@@ -1,0 +1,33 @@
+<title>Bramblewick</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;700;800&display=swap">
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="hud-top">
+    <div class="pill" id="p-wood"><b id="wood-n">100</b></div>
+    <div class="pill" id="p-gold"><b id="gold-n">0</b></div>
+    <div class="pill" id="p-pop"><b id="pop-n">3/5</b></div>
+  </div>
+  <div id="hint" class="hidden"></div>
+  <div id="toasts"></div>
+  <button id="army-btn"></button>
+  <div id="dock">
+    <div id="sel-info"></div>
+    <div id="dock-buttons"></div>
+  </div>
+  <div id="start-overlay" class="overlay">
+    <div class="card">
+      <div class="tagline">A tiny cosy RTS</div>
+      <h1>Bramblewick</h1>
+      <p>Gather wood and gold, raise a barracks, and march your little soldiers on the enemy town hall before their raiders topple yours.</p>
+      <p>Tap to select and command &middot; drag to look around &middot; pinch to zoom.</p>
+      <button class="big-btn" id="play-btn">Play</button>
+    </div>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <div class="card">
+      <h1 id="end-title">Victory!</h1>
+      <p id="end-text"></p>
+      <button class="big-btn" id="replay-btn">Play again</button>
+    </div>
+  </div>
+</div>
