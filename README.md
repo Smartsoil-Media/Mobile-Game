@@ -22,6 +22,9 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
   for +5 pop and forward drop-offs
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army** button selects all your soldiers and jumps the camera to them
+- **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
+  range and shelter up to 5 units — tap a tower with units selected to
+  garrison them, select it to open the doors
 - **Ring the Bell** (Town Hall) shelters your villagers inside — a garrisoned
   Town Hall shoots arrows at attackers (one per villager, up to 10). Ring
   again to send everyone back to work.

@@ -1,8 +1,8 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
   Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF,
-  CARRY_CAP, GATHER_TICK, GARRISON_CAP, TC_RANGE, TC_VOLLEY, ARROW_DMG,
-  WORLD_W, WORLD_H,
+  CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
+  TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision } from './world'
@@ -168,24 +168,28 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       }
       break
     }
-    case 'garrison': {
-      const tc = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
-      if (!tc || !tc.complete) { e.state = 'idle'; e.targetId = undefined; break }
-      if (!inRange(e, tc, 10)) { moveToward(e, tc.x, tc.y, s.speed * 1.15, dt); break } // run!
-      if ((tc.garrison ?? 0) < GARRISON_CAP) {
-        tc.garrison = (tc.garrison ?? 0) + 1
-        e.hidden = true
-        e.carry = 0
-        puff(g, tc.x, tc.y + tc.r * 0.4, '#FBF3E4', 3)
-        g.uiDirty = true
-      }
-      e.state = 'idle'
-      e.targetId = undefined
-      break
-    }
+    case 'garrison': garrisonWalk(g, e, dt); break
     case 'attack': attackTarget(g, e, dt); break
     default: break // idle: villagers wait for orders (the enemy AI assigns its own)
   }
+}
+
+// walk to a garrisonable building and shelter inside (villagers and soldiers alike)
+function garrisonWalk(g: Game, e: Ent, dt: number): void {
+  const s = UNITS[e.kind]
+  const b = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+  if (!b || !b.complete || !isBuilding(b)) { e.state = 'idle'; e.targetId = undefined; return }
+  if (!inRange(e, b, 10)) { moveToward(e, b.x, b.y, s.speed * 1.15, dt); return } // hurry!
+  if ((b.garrison ?? 0) < BUILDINGS[b.kind].garrisonCap) {
+    b.garrison = (b.garrison ?? 0) + 1
+    e.hidden = true
+    e.insideId = b.id
+    e.carry = 0
+    puff(g, b.x, b.y + b.r * 0.4, '#FBF3E4', 3)
+    g.uiDirty = true
+  }
+  e.state = 'idle'
+  e.targetId = undefined
 }
 
 function updateSoldier(g: Game, e: Ent, dt: number): void {
@@ -195,6 +199,7 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
       if (moveToward(e, e.tx!, e.ty!, s.speed, dt)) e.state = 'idle'
       break
     }
+    case 'garrison': garrisonWalk(g, e, dt); break
     case 'attackmove': {
       e.scanT = (e.scanT ?? 0) - dt
       if (e.scanT <= 0) {
@@ -249,7 +254,7 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
           dist(e.x, e.y, o.x, o.y) < TC_RANGE)
         .sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y))
       if (inRangeFoes.length) {
-        const arrows = Math.min(e.garrison ?? 0, GARRISON_CAP)
+        const arrows = Math.min(e.garrison ?? 0, BUILDINGS.towncenter.garrisonCap)
         for (let i = 0; i < arrows; i++) {
           const t = inRangeFoes[i % Math.min(inRangeFoes.length, 4)]
           g.projectiles.push({
@@ -259,6 +264,23 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
           })
           g.arrowsFired++
         }
+      }
+    }
+  }
+  // a finished watchtower looses one arrow at a time, garrisoned or not
+  if (e.kind === 'watchtower') {
+    e.volleyT = (e.volleyT ?? TOWER_VOLLEY) - dt
+    if (e.volleyT <= 0) {
+      e.volleyT = TOWER_VOLLEY
+      const foe = nearest(g, e.x, e.y,
+        o => isUnit(o) && !o.hidden && o.team >= 0 && o.team !== e.team, TOWER_RANGE)
+      if (foe) {
+        g.projectiles.push({
+          x: e.x, y: e.y - e.r * 1.6,
+          targetId: foe.id, tx: foe.x, ty: foe.y,
+          speed: 270, dmg: TOWER_DMG, team: e.team,
+        })
+        g.arrowsFired++
       }
     }
   }
@@ -276,18 +298,17 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
 }
 
 function killEnt(g: Game, e: Ent): void {
-  // a falling Town Hall spills its garrison out instead of taking them with it
-  if (e.kind === 'towncenter' && (e.garrison ?? 0) > 0) {
-    let left = e.garrison ?? 0
+  // a falling building spills its garrison out instead of taking them with it
+  if ((e.garrison ?? 0) > 0) {
     for (const v of g.ents) {
-      if (left <= 0) break
-      if (v.team === e.team && v.kind === 'villager' && v.hidden) {
+      if (v.hidden && v.insideId === e.id) {
         v.hidden = false
+        v.insideId = undefined
         const a = Math.random() * Math.PI * 2
         v.x = e.x + Math.cos(a) * (e.r + 20)
         v.y = e.y + Math.sin(a) * (e.r * 0.6) + 16
         v.state = 'idle'
-        left--
+        v.targetId = undefined
       }
     }
   }

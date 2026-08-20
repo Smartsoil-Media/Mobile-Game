@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  NEUTRAL, POP_MAX, GARRISON_CAP, FOG_CELL, WORLD_W, WORLD_H,
+  NEUTRAL, POP_MAX, FOG_CELL, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 
@@ -260,22 +260,23 @@ export function ringBell(g: Game, tc: Ent): void {
   g.uiDirty = true
 }
 
-export function openDoors(g: Game, tc: Ent): void {
+export function openDoors(g: Game, b: Ent): void {
   for (const v of g.ents) {
-    if (v.team !== tc.team || v.kind !== 'villager') continue
-    if (v.hidden) {
+    if (v.team !== b.team || !isUnit(v)) continue
+    if (v.hidden && v.insideId === b.id) {
       v.hidden = false
+      v.insideId = undefined
       const a = Math.random() * Math.PI * 2
-      v.x = tc.x + Math.cos(a) * (tc.r + 18)
-      v.y = tc.y + Math.abs(Math.sin(a)) * (tc.r * 0.7) + 14
+      v.x = b.x + Math.cos(a) * (b.r + 18)
+      v.y = b.y + Math.abs(Math.sin(a)) * (b.r * 0.7) + 14
       v.state = 'idle'
       v.targetId = undefined
-    } else if (v.state === 'garrison') {
+    } else if (v.state === 'garrison' && v.targetId === b.id) {
       v.state = 'idle'
       v.targetId = undefined
     }
   }
-  tc.garrison = 0
+  b.garrison = 0
   g.uiDirty = true
 }
 

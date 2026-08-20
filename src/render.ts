@@ -3,7 +3,8 @@ import { Game, Ent, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
-  drawLumberCamp, drawMiningCamp, drawFarm, drawSite, drawVillager, drawSwordsman, drawScout,
+  drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawSite,
+  drawVillager, drawSwordsman, drawScout,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -131,6 +132,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'towncenter': e.complete ? drawTC(ctx, e, time) : drawSite(ctx, e); break
       case 'house': e.complete ? drawHouse(ctx, e, time) : drawSite(ctx, e); break
       case 'barracks': e.complete ? drawBarracks(ctx, e, time) : drawSite(ctx, e); break
+      case 'watchtower': e.complete ? drawWatchtower(ctx, e, time) : drawSite(ctx, e); break
       case 'lumbercamp': e.complete ? drawLumberCamp(ctx, e) : drawSite(ctx, e); break
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
       case 'villager': drawVillager(ctx, e, time); break

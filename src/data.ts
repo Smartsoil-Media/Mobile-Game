@@ -5,10 +5,10 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'scout'
-  | 'towncenter' | 'house' | 'barracks' | 'lumbercamp' | 'miningcamp' | 'farm'
+  | 'towncenter' | 'house' | 'barracks' | 'lumbercamp' | 'miningcamp' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'barracks' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'barracks' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -43,6 +43,7 @@ export interface Ent {
   progress?: number
   queue?: { kind: Kind; t: number; total: number }[]
   garrison?: number
+  insideId?: number // which building this hidden unit is sheltering in
   volleyT?: number
   // resources
   amount?: number
@@ -108,14 +109,16 @@ export const UNITS: Record<string, {
 }
 
 export const BUILDINGS: Record<string, {
-  hp: number; r: number; cost: Cost; time: number; pop: number; los: number; name: string
+  hp: number; r: number; cost: Cost; time: number; pop: number; los: number
+  garrisonCap: number; name: string
 }> = {
-  towncenter: { hp: 800, r: 52, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, name: 'Town Hall' },
-  house: { hp: 200, r: 26, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, name: 'House' },
-  farm: { hp: 120, r: 24, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, name: 'Farm' },
-  barracks: { hp: 350, r: 40, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, name: 'Barracks' },
-  lumbercamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, name: 'Lumber Camp' },
-  miningcamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, name: 'Mining Camp' },
+  towncenter: { hp: 800, r: 52, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, name: 'Town Hall' },
+  house: { hp: 200, r: 26, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
+  farm: { hp: 120, r: 24, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
+  barracks: { hp: 350, r: 40, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
+  watchtower: { hp: 280, r: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, name: 'Watchtower' },
+  lumbercamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
+  miningcamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
 }
 
 export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKind; name: string }> = {
@@ -142,11 +145,13 @@ export const FOG_CELL = 32
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
 export const POP_MAX = 25
-// Town Hall garrison defense
-export const GARRISON_CAP = 10
+// garrison defense
 export const TC_RANGE = 190
 export const TC_VOLLEY = 1.4
 export const ARROW_DMG = 4
+export const TOWER_RANGE = 200
+export const TOWER_VOLLEY = 1.6
+export const TOWER_DMG = 5
 export const WORLD_W = 1920
 export const WORLD_H = 1280
 
@@ -165,7 +170,8 @@ export function isUnit(e: Ent): boolean {
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
-    e.kind === 'lumbercamp' || e.kind === 'miningcamp' || e.kind === 'farm'
+    e.kind === 'lumbercamp' || e.kind === 'miningcamp' || e.kind === 'farm' ||
+    e.kind === 'watchtower'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'

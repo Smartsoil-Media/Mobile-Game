@@ -150,6 +150,15 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
+  // units tap one of your watchtowers: climb inside
+  if (hit && hit.team === 0 && hit.kind === 'watchtower' && hit.complete && myUnits.length) {
+    for (const u of myUnits) {
+      u.state = 'garrison'
+      u.targetId = hit.id
+    }
+    return
+  }
+
   if (hit && hit.team === 0) {
     // tapping your own stuff toggles: already selected → deselect
     const i = g.selection.indexOf(hit.id)

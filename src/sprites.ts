@@ -460,6 +460,61 @@ export function drawFarm(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
   ctx.closePath(); ctx.fill()
 }
 
+export function drawWatchtower(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 13, 20, 8)
+  // round stone base, slightly tapered
+  ctx.fillStyle = '#CFC4AC'
+  ctx.beginPath()
+  ctx.moveTo(x - 15, y + 12)
+  ctx.lineTo(x - 12, y - 26)
+  ctx.lineTo(x + 12, y - 26)
+  ctx.lineTo(x + 15, y + 12)
+  ctx.quadraticCurveTo(x, y + 16, x - 15, y + 12)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = '#B4A88D'
+  ctx.lineWidth = 1.8
+  ctx.stroke()
+  // stone texture
+  ctx.fillStyle = '#BDB197'
+  for (const [ox, oy] of [[-6, 2], [5, -6], [-3, -14], [6, 6]]) {
+    ctx.beginPath(); ctx.ellipse(x + ox, y + oy, 3, 2.2, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  // arrow slit
+  ctx.fillStyle = '#5F5343'
+  rr(ctx, x - 1.6, y - 12, 3.2, 9, 1.6); ctx.fill()
+  // timber balcony ring
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 16, y - 32, 32, 8, 3); ctx.fill()
+  ctx.fillStyle = WOOD_DARK
+  for (const ox of [-13, -5, 3, 11]) rr(ctx, x + ox, y - 33.5, 2.4, 4, 1), ctx.fill()
+  // garrison peeking over the parapet
+  const inside = Math.min(e.garrison ?? 0, 3)
+  for (let i = 0; i < inside; i++) {
+    const hx = x - 8 + i * 8
+    ctx.fillStyle = SKIN
+    ctx.beginPath(); ctx.arc(hx, y - 35, 3, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = c.main
+    ctx.beginPath(); ctx.arc(hx, y - 36.5, 3.1, Math.PI, 0); ctx.fill()
+  }
+  // pointed roof in team color
+  ctx.fillStyle = c.dark
+  ctx.beginPath()
+  ctx.moveTo(x - 17, y - 38)
+  ctx.quadraticCurveTo(x, y - 42, x + 17, y - 38)
+  ctx.lineTo(x + 2.5, y - 58)
+  ctx.quadraticCurveTo(x, y - 60, x - 2.5, y - 58)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(x - 17, y - 38)
+  ctx.quadraticCurveTo(x, y - 42, x + 17, y - 38)
+  ctx.quadraticCurveTo(x, y - 46, x - 17, y - 38)
+  ctx.closePath(); ctx.fill()
+  flag(ctx, x, y - 58, e.team, t + e.seed)
+}
+
 export function drawSite(ctx: CanvasRenderingContext2D, e: Ent): void {
   // construction: wooden frame + rising walls with progress
   const x = e.x, y = e.y, w = e.r * 0.9

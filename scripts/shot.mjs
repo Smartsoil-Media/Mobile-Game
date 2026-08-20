@@ -68,7 +68,7 @@ await page.waitForTimeout(250)
 if (await page.isHidden('#dock')) throw new Error('dock hidden with villager selected')
 if (!(await page.isVisible('[data-cmd="build-house"]'))) throw new Error('build buttons missing for villager')
 
-// icon dock: 6 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
+// icon dock: 7 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
 const dockIcons = await page.evaluate(() => ({
   buttons: [...document.querySelectorAll('#dock-buttons button.cmd.icon')].map(b => b.dataset.cmd),
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
@@ -76,14 +76,14 @@ const dockIcons = await page.evaluate(() => ({
   disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
 }))
 console.log('icon dock:', dockIcons)
-if (dockIcons.buttons.length !== 6 || dockIcons.canvases !== 6) throw new Error('expected 6 sprite-icon build buttons')
+if (dockIcons.buttons.length !== 7 || dockIcons.canvases !== 7) throw new Error('expected 7 sprite-icon build buttons')
 if (!dockIcons.hintGone) throw new Error('hint element still present')
 if (!dockIcons.disabled.includes('build-barracks')) throw new Error('unaffordable barracks not greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
 await page.waitForTimeout(150)
 const allDisabled = await page.evaluate(() =>
   document.querySelectorAll('#dock-buttons button.disabled').length)
-if (allDisabled !== 6) throw new Error('with 0 wood all build buttons should be greyed out')
+if (allDisabled !== 7) throw new Error('with 0 wood all build buttons should be greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
 await page.waitForTimeout(150)
 await page.evaluate(() => {
@@ -715,6 +715,94 @@ const fogShadow = await page3.evaluate(({ idx }) => {
 console.log('fog shadow:', fogShadow)
 if (!fogShadow.explored || fogShadow.visible) throw new Error('enemy base should drop to shadow')
 if (!fogShadow.scoutAlive) throw new Error('scout died on a safe route')
+
+// 16) watchtower: fires on its own, shelters units, releases them
+await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  g.res[0].wood = 300
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  for (const v of vills) { v.state = 'idle'; v.targetId = undefined } // all hands available
+  window.__game.select(vills[0].id)
+  g.camera.x = 500; g.camera.y = 1000
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="build-watchtower"]')
+await page3.waitForTimeout(200)
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+const towerPlaced = await page3.evaluate(() =>
+  window.__game.state.ents.some(e => e.team === 0 && e.kind === 'watchtower'))
+if (!towerPlaced) throw new Error('watchtower was not placed')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 35)
+const towerReady = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower' && e.complete)
+  if (!tower) return null
+  // an empty tower must still defend itself: send one attacker at it
+  const id = window.__game.spawn('swordsman', 1, tower.x + 160, tower.y)
+  const u = g.byId.get(id)
+  u.state = 'attackmove'; u.tx = tower.x; u.ty = tower.y
+  return { arrowsBefore: g.arrowsFired, towerHp: tower.hp }
+})
+if (!towerReady) throw new Error('watchtower never completed')
+await waitSim(page3, 60) // 1 arrow / 1.6s vs 70hp needs ~23s once in range; generous margin
+const towerFight = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower')
+  return {
+    arrows: g.arrowsFired,
+    attackerAlive: g.ents.some(e => e.team === 1 && e.kind === 'swordsman'),
+    towerAlive: !!tower,
+    towerHp: tower ? Math.round(tower.hp) : 0,
+  }
+})
+console.log('tower defense:', towerReady.arrowsBefore, '->', towerFight)
+if (towerFight.arrows <= towerReady.arrowsBefore) throw new Error('empty tower never fired')
+if (towerFight.attackerAlive) throw new Error('tower did not defeat a lone attacker')
+if (!towerFight.towerAlive) throw new Error('tower died to a lone attacker')
+
+// garrison two villagers by tapping the tower, then open the doors
+await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  g.selection = [vills[0].id, vills[1].id]
+  const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower')
+  g.camera.x = tower.x; g.camera.y = tower.y
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+await page3.tap('#game', { position: canvasBox })
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 15)
+const towerGarrison = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower')
+  window.__game.select(tower.id)
+  return {
+    garrison: tower.garrison ?? 0,
+    inside: g.ents.filter(e => e.hidden && e.insideId === tower.id).length,
+  }
+})
+console.log('tower garrison:', towerGarrison)
+if (towerGarrison.garrison !== 2 || towerGarrison.inside !== 2)
+  throw new Error('villagers did not garrison the tower')
+await page3.waitForTimeout(250)
+await page3.screenshot({ path: 'shots/13-watchtower.png' })
+await page3.tap('[data-cmd="doors"]')
+await page3.waitForTimeout(300)
+const towerReleased = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower')
+  return { garrison: tower.garrison ?? 0, hidden: g.ents.filter(e => e.hidden).length }
+})
+console.log('tower released:', towerReleased)
+if (towerReleased.garrison !== 0 || towerReleased.hidden !== 0)
+  throw new Error('tower did not release its garrison')
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

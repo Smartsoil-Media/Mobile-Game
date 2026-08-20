@@ -2,7 +2,7 @@
 import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawVillager, drawSwordsman } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawVillager, drawSwordsman } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -11,7 +11,7 @@ const ICON = {
   food: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="9" cy="13" r="5" fill="#C9525E"/><circle cx="16" cy="12" r="4.4" fill="#B23F4C"/><circle cx="10.5" cy="11.5" r="1.5" fill="#E58F8F"/><path d="M12 8c1-2.5 3-3.5 4.5-3.5" stroke="#75A055" stroke-width="2" stroke-linecap="round" fill="none"/><ellipse cx="17.5" cy="5" rx="2.6" ry="1.6" fill="#8CB56A" transform="rotate(-20 17.5 5)"/></svg>`,
   stone: `<svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 16 7 8.5 13 6l6 4-1 7z" fill="#A8A395"/><path d="M7 8.5 13 6l3 2.5-5.5 2z" fill="#D3CEC1"/><path d="M10.5 10.5 16 8.5l3 1.5-1 7-7.5-1z" fill="#BDB8AA"/></svg>`,
   sword: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 19 15.5 8.5M15.5 8.5 19 5l-1 4.5L14.5 13" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 14.5l2 2M5 19l-1.2 1.2" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-  bell: `<svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
 function el<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T }
@@ -32,6 +32,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   const conf: Record<string, { scale: number; cx: number; cy: number }> = {
     towncenter: { scale: 0.44, cx: 0, cy: -11 },
     farm: { scale: 0.85, cx: 2, cy: -1 },
+    watchtower: { scale: 0.58, cx: 0, cy: -23 },
     house: { scale: 1.0, cx: 0, cy: -5.5 },
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
@@ -47,6 +48,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   switch (kind) {
     case 'towncenter': drawTC(ctx, fake, 0.2); break
     case 'farm': drawFarm(ctx, fake, 0.2); break
+    case 'watchtower': drawWatchtower(ctx, fake, 0.2); break
     case 'house': drawHouse(ctx, fake, 0.2); break
     case 'barracks': drawBarracks(ctx, fake, 0.2); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
@@ -212,13 +214,17 @@ export function syncUI(g: Game): void {
         () => ringBell(g, first)))
     }
     if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && first.kind === 'watchtower' && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
+      () => openDoors(g, first)))
   } else if (first && first.kind === 'barracks' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), cost: UNITS.swordsman.cost },
       () => tryTrain(g, first, 'swordsman')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
-    const buildables: Buildable[] = ['house', 'farm', 'barracks', 'lumbercamp', 'miningcamp', 'towncenter']
+    const buildables: Buildable[] = ['house', 'farm', 'barracks', 'watchtower', 'lumbercamp', 'miningcamp', 'towncenter']
     for (const kind of buildables) {
       const b = BUILDINGS[kind]
       dock.appendChild(iconButton(
