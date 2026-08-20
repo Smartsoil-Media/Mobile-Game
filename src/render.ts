@@ -1,8 +1,8 @@
 // Camera + world rendering.
 import { Game, Ent, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
 import {
-  drawTree, drawMine, drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp,
-  drawSite, drawVillager, drawSwordsman,
+  drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
+  drawLumberCamp, drawMiningCamp, drawFarm, drawSite, drawVillager, drawSwordsman,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -99,6 +99,9 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
       case 'goldmine': drawMine(ctx, e); break
+      case 'berrybush': drawBush(ctx, e, time); break
+      case 'stonequarry': drawQuarry(ctx, e); break
+      case 'farm': e.complete ? drawFarm(ctx, e, time) : drawSite(ctx, e); break
       case 'towncenter': e.complete ? drawTC(ctx, e, time) : drawSite(ctx, e); break
       case 'house': e.complete ? drawHouse(ctx, e, time) : drawSite(ctx, e); break
       case 'barracks': e.complete ? drawBarracks(ctx, e, time) : drawSite(ctx, e); break

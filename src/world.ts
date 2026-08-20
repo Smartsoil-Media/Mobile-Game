@@ -1,9 +1,11 @@
 // World creation and shared queries/helpers.
 import {
-  Game, Ent, Kind, Cost, UNITS, BUILDINGS, RESOURCES,
+  Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   NEUTRAL, POP_MAX, FIRST_WAVE_AT, GARRISON_CAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
+
+const RES_KINDS: ResKind[] = ['wood', 'food', 'gold', 'stone']
 
 // Deterministic little RNG so the map is the same every run (tweakable later).
 function mulberry(seed: number) {
@@ -47,7 +49,10 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
 export function createGame(): Game {
   const g: Game = {
     ents: [], byId: new Map(), nextId: 1, t: 0, speed: 1,
-    res: [{ wood: 100, gold: 0 }, { wood: 9999, gold: 9999 }],
+    res: [
+      { wood: 100, food: 50, gold: 0, stone: 0 },
+      { wood: 9999, food: 9999, gold: 9999, stone: 9999 },
+    ],
     camera: { x: 0, y: 0, zoom: 0.62 },
     selection: [], placing: null, over: null, overT: 0,
     particles: [],
@@ -76,6 +81,28 @@ export function createGame(): Game {
   // Gold mines: one near each base, one contested in the middle
   for (const m of [{ x: 640, y: 1100 }, { x: 1300, y: 170 }, { x: 950, y: 620 }]) {
     spawn(g, 'goldmine', NEUTRAL, m.x, m.y); mark(m.x, m.y, 44)
+  }
+
+  // Stone quarries: one near each base plus a contested one
+  for (const q of [{ x: 160, y: 1130 }, { x: 1780, y: 400 }, { x: 1060, y: 860 }]) {
+    spawn(g, 'stonequarry', NEUTRAL, q.x, q.y); mark(q.x, q.y, 40)
+  }
+
+  // Berry patches: forageable food near each base and in the wilds
+  const patches = [
+    { x: 540, y: 870, n: 5 }, { x: 1420, y: 430, n: 5 },
+    { x: 900, y: 1060, n: 4 }, { x: 620, y: 420, n: 4 },
+  ]
+  for (const patch of patches) {
+    for (let i = 0; i < patch.n; i++) {
+      for (let tries = 0; tries < 20; tries++) {
+        const a = rnd() * Math.PI * 2
+        const d = rnd() * 70
+        const x = patch.x + Math.cos(a) * d
+        const y = patch.y + Math.sin(a) * d * 0.8
+        if (clear(x, y, 16)) { spawn(g, 'berrybush', NEUTRAL, x, y); mark(x, y, 16); break }
+      }
+    }
   }
 
   // Tree groves: near each base plus scattered woods
@@ -131,12 +158,12 @@ export function pop(g: Game, team: number): { used: number; cap: number } {
 
 export function canAfford(g: Game, team: number, cost: Cost): boolean {
   const r = g.res[team]
-  return r.wood >= cost.wood && r.gold >= cost.gold
+  return RES_KINDS.every(k => r[k] >= cost[k])
 }
 
 export function pay(g: Game, team: number, cost: Cost): void {
-  g.res[team].wood -= cost.wood
-  g.res[team].gold -= cost.gold
+  const r = g.res[team]
+  for (const k of RES_KINDS) r[k] -= cost[k]
 }
 
 export function nearest(g: Game, x: number, y: number, pred: (e: Ent) => boolean, maxDist = Infinity): Ent | null {
@@ -150,10 +177,9 @@ export function nearest(g: Game, x: number, y: number, pred: (e: Ent) => boolean
 }
 
 export function nearestDropoff(g: Game, e: Ent): Ent | null {
-  // camps accept their own resource; the Town Hall accepts everything
-  const camp = e.carryRes === 'gold' ? 'miningcamp' : 'lumbercamp'
+  const accepted = DROPOFFS[e.carryRes ?? 'wood']
   return nearest(g, e.x, e.y, o =>
-    (o.kind === 'towncenter' || o.kind === camp) && o.team === e.team && !!o.complete)
+    accepted.includes(o.kind) && o.team === e.team && !!o.complete)
 }
 
 export function nearestEnemyUnit(g: Game, e: Ent, range: number): Ent | null {

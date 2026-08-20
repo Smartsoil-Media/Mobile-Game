@@ -1,13 +1,15 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
-import { Game, Ent, UNITS, BUILDINGS, isUnit } from './data'
+import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy } from './input'
-import { drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawVillager, drawSwordsman } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawVillager, drawSwordsman } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   gold: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="8" fill="#E9B44C"/><circle cx="12" cy="12" r="5.4" fill="#F5D584"/><path d="M12 8.5v7M9.8 10.4h3.4a1.7 1.7 0 0 1 0 3.4H10" stroke="#B8842E" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>`,
   pop: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="8" r="4.2" fill="#F6CFA0"/><path d="M4.5 20c.8-4.4 3.9-6.5 7.5-6.5s6.7 2.1 7.5 6.5z" fill="#6D9DC5"/></svg>`,
+  food: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="9" cy="13" r="5" fill="#C9525E"/><circle cx="16" cy="12" r="4.4" fill="#B23F4C"/><circle cx="10.5" cy="11.5" r="1.5" fill="#E58F8F"/><path d="M12 8c1-2.5 3-3.5 4.5-3.5" stroke="#75A055" stroke-width="2" stroke-linecap="round" fill="none"/><ellipse cx="17.5" cy="5" rx="2.6" ry="1.6" fill="#8CB56A" transform="rotate(-20 17.5 5)"/></svg>`,
+  stone: `<svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 16 7 8.5 13 6l6 4-1 7z" fill="#A8A395"/><path d="M7 8.5 13 6l3 2.5-5.5 2z" fill="#D3CEC1"/><path d="M10.5 10.5 16 8.5l3 1.5-1 7-7.5-1z" fill="#BDB8AA"/></svg>`,
   sword: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 19 15.5 8.5M15.5 8.5 19 5l-1 4.5L14.5 13" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 14.5l2 2M5 19l-1.2 1.2" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
@@ -28,6 +30,8 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   // scale fits the sprite's bounding box into the 48px icon; (cx, cy) is the
   // sprite's visual center in its own coordinates
   const conf: Record<string, { scale: number; cx: number; cy: number }> = {
+    towncenter: { scale: 0.44, cx: 0, cy: -11 },
+    farm: { scale: 0.85, cx: 2, cy: -1 },
     house: { scale: 1.0, cx: 0, cy: -5.5 },
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
@@ -41,6 +45,8 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   ctx.scale(k.scale, k.scale)
   ctx.translate(-k.cx, -k.cy)
   switch (kind) {
+    case 'towncenter': drawTC(ctx, fake, 0.2); break
+    case 'farm': drawFarm(ctx, fake, 0.2); break
     case 'house': drawHouse(ctx, fake, 0.2); break
     case 'barracks': drawBarracks(ctx, fake, 0.2); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
@@ -56,7 +62,9 @@ export function initUI(g: Game): void {
   const canvas = document.getElementById('game') as HTMLCanvasElement
   el('army-btn').addEventListener('click', () => selectArmy(g, canvas))
   el('p-wood').insertAdjacentHTML('afterbegin', ICON.wood)
+  el('p-food').insertAdjacentHTML('afterbegin', ICON.food)
   el('p-gold').insertAdjacentHTML('afterbegin', ICON.gold)
+  el('p-stone').insertAdjacentHTML('afterbegin', ICON.stone)
   el('p-pop').insertAdjacentHTML('afterbegin', ICON.pop)
 
   el('play-btn').addEventListener('click', () => {
@@ -81,7 +89,13 @@ function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman'): void {
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
   if (!canAfford(g, 0, s.cost)) {
-    toast(g, s.cost.gold ? 'Not enough gold — mine some!' : 'Not enough wood!')
+    const r = g.res[0]
+    const missing =
+      r.food < s.cost.food ? 'Not enough food — forage berries or work a farm!' :
+      r.gold < s.cost.gold ? 'Not enough gold — mine some!' :
+      r.stone < s.cost.stone ? 'Not enough stone — quarry some!' :
+      'Not enough wood!'
+    toast(g, missing)
     return
   }
   if ((b.queue?.length ?? 0) >= 5) { toast(g, 'Training queue is full.'); return }
@@ -94,23 +108,26 @@ interface IconBtn {
   cmd: string
   label: string
   icon: HTMLElement | string
-  wood?: number
-  gold?: number
+  cost?: Cost
   badge?: string
 }
+
+const COST_KEYS = ['wood', 'food', 'gold', 'stone'] as const
 
 function iconButton(opts: IconBtn, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button')
   b.className = 'cmd icon'
   b.dataset.cmd = opts.cmd
   b.setAttribute('aria-label', opts.label)
-  if (opts.wood) b.dataset.wood = String(opts.wood)
-  if (opts.gold) b.dataset.gold = String(opts.gold)
+  const costs: string[] = []
+  for (const k of COST_KEYS) {
+    const n = opts.cost?.[k] ?? 0
+    if (!n) continue
+    b.dataset[k] = String(n)
+    costs.push(`${n}${ICON[k]}`)
+  }
   if (typeof opts.icon === 'string') b.insertAdjacentHTML('beforeend', opts.icon)
   else b.appendChild(opts.icon)
-  const costs: string[] = []
-  if (opts.wood) costs.push(`${opts.wood}${ICON.wood}`)
-  if (opts.gold) costs.push(`${opts.gold}${ICON.gold}`)
   if (costs.length) b.insertAdjacentHTML('beforeend', `<i>${costs.join(' ')}</i>`)
   if (opts.badge) b.insertAdjacentHTML('beforeend', `<span class="badge">${opts.badge}</span>`)
   b.addEventListener('click', onClick)
@@ -128,17 +145,24 @@ function queuePill(b: Ent): HTMLElement {
 function updateAffordability(g: Game): void {
   const btns = document.querySelectorAll<HTMLButtonElement>('#dock-buttons button.cmd')
   btns.forEach(b => {
-    const w = Number(b.dataset.wood ?? 0)
-    const gd = Number(b.dataset.gold ?? 0)
-    if (!w && !gd) return
-    b.classList.toggle('disabled', g.res[0].wood < w || g.res[0].gold < gd)
+    let hasCost = false
+    let short = false
+    for (const k of COST_KEYS) {
+      const n = Number(b.dataset[k] ?? 0)
+      if (!n) continue
+      hasCost = true
+      if (g.res[0][k] < n) short = true
+    }
+    if (hasCost) b.classList.toggle('disabled', short)
   })
 }
 
 export function syncUI(g: Game): void {
   const p = pop(g, 0)
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
+  el('food-n').textContent = String(Math.floor(g.res[0].food))
   el('gold-n').textContent = String(Math.floor(g.res[0].gold))
+  el('stone-n').textContent = String(Math.floor(g.res[0].stone))
   el('pop-n').textContent = `${p.used}/${p.cap}`
   updateAffordability(g)
 
@@ -175,7 +199,7 @@ export function syncUI(g: Game): void {
     dock.appendChild(btn)
   } else if (first && first.kind === 'towncenter' && first.complete) {
     dock.appendChild(iconButton(
-      { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), wood: UNITS.villager.cost.wood, gold: UNITS.villager.cost.gold },
+      { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
       () => tryTrain(g, first, 'villager')))
     const garrison = first.garrison ?? 0
     if (garrison > 0) {
@@ -190,16 +214,15 @@ export function syncUI(g: Game): void {
     if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && first.kind === 'barracks' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
-      { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), wood: UNITS.swordsman.cost.wood, gold: UNITS.swordsman.cost.gold },
+      { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), cost: UNITS.swordsman.cost },
       () => tryTrain(g, first, 'swordsman')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
-    const buildables: ('house' | 'barracks' | 'lumbercamp' | 'miningcamp')[] =
-      ['house', 'barracks', 'lumbercamp', 'miningcamp']
+    const buildables: Buildable[] = ['house', 'farm', 'barracks', 'lumbercamp', 'miningcamp', 'towncenter']
     for (const kind of buildables) {
       const b = BUILDINGS[kind]
       dock.appendChild(iconButton(
-        { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: spriteIcon(kind), wood: b.cost.wood, gold: b.cost.gold },
+        { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: spriteIcon(kind), cost: b.cost },
         () => { g.placing = kind; g.uiDirty = true }))
     }
   }

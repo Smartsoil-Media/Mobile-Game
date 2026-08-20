@@ -105,6 +105,90 @@ export function drawMine(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(e.x + 3, e.y - R * 0.3, 2.4, 0, Math.PI * 2); ctx.fill()
 }
 
+export function drawBush(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  if ((e.amount ?? 0) <= 0) {
+    // foraged out: bare twiggy shrub
+    shadow(ctx, e.x, e.y + 3, 8, 3)
+    ctx.strokeStyle = '#8A7458'
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.moveTo(e.x, e.y + 3); ctx.lineTo(e.x - 4, e.y - 6)
+    ctx.moveTo(e.x, e.y + 3); ctx.lineTo(e.x + 1, e.y - 8)
+    ctx.moveTo(e.x, e.y + 3); ctx.lineTo(e.x + 5, e.y - 5)
+    ctx.stroke()
+    ctx.fillStyle = '#9CB37E'
+    ctx.beginPath(); ctx.ellipse(e.x + 5, e.y - 5, 2, 1.2, 0.4, 0, Math.PI * 2); ctx.fill()
+    return
+  }
+  const sway = Math.sin(t * 0.9 + e.seed) * 0.8
+  shadow(ctx, e.x, e.y + 4, 13, 5)
+  // rounded shrub
+  ctx.fillStyle = '#75A055'
+  for (const [ox, oy, r] of [[-6, 0, 8], [6, 0, 8], [0, -4, 9]]) {
+    ctx.beginPath(); ctx.arc(e.x + ox + sway * 0.4, e.y + oy, r, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.fillStyle = '#8CB56A'
+  ctx.beginPath(); ctx.arc(e.x - 2 + sway, e.y - 5, 6.5, 0, Math.PI * 2); ctx.fill()
+  // berries, thinning as the bush is picked
+  const left = (e.amount ?? 120) / 120
+  const berries = Math.max(2, Math.round(7 * left))
+  ctx.fillStyle = '#C9525E'
+  for (let i = 0; i < berries; i++) {
+    const a = (i / 7) * Math.PI * 2 + e.seed
+    ctx.beginPath()
+    ctx.arc(e.x + Math.cos(a) * 7, e.y - 2 + Math.sin(a) * 5, 2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = '#E58F8F'
+  ctx.beginPath(); ctx.arc(e.x + 2, e.y - 6, 1.6, 0, Math.PI * 2); ctx.fill()
+}
+
+export function drawQuarry(ctx: CanvasRenderingContext2D, e: Ent): void {
+  const left = Math.max(0, (e.amount ?? 350) / 350)
+  if (left <= 0) {
+    // quarried out: cool grey rubble
+    shadow(ctx, e.x, e.y + 6, 14, 5)
+    ctx.fillStyle = '#A8A395'
+    for (const [ox, oy, r] of [[-7, 2, 4.6], [5, 4, 4], [1, -2, 5], [11, 0, 3]]) {
+      ctx.beginPath(); ctx.ellipse(e.x + ox, e.y + oy, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.fillStyle = '#C2BDB0'
+    for (const [ox, oy, r] of [[-3, 0, 2.8], [7, 2, 2.4]]) {
+      ctx.beginPath(); ctx.ellipse(e.x + ox, e.y + oy, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill()
+    }
+    return
+  }
+  const R = 30 * (0.55 + 0.45 * left)
+  shadow(ctx, e.x, e.y + R * 0.55, R * 1.05, R * 0.4)
+  // grey angular rock pile
+  ctx.fillStyle = '#A8A395'
+  ctx.beginPath()
+  ctx.ellipse(e.x, e.y, R, R * 0.7, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#BDB8AA'
+  ctx.beginPath()
+  ctx.moveTo(e.x - R * 0.55, e.y - R * 0.1)
+  ctx.lineTo(e.x - R * 0.15, e.y - R * 0.62)
+  ctx.lineTo(e.x + R * 0.35, e.y - R * 0.4)
+  ctx.lineTo(e.x + R * 0.5, e.y + R * 0.05)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#D3CEC1'
+  ctx.beginPath()
+  ctx.moveTo(e.x - R * 0.15, e.y - R * 0.62)
+  ctx.lineTo(e.x + R * 0.1, e.y - R * 0.55)
+  ctx.lineTo(e.x - R * 0.05, e.y - R * 0.25)
+  ctx.closePath()
+  ctx.fill()
+  // chisel marks
+  ctx.strokeStyle = '#8F8A7C'
+  ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(e.x + R * 0.15, e.y + R * 0.15); ctx.lineTo(e.x + R * 0.35, e.y + R * 0.25)
+  ctx.moveTo(e.x - R * 0.4, e.y + R * 0.2); ctx.lineTo(e.x - R * 0.22, e.y + R * 0.3)
+  ctx.stroke()
+}
+
 // ---------- Buildings ----------
 
 function chimneySmoke(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, seed: number): void {
@@ -323,6 +407,44 @@ export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.moveTo(x - 14, y - 1); ctx.lineTo(x - 8, y + 5); ctx.stroke()
   ctx.strokeStyle = '#C7CCD4'
   ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
+}
+
+export function drawFarm(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  // tilled plot in a timber frame
+  ctx.fillStyle = '#B08968'
+  rr(ctx, x - 24, y - 15, 48, 32, 6); ctx.fill()
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 3
+  rr(ctx, x - 24, y - 15, 48, 32, 6); ctx.stroke()
+  // furrow rows
+  ctx.strokeStyle = '#9A7357'
+  ctx.lineWidth = 2.4
+  for (let i = 0; i < 4; i++) {
+    const ry = y - 9 + i * 7
+    ctx.beginPath()
+    ctx.moveTo(x - 19, ry)
+    ctx.quadraticCurveTo(x, ry + 1.5, x + 19, ry)
+    ctx.stroke()
+  }
+  // little sprouts, swaying
+  ctx.fillStyle = '#7FA95E'
+  for (let i = 0; i < 8; i++) {
+    const sx = x - 16 + (i % 4) * 10.5 + Math.sin(t * 1.4 + i + e.seed) * 0.7
+    const sy = y - 6 + Math.floor(i / 4) * 14
+    ctx.beginPath(); ctx.ellipse(sx, sy, 2.4, 3.2, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  // corner post with a team pennant
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 2.4
+  ctx.beginPath(); ctx.moveTo(x + 21, y - 13); ctx.lineTo(x + 21, y - 26); ctx.stroke()
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(x + 21, y - 26)
+  ctx.lineTo(x + 30, y - 23.5)
+  ctx.lineTo(x + 21, y - 21)
+  ctx.closePath(); ctx.fill()
 }
 
 export function drawSite(ctx: CanvasRenderingContext2D, e: Ent): void {

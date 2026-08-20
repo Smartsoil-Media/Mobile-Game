@@ -68,7 +68,7 @@ await page.waitForTimeout(250)
 if (await page.isHidden('#dock')) throw new Error('dock hidden with villager selected')
 if (!(await page.isVisible('[data-cmd="build-house"]'))) throw new Error('build buttons missing for villager')
 
-// icon dock: 4 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
+// icon dock: 6 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
 const dockIcons = await page.evaluate(() => ({
   buttons: [...document.querySelectorAll('#dock-buttons button.cmd.icon')].map(b => b.dataset.cmd),
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
@@ -76,14 +76,14 @@ const dockIcons = await page.evaluate(() => ({
   disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
 }))
 console.log('icon dock:', dockIcons)
-if (dockIcons.buttons.length !== 4 || dockIcons.canvases !== 4) throw new Error('expected 4 sprite-icon build buttons')
+if (dockIcons.buttons.length !== 6 || dockIcons.canvases !== 6) throw new Error('expected 6 sprite-icon build buttons')
 if (!dockIcons.hintGone) throw new Error('hint element still present')
 if (!dockIcons.disabled.includes('build-barracks')) throw new Error('unaffordable barracks not greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
 await page.waitForTimeout(150)
 const allDisabled = await page.evaluate(() =>
   document.querySelectorAll('#dock-buttons button.disabled').length)
-if (allDisabled !== 4) throw new Error('with 0 wood all build buttons should be greyed out')
+if (allDisabled !== 6) throw new Error('with 0 wood all build buttons should be greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
 await page.waitForTimeout(150)
 await page.evaluate(() => {
@@ -143,7 +143,7 @@ const placeTap = await page.evaluate(() => {
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   g.camera.x = tc.x; g.camera.y = tc.y
   const c = document.getElementById('game').getBoundingClientRect()
-  return { x: c.width / 2 + 130 * g.camera.zoom, y: c.height / 2 - 120 * g.camera.zoom }
+  return { x: c.width / 2 - 150 * g.camera.zoom, y: c.height / 2 + 40 * g.camera.zoom }
 })
 await page.tap('#game', { position: placeTap })
 await page.waitForTimeout(300)
@@ -175,11 +175,12 @@ const armySel = await page.evaluate(() => {
   const army = g.ents.filter(e => e.team === 0 && e.kind === 'swordsman')
   const cx = army.reduce((s, e) => s + e.x, 0) / army.length
   const cy = army.reduce((s, e) => s + e.y, 0) / army.length
-  return { sel: g.selection.length, offCenter: Math.hypot(g.camera.x - cx, g.camera.y - cy) }
+  // y is often clamped on tall viewports (whole map height fits), so check x only
+  return { sel: g.selection.length, offCenterX: Math.abs(g.camera.x - cx) }
 })
 console.log('army select:', armySel)
 if (armySel.sel < s3.playerSoldiers) throw new Error('army button did not select all soldiers')
-if (armySel.offCenter > 250) throw new Error('army button did not recenter the camera')
+if (armySel.offCenterX > 150) throw new Error('army button did not recenter the camera')
 
 // 3) march the army on the enemy town hall until victory
 await page.evaluate(() => {
@@ -527,6 +528,107 @@ await page3.evaluate(({ treeId }) => {
 }, depSetup)
 await page3.waitForTimeout(300)
 await page3.screenshot({ path: 'shots/9-stump.png' })
+
+// 12) food & stone: forage a bush, quarry stone
+const fsSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  const bush = g.ents.find(e => e.kind === 'berrybush' && (e.amount ?? 0) > 0 && e.x < 960)
+  const quarry = g.ents.find(e => e.kind === 'stonequarry' && e.x < 960)
+  vills[0].state = 'gather'; vills[0].targetId = bush.id; vills[0].gatherT = 0
+  vills[1].state = 'gather'; vills[1].targetId = quarry.id; vills[1].gatherT = 0
+  window.__game.setSpeed(15)
+  return { food: g.res[0].food, stone: g.res[0].stone }
+})
+await waitSim(page3, 45)
+const fsResult = await page3.evaluate(() => ({
+  food: window.__game.state.res[0].food, stone: window.__game.state.res[0].stone,
+}))
+console.log('food/stone gathering:', fsSetup, '->', fsResult)
+if (fsResult.food - fsSetup.food < 8) throw new Error('foraging produced no food')
+if (fsResult.stone - fsSetup.stone < 8) throw new Error('quarrying produced no stone')
+
+// 13) farm: build via the menu, then a villager works the field for steady food
+await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(vills[2].id)
+  g.res[0].wood = Math.max(g.res[0].wood, 200)
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  g.camera.x = tc.x - 120; g.camera.y = tc.y + 150
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="build-farm"]')
+await page3.waitForTimeout(200)
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+const farmPlaced = await page3.evaluate(() => window.__game.state.ents.some(e => e.kind === 'farm'))
+if (!farmPlaced) throw new Error('farm was not placed')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 30)
+const farmReady = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const farm = g.ents.find(e => e.kind === 'farm' && e.complete)
+  if (!farm) return null
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(vills[2].id)
+  g.camera.x = farm.x; g.camera.y = farm.y
+  return { food: g.res[0].food }
+})
+if (!farmReady) throw new Error('farm never completed')
+await page3.waitForTimeout(250)
+await page3.tap('#game', { position: canvasBox }) // tap the farm -> work it
+await page3.waitForTimeout(250)
+const farmWorking = await page3.evaluate(() => {
+  const g = window.__game.state
+  const farm = g.ents.find(e => e.kind === 'farm' && e.complete)
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[2]
+  return { state: v.state, onFarm: v.targetId === farm.id }
+})
+console.log('farm working:', farmWorking)
+if (farmWorking.state !== 'gather' || !farmWorking.onFarm) throw new Error('villager did not start working the farm')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 30)
+const farmFood = await page3.evaluate(() => window.__game.state.res[0].food)
+console.log('farm food:', farmReady.food, '->', farmFood)
+if (farmFood - farmReady.food < 6) throw new Error('farm produced no food')
+
+// 14) expansion: a second Town Hall paid with stone
+const tcSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  g.res[0].wood = 400; g.res[0].stone = 300
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(vills[0].id)
+  g.camera.x = 900; g.camera.y = 480
+  g.uiDirty = true
+  return { popText: document.getElementById('pop-n').textContent }
+})
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="build-towncenter"]')
+await page3.waitForTimeout(200)
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+const tcPlaced = await page3.evaluate(() =>
+  window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'towncenter').length)
+if (tcPlaced !== 2) throw new Error('second town hall was not placed')
+await page3.evaluate(() => window.__game.setSpeed(20))
+await waitSim(page3, 75) // long walk + 45s build
+const tcDone = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  return {
+    complete: g.ents.filter(e => e.team === 0 && e.kind === 'towncenter' && e.complete).length,
+    popText: document.getElementById('pop-n').textContent,
+  }
+})
+console.log('expansion:', tcSetup.popText, '->', tcDone)
+if (tcDone.complete !== 2) throw new Error('second town hall never completed')
+if (!tcDone.popText.endsWith('/15')) throw new Error('pop cap did not grow to 15: ' + tcDone.popText)
+await page3.screenshot({ path: 'shots/10-expansion.png' })
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

@@ -74,7 +74,7 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
-  if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough wood for a ${b.name}.`); return false }
+  if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
   if (x < 70 || x > WORLD_W - 70 || y < 70 || y > WORLD_H - 70) { toast(g, 'Too close to the meadow edge.'); return false }
   for (const e of g.ents) {
     if (dist(x, y, e.x, e.y) < b.r + e.r + (isUnit(e) ? 0 : 12)) {
@@ -137,6 +137,15 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
+      return
+    }
+  }
+
+  // villagers tap one of your farms: work the field
+  if (hit && hit.team === 0 && hit.kind === 'farm' && hit.complete) {
+    const villagers = myUnits.filter(e => e.kind === 'villager')
+    if (villagers.length) {
+      commandGather(g, villagers, hit)
       return
     }
   }

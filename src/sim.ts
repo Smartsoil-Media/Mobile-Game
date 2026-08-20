@@ -1,6 +1,6 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
-  Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES,
+  Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF,
   CARRY_CAP, GATHER_TICK, GARRISON_CAP, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   WAVE_EVERY, WAVE_WARNING, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
@@ -70,9 +70,17 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     }
     case 'gather': {
       const res = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
-      if (!res || (res.amount ?? 0) <= 0) {
-        // find another of the same kind nearby, else head home with what we carry
-        const kind = res?.kind ?? (e.carryRes === 'gold' ? 'goldmine' : 'tree')
+      const isFarm = res?.kind === 'farm'
+      const dead = !res ||
+        (isFarm ? (!res.complete || res.team !== e.team || res.hp <= 0) : (res.amount ?? 0) <= 0)
+      if (dead) {
+        // find another source of the same kind nearby, else head home with what we carry
+        if (isFarm || res?.kind === undefined && e.carryRes === 'food') {
+          const next = nearest(g, e.x, e.y,
+            o => o.kind === 'farm' && o.team === e.team && !!o.complete, 300)
+          if (next) { e.targetId = next.id; break }
+        }
+        const kind = res && !isFarm ? res.kind : SOURCE_OF[e.carryRes ?? 'wood']
         const next = nearest(g, e.x, e.y, o => o.kind === kind && (o.amount ?? 0) > 0, 280)
         if (next) { e.targetId = next.id }
         else if ((e.carry ?? 0) > 0) e.state = 'return'
@@ -82,22 +90,35 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       if (!inRange(e, res, 6)) { moveToward(e, res.x, res.y, s.speed, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
       e.gatherT = (e.gatherT ?? 0) + dt
-      if (e.gatherT >= GATHER_TICK) {
+      const tick = isFarm ? GATHER_TICK * 1.5 : GATHER_TICK // farms are steady but slow
+      if (e.gatherT >= tick) {
         e.gatherT = 0
-        const gives = RESOURCES[res.kind].gives
+        const gives = isFarm ? 'food' : RESOURCES[res.kind].gives
         if (e.carryRes !== gives) { e.carry = 0; e.carryRes = gives }
-        const take = Math.min(1, res.amount!)
-        res.amount! -= take
-        e.carry = (e.carry ?? 0) + take
-        puff(g, res.x, res.y - res.r * 0.6, gives === 'gold' ? '#F2CA5C' : '#A4C77E', 2, 'spark')
-        if (res.kind === 'goldmine' && res.amount! > 0) {
-          res.r = 34 * (0.55 + 0.45 * (res.amount! / 500)) // mound shrinks as it empties
+        if (!isFarm) {
+          const take = Math.min(1, res.amount!)
+          res.amount! -= take
+          e.carry = (e.carry ?? 0) + take
+        } else {
+          e.carry = (e.carry ?? 0) + 1
         }
-        if (res.amount! <= 0) {
-          // depleted resources stay in the world as scenery: stumps and rubble
+        const sparkColor = gives === 'gold' ? '#F2CA5C'
+          : gives === 'food' ? '#E58F8F'
+          : gives === 'stone' ? '#C9C2B2' : '#A4C77E'
+        puff(g, res.x, res.y - res.r * 0.6, sparkColor, 2, 'spark')
+        if ((res.kind === 'goldmine' || res.kind === 'stonequarry') && res.amount! > 0) {
+          // the mound shrinks as it empties
+          const spec = RESOURCES[res.kind]
+          res.r = spec.r * (0.55 + 0.45 * (res.amount! / spec.amount))
+        }
+        if (!isFarm && res.amount! <= 0) {
+          // depleted resources stay in the world as scenery
           if (res.kind === 'tree') {
             puff(g, res.x, res.y - 10, '#7BA05B', 8, 'leaf')
             res.r = 8
+          } else if (res.kind === 'berrybush') {
+            puff(g, res.x, res.y - 8, '#9CB37E', 6, 'leaf')
+            res.r = 10
           } else {
             puff(g, res.x, res.y - 8, '#C6B89D', 8)
             res.r = 16
@@ -112,15 +133,15 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       if (!home) { e.state = 'idle'; break }
       if (!inRange(e, home, 8)) { moveToward(e, home.x, home.y, s.speed, dt); break }
       if (e.team === 0 || e.team === 1) {
-        const r = g.res[e.team] as any
-        r[e.carryRes === 'gold' ? 'gold' : 'wood'] += e.carry ?? 0
+        g.res[e.team][e.carryRes ?? 'wood'] += e.carry ?? 0
         if (e.team === 0) g.uiDirty = true
       }
       e.carry = 0
       const res = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
-      if (res && (res.amount ?? 0) > 0) e.state = 'gather'
+      const farmAlive = res?.kind === 'farm' && res.complete && res.team === e.team
+      if (res && (farmAlive || (res.amount ?? 0) > 0)) e.state = 'gather'
       else {
-        const kind = e.carryRes === 'gold' ? 'goldmine' : 'tree'
+        const kind = SOURCE_OF[e.carryRes ?? 'wood']
         const next = nearest(g, e.x, e.y, o => o.kind === kind && (o.amount ?? 0) > 0, 320)
         if (next) { e.targetId = next.id; e.state = 'gather' }
         else e.state = 'idle'

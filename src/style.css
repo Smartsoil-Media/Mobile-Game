@@ -52,17 +52,18 @@ html, body {
 .pill {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--cream);
   border: 2px solid var(--cream-edge);
   border-radius: 999px;
-  padding: 5px 12px 5px 9px;
+  padding: 4px 9px 4px 7px;
   box-shadow: 0 3px 0 rgba(70, 92, 48, 0.25);
   font-family: 'Fredoka', 'Nunito', system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.pill svg { width: 15px; height: 15px; }
 .pill svg { display: block; }
 
 /* ---- toasts ---- */
