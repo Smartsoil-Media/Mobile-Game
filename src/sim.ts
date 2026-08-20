@@ -90,9 +90,18 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         res.amount! -= take
         e.carry = (e.carry ?? 0) + take
         puff(g, res.x, res.y - res.r * 0.6, gives === 'gold' ? '#F2CA5C' : '#A4C77E', 2, 'spark')
-        if (res.amount! <= 0 && res.kind === 'tree') {
-          puff(g, res.x, res.y - 10, '#7BA05B', 8, 'leaf')
-          killEnt(g, res)
+        if (res.kind === 'goldmine' && res.amount! > 0) {
+          res.r = 34 * (0.55 + 0.45 * (res.amount! / 500)) // mound shrinks as it empties
+        }
+        if (res.amount! <= 0) {
+          // depleted resources stay in the world as scenery: stumps and rubble
+          if (res.kind === 'tree') {
+            puff(g, res.x, res.y - 10, '#7BA05B', 8, 'leaf')
+            res.r = 8
+          } else {
+            puff(g, res.x, res.y - 8, '#C6B89D', 8)
+            res.r = 16
+          }
         }
         if ((e.carry ?? 0) >= CARRY_CAP) e.state = 'return'
       }

@@ -466,6 +466,50 @@ await page3.evaluate(() => window.__game.setSpeed(1))
 await page3.waitForTimeout(300)
 await page3.screenshot({ path: 'shots/8-lumber-camp.png' })
 
+// 11) depletion: trees become stumps, mines shrink into rubble — both stay in the world
+const depSetup = await page3.evaluate(({ treeId }) => {
+  const g = window.__game.state
+  const tree = g.byId.get(treeId)
+  tree.amount = 2
+  const mine = g.ents.reduce((best, e) => {
+    if (e.kind !== 'goldmine') return best
+    const d = Math.hypot(e.x - tree.x, e.y - tree.y)
+    return !best || d < best.d ? { e, d } : best
+  }, null).e
+  mine.amount = 3
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  vills[0].state = 'gather'; vills[0].targetId = tree.id; vills[0].gatherT = 0
+  vills[1].state = 'gather'; vills[1].targetId = mine.id; vills[1].gatherT = 0
+  window.__game.setSpeed(15)
+  return { treeId: tree.id, mineId: mine.id }
+}, grove)
+await waitSim(page3, 40)
+const depleted = await page3.evaluate(({ treeId, mineId }) => {
+  const g = window.__game.state
+  const tree = g.byId.get(treeId)
+  const mine = g.byId.get(mineId)
+  const chopper = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  return {
+    stump: tree ? { amount: tree.amount, r: tree.r } : null,
+    rubble: mine ? { amount: mine.amount, r: mine.r } : null,
+    chopperRetargeted: chopper.state === 'gather' && chopper.targetId !== treeId,
+  }
+}, depSetup)
+console.log('depletion:', depleted)
+if (!depleted.stump || depleted.stump.amount !== 0 || depleted.stump.r !== 8)
+  throw new Error('tree did not become a stump')
+if (!depleted.rubble || depleted.rubble.amount !== 0 || depleted.rubble.r !== 16)
+  throw new Error('mine did not become rubble')
+if (!depleted.chopperRetargeted) throw new Error('chopper did not retarget a living tree')
+await page3.evaluate(({ treeId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const tree = g.byId.get(treeId)
+  g.camera.x = tree.x; g.camera.y = tree.y
+}, depSetup)
+await page3.waitForTimeout(300)
+await page3.screenshot({ path: 'shots/9-stump.png' })
+
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html'))

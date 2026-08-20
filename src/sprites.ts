@@ -29,6 +29,21 @@ export function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 // ---------- Resources ----------
 
 export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  if ((e.amount ?? 0) <= 0) {
+    // chopped: a cosy stump with growth rings and a stray leaf
+    shadow(ctx, e.x, e.y + 3, 9, 3.6)
+    ctx.fillStyle = WOOD
+    rr(ctx, e.x - 6, e.y - 6, 12, 10, 3.5)
+    ctx.fill()
+    ctx.fillStyle = '#C89B6E'
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 6, 6, 3.4, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = '#A8794F'
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 6, 3.4, 1.8, 0, 0, Math.PI * 2); ctx.stroke()
+    ctx.fillStyle = '#85B168'
+    ctx.beginPath(); ctx.ellipse(e.x + 8, e.y + 1, 2.8, 1.6, 0.5, 0, Math.PI * 2); ctx.fill()
+    return
+  }
   const sway = Math.sin(t * 0.8 + e.seed) * 1.6
   const full = (e.amount ?? 60) / 60
   const s = 0.75 + 0.25 * full
@@ -52,28 +67,42 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
 }
 
 export function drawMine(ctx: CanvasRenderingContext2D, e: Ent): void {
-  shadow(ctx, e.x, e.y + e.r * 0.55, e.r * 1.05, e.r * 0.4)
-  // rock mound
+  const left = Math.max(0, (e.amount ?? 500) / 500)
+  if (left <= 0) {
+    // mined out: a flat patch of grey rubble
+    shadow(ctx, e.x, e.y + 6, 15, 5)
+    ctx.fillStyle = '#B9AE95'
+    for (const [ox, oy, r] of [[-8, 2, 5], [6, 4, 4.4], [0, -2, 5.5], [12, -1, 3.4], [-14, 4, 3]]) {
+      ctx.beginPath(); ctx.ellipse(e.x + ox, e.y + oy, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.fillStyle = '#CFC4AC'
+    for (const [ox, oy, r] of [[-4, 0, 3], [8, 1, 2.6], [2, 4, 2.4]]) {
+      ctx.beginPath(); ctx.ellipse(e.x + ox, e.y + oy, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill()
+    }
+    return
+  }
+  // the mound shrinks as it's mined out
+  const R = 34 * (0.55 + 0.45 * left)
+  shadow(ctx, e.x, e.y + R * 0.55, R * 1.05, R * 0.4)
   ctx.fillStyle = '#B3A489'
   ctx.beginPath()
-  ctx.ellipse(e.x, e.y, e.r, e.r * 0.72, 0, 0, Math.PI * 2)
+  ctx.ellipse(e.x, e.y, R, R * 0.72, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = '#C6B89D'
   ctx.beginPath()
-  ctx.ellipse(e.x - e.r * 0.2, e.y - e.r * 0.25, e.r * 0.62, e.r * 0.42, -0.2, 0, Math.PI * 2)
+  ctx.ellipse(e.x - R * 0.2, e.y - R * 0.25, R * 0.62, R * 0.42, -0.2, 0, Math.PI * 2)
   ctx.fill()
   // gold nuggets
-  const left = (e.amount ?? 500) / 500
   const nuggets = Math.max(2, Math.round(6 * left))
   ctx.fillStyle = '#E9B44C'
   for (let i = 0; i < nuggets; i++) {
     const a = (i / 6) * Math.PI * 2 + e.seed
-    const nx = e.x + Math.cos(a) * e.r * 0.45
-    const ny = e.y - 2 + Math.sin(a) * e.r * 0.3
+    const nx = e.x + Math.cos(a) * R * 0.45
+    const ny = e.y - 2 + Math.sin(a) * R * 0.3
     ctx.beginPath(); ctx.arc(nx, ny, 3.4, 0, Math.PI * 2); ctx.fill()
   }
   ctx.fillStyle = '#F5D584'
-  ctx.beginPath(); ctx.arc(e.x + 3, e.y - e.r * 0.3, 2.4, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(e.x + 3, e.y - R * 0.3, 2.4, 0, Math.PI * 2); ctx.fill()
 }
 
 // ---------- Buildings ----------
