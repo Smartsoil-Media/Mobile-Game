@@ -18,6 +18,18 @@ async function waitSim(pg, simSeconds, timeoutMs = 60000) {
     if (Date.now() - start > timeoutMs) throw new Error(`sim only advanced ${(t - t0).toFixed(1)}s of ${simSeconds}s`)
   }
 }
+// open a build category tab in the villager dock (backing out of any open one)
+async function openCat(pg, cat) {
+  if (await pg.isVisible('[data-cmd="back"]')) {
+    await pg.tap('[data-cmd="back"]')
+    await pg.waitForTimeout(200)
+  }
+  if (await pg.isVisible(`[data-cmd="cat-${cat}"]`)) {
+    await pg.tap(`[data-cmd="cat-${cat}"]`)
+    await pg.waitForTimeout(200)
+  }
+}
+
 const browser = await chromium.launch(
   process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {},
 )
@@ -66,26 +78,45 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(250)
 if (await page.isHidden('#dock')) throw new Error('dock hidden with villager selected')
-if (!(await page.isVisible('[data-cmd="build-house"]'))) throw new Error('build buttons missing for villager')
+if (!(await page.isVisible('[data-cmd="cat-economy"]'))) throw new Error('build categories missing for villager')
 
-// icon dock: 7 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
-const dockIcons = await page.evaluate(() => ({
-  buttons: [...document.querySelectorAll('#dock-buttons button.cmd.icon')].map(b => b.dataset.cmd),
+// build menu: two category doors, then per-category icon buttons
+const rootDock = await page.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+console.log('build categories:', rootDock)
+if (rootDock.join(',') !== 'cat-economy,cat-military') throw new Error('expected economy/military category buttons')
+
+await openCat(page, 'economy')
+const ecoDock = await page.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
-  hintGone: !document.getElementById('hint'),
   disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
 }))
-console.log('icon dock:', dockIcons)
-if (dockIcons.buttons.length !== 7 || dockIcons.canvases !== 7) throw new Error('expected 7 sprite-icon build buttons')
-if (!dockIcons.hintGone) throw new Error('hint element still present')
-if (!dockIcons.disabled.includes('build-barracks')) throw new Error('unaffordable barracks not greyed out')
+console.log('economy menu:', ecoDock)
+if (ecoDock.buttons.join(',') !== 'back,build-house,build-farm,build-lumbercamp,build-miningcamp,build-towncenter')
+  throw new Error('economy menu wrong: ' + ecoDock.buttons.join(','))
+if (ecoDock.canvases !== 5) throw new Error('economy menu should use 5 sprite icons')
+if (!ecoDock.disabled.includes('build-towncenter')) throw new Error('unaffordable town hall not greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
 await page.waitForTimeout(150)
 const allDisabled = await page.evaluate(() =>
   document.querySelectorAll('#dock-buttons button.disabled').length)
-if (allDisabled !== 7) throw new Error('with 0 wood all build buttons should be greyed out')
+if (allDisabled !== 5) throw new Error('with 0 wood all economy buildings should be greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
 await page.waitForTimeout(150)
+await page.tap('[data-cmd="back"]')
+await page.waitForTimeout(200)
+await openCat(page, 'military')
+const milDock = await page.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
+  canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
+}))
+console.log('military menu:', milDock)
+if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-watchtower')
+  throw new Error('military menu wrong: ' + milDock.buttons.join(','))
+if (milDock.canvases !== 1) throw new Error('barracks and archery range should use symbolic icons')
+await page.tap('[data-cmd="back"]')
+await page.waitForTimeout(200)
 await page.evaluate(() => {
   // aim the camera so a tree is on screen, then find its screen position
   const g = window.__game.state
@@ -136,6 +167,7 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(300)
 await page.screenshot({ path: 'shots/3-villager-selected.png' })
+await openCat(page, 'military')
 await page.tap('[data-cmd="build-barracks"]')
 await page.waitForTimeout(200)
 const placeTap = await page.evaluate(() => {
@@ -338,6 +370,7 @@ await page3.evaluate(() => {
   g.camera.x = tc.x; g.camera.y = tc.y
 })
 await page3.waitForTimeout(250)
+await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-house"]')
 await page3.waitForTimeout(200)
 const canvasBox = await page3.evaluate(() => {
@@ -379,6 +412,7 @@ await page3.evaluate(() => {
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
+await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-house"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox }) // place on open meadow
@@ -471,6 +505,7 @@ const grove = await page3.evaluate(() => {
   return { treeId: t.id, spot }
 })
 await page3.waitForTimeout(300)
+await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-lumbercamp"]')
 await page3.waitForTimeout(200)
 const placingState = await page3.evaluate(() => ({
@@ -596,6 +631,7 @@ await page3.evaluate(() => {
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
+await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-farm"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
@@ -644,6 +680,7 @@ const tcSetup = await page3.evaluate(() => {
   return { popText: document.getElementById('pop-n').textContent }
 })
 await page3.waitForTimeout(250)
+await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-towncenter"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
@@ -728,6 +765,7 @@ await page3.evaluate(() => {
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
+await openCat(page3, 'military')
 await page3.tap('[data-cmd="build-watchtower"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
@@ -804,6 +842,67 @@ const towerReleased = await page3.evaluate(() => {
 console.log('tower released:', towerReleased)
 if (towerReleased.garrison !== 0 || towerReleased.hidden !== 0)
   throw new Error('tower did not release its garrison')
+
+// 17) archery range trains archers; archers kill at range
+await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  g.res[0].wood = 400; g.res[0].food = 300; g.res[0].gold = 300
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  for (const v of vills) { v.state = 'idle'; v.targetId = undefined }
+  window.__game.select(vills[0].id)
+  g.camera.x = 700; g.camera.y = 900
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+await openCat(page3, 'military')
+await page3.tap('[data-cmd="build-archeryrange"]')
+await page3.waitForTimeout(200)
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+const rangePlaced = await page3.evaluate(() =>
+  window.__game.state.ents.some(e => e.team === 0 && e.kind === 'archeryrange'))
+if (!rangePlaced) throw new Error('archery range was not placed')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 55)
+const rangeReady = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const range = g.ents.find(e => e.team === 0 && e.kind === 'archeryrange' && e.complete)
+  if (range) window.__game.select(range.id)
+  return !!range
+})
+if (!rangeReady) throw new Error('archery range never completed')
+await page3.waitForTimeout(250)
+await page3.screenshot({ path: 'shots/15-archery-range.png' })
+await page3.tap('[data-cmd="train-archer"]')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 15)
+const archerBorn = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const archer = g.ents.find(e => e.team === 0 && e.kind === 'archer')
+  if (!archer) return null
+  // a practice target: an enemy villager well inside bow range but out of reach
+  const id = window.__game.spawn('villager', 1, archer.x + 100, archer.y)
+  archer.state = 'attack'; archer.targetId = id
+  return { arrowsBefore: g.arrowsFired }
+})
+if (!archerBorn) throw new Error('archer never trained')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 25)
+const archery = await page3.evaluate(() => {
+  const g = window.__game.state
+  return {
+    arrows: g.arrowsFired,
+    targetDead: !g.ents.some(e => e.team === 1 && e.kind === 'villager' && e.x > 600 && e.y > 700),
+    archerAlive: g.ents.some(e => e.team === 0 && e.kind === 'archer'),
+  }
+})
+console.log('archery:', archerBorn.arrowsBefore, '->', archery)
+if (archery.arrows <= archerBorn.arrowsBefore) throw new Error('archer never loosed an arrow')
+if (!archery.targetDead) throw new Error('archer failed to kill the practice target')
+if (!archery.archerAlive) throw new Error('archer died shooting a villager?!')
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

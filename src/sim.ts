@@ -55,10 +55,20 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
   if (Math.abs(t.x - e.x) > 1) e.face = t.x > e.x ? 1 : -1
   if ((e.cd ?? 0) <= 0) {
     e.cd = s.cd
-    t.hp -= s.dmg
-    puff(g, t.x + (Math.random() - 0.5) * t.r, t.y - t.r * 0.4, '#FFF3D6', 3, 'hit')
+    if (e.kind === 'archer') {
+      // loose an arrow instead of striking
+      g.projectiles.push({
+        x: e.x, y: e.y - 12, targetId: t.id, tx: t.x, ty: t.y - 6,
+        speed: 260, dmg: s.dmg, team: e.team,
+      })
+      g.arrowsFired++
+    } else {
+      t.hp -= s.dmg
+      puff(g, t.x + (Math.random() - 0.5) * t.r, t.y - t.r * 0.4, '#FFF3D6', 3, 'hit')
+    }
     // defenders fight back: idle victims turn on their attacker
-    if (isUnit(t) && (t.state === 'idle' || t.state === 'gather' || t.state === 'return') && t.kind === 'swordsman') {
+    if (isUnit(t) && (t.state === 'idle' || t.state === 'gather' || t.state === 'return') &&
+      (t.kind === 'swordsman' || t.kind === 'archer')) {
       t.state = 'attack'; t.targetId = e.id
     }
   }

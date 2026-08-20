@@ -4,11 +4,11 @@ export type Team = 0 | 1
 export const NEUTRAL = -1
 
 export type Kind =
-  | 'villager' | 'swordsman' | 'scout'
-  | 'towncenter' | 'house' | 'barracks' | 'lumbercamp' | 'miningcamp' | 'farm' | 'watchtower'
+  | 'villager' | 'swordsman' | 'archer' | 'scout'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'barracks' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -105,6 +105,7 @@ export const UNITS: Record<string, {
 }> = {
   villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 31, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 120, name: 'Villager' },
   swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 150, name: 'Swordsman' },
+  archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 180, name: 'Archer' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
 }
 
@@ -116,6 +117,7 @@ export const BUILDINGS: Record<string, {
   house: { hp: 200, r: 26, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
   farm: { hp: 120, r: 24, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
   barracks: { hp: 350, r: 40, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
+  archeryrange: { hp: 300, r: 38, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Archery Range' },
   watchtower: { hp: 280, r: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, name: 'Watchtower' },
   lumbercamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
@@ -166,12 +168,12 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 }
 
 export function isUnit(e: Ent): boolean {
-  return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'scout'
+  return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'archer' || e.kind === 'scout'
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
-    e.kind === 'lumbercamp' || e.kind === 'miningcamp' || e.kind === 'farm' ||
-    e.kind === 'watchtower'
+    e.kind === 'archeryrange' || e.kind === 'lumbercamp' || e.kind === 'miningcamp' ||
+    e.kind === 'farm' || e.kind === 'watchtower'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'

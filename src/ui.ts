@@ -2,7 +2,7 @@
 import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawVillager, drawSwordsman } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawArcher } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -11,6 +11,10 @@ const ICON = {
   food: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="9" cy="13" r="5" fill="#C9525E"/><circle cx="16" cy="12" r="4.4" fill="#B23F4C"/><circle cx="10.5" cy="11.5" r="1.5" fill="#E58F8F"/><path d="M12 8c1-2.5 3-3.5 4.5-3.5" stroke="#75A055" stroke-width="2" stroke-linecap="round" fill="none"/><ellipse cx="17.5" cy="5" rx="2.6" ry="1.6" fill="#8CB56A" transform="rotate(-20 17.5 5)"/></svg>`,
   stone: `<svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 16 7 8.5 13 6l6 4-1 7z" fill="#A8A395"/><path d="M7 8.5 13 6l3 2.5-5.5 2z" fill="#D3CEC1"/><path d="M10.5 10.5 16 8.5l3 1.5-1 7-7.5-1z" fill="#BDB8AA"/></svg>`,
   sword: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 19 15.5 8.5M15.5 8.5 19 5l-1 4.5L14.5 13" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 14.5l2 2M5 19l-1.2 1.2" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  economy: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 19V8M12 19c0-3-2.5-4.5-5-4.5M12 19c0-3 2.5-4.5 5-4.5" stroke="#8B6A4A" stroke-width="1.6" stroke-linecap="round" fill="none"/><ellipse cx="12" cy="6.5" rx="2" ry="3" fill="#E9B44C"/><ellipse cx="8.4" cy="9" rx="1.8" ry="2.6" fill="#E9B44C" transform="rotate(-28 8.4 9)"/><ellipse cx="15.6" cy="9" rx="1.8" ry="2.6" fill="#E9B44C" transform="rotate(28 15.6 9)"/></svg>`,
+  military: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6.5 17.5 16 8M17.5 17.5 8 8" stroke="#AEB4BF" stroke-width="2.4" stroke-linecap="round"/><path d="M15 6.5 17.5 5.5 16.5 8M9 6.5 6.5 5.5 7.5 8" fill="#AEB4BF"/><path d="M6.5 17.5l-1.6 1.6M17.5 17.5l1.6 1.6" stroke="#E9B44C" stroke-width="2.6" stroke-linecap="round"/></svg>`,
+  swordspear: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6 18 15 9" stroke="#C7CCD4" stroke-width="2.4" stroke-linecap="round"/><path d="M15 9l2.5-3.5L18.5 9z" fill="#C7CCD4"/><path d="M9.2 15.2l-1.8-1.8M6 18l-1.4 1.4" stroke="#E9B44C" stroke-width="2.4" stroke-linecap="round"/><path d="M18 18 8.5 8.5" stroke="#8B6A4A" stroke-width="2.2" stroke-linecap="round"/><path d="M8.5 8.5 5.5 5.5l1.2 3.8 2.6-.1z" fill="#AEB4BF"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><circle cx="12" cy="12" r="8.5" fill="#E8C97A"/><circle cx="12" cy="12" r="6" fill="#FBF3E4"/><circle cx="12" cy="12" r="3.6" fill="#C9525E"/><circle cx="12" cy="12" r="1.4" fill="#FBF3E4"/><path d="M12.5 11.5 18 6" stroke="#6F5238" stroke-width="1.8" stroke-linecap="round"/><path d="M18 6l.8-2.3L16.5 4.6z" fill="#8B6A4A"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
@@ -33,12 +37,14 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     towncenter: { scale: 0.44, cx: 0, cy: -11 },
     farm: { scale: 0.85, cx: 2, cy: -1 },
     watchtower: { scale: 0.58, cx: 0, cy: -23 },
+    archeryrange: { scale: 0.62, cx: -2, cy: -3 },
     house: { scale: 1.0, cx: 0, cy: -5.5 },
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
     miningcamp: { scale: 0.78, cx: 4.5, cy: -2.5 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
+    archer: { scale: 1.45, cx: 0, cy: -7 },
   }
   const k = conf[kind] ?? { scale: 1, cx: 0, cy: 0 }
   ctx.scale(2, 2)
@@ -49,12 +55,14 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     case 'towncenter': drawTC(ctx, fake, 0.2); break
     case 'farm': drawFarm(ctx, fake, 0.2); break
     case 'watchtower': drawWatchtower(ctx, fake, 0.2); break
+    case 'archeryrange': drawArcheryRange(ctx, fake, 0.2); break
     case 'house': drawHouse(ctx, fake, 0.2); break
     case 'barracks': drawBarracks(ctx, fake, 0.2); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
     case 'miningcamp': drawMiningCamp(ctx, fake); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
+    case 'archer': drawArcher(ctx, fake, 0); break
   }
   return c
 }
@@ -86,7 +94,7 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman'): void {
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'archer'): void {
   const s = UNITS[kind]
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
@@ -144,6 +152,10 @@ function queuePill(b: Ent): HTMLElement {
   return q
 }
 
+// which build submenu is open (per selection; resets when the selection changes)
+let buildCat: 'economy' | 'military' | null = null
+let lastSelKey = ''
+
 function updateAffordability(g: Game): void {
   const btns = document.querySelectorAll<HTMLButtonElement>('#dock-buttons button.cmd')
   btns.forEach(b => {
@@ -191,6 +203,8 @@ export function syncUI(g: Game): void {
   const sel = selectedEnts(g)
   const first = sel[0]
   const sameKind = sel.length > 0 && sel.every(e => e.kind === first.kind)
+  const selKey = g.selection.join(',')
+  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null }
 
   if (g.placing) {
     const btn = document.createElement('button')
@@ -223,13 +237,45 @@ export function syncUI(g: Game): void {
       { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), cost: UNITS.swordsman.cost },
       () => tryTrain(g, first, 'swordsman')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-archer', label: 'Train archer', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
+      () => tryTrain(g, first, 'archer')))
+    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
-    const buildables: Buildable[] = ['house', 'farm', 'barracks', 'watchtower', 'lumbercamp', 'miningcamp', 'towncenter']
-    for (const kind of buildables) {
-      const b = BUILDINGS[kind]
+    if (buildCat === null) {
+      // two clear doors: what kind of building?
       dock.appendChild(iconButton(
-        { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: spriteIcon(kind), cost: b.cost },
-        () => { g.placing = kind; g.uiDirty = true }))
+        { cmd: 'cat-economy', label: 'Economy buildings', icon: ICON.economy },
+        () => { buildCat = 'economy'; g.uiDirty = true }))
+      dock.appendChild(iconButton(
+        { cmd: 'cat-military', label: 'Military buildings', icon: ICON.military },
+        () => { buildCat = 'military'; g.uiDirty = true }))
+      dock.querySelector('[data-cmd="cat-economy"]')!.insertAdjacentHTML('beforeend', '<i>Economy</i>')
+      dock.querySelector('[data-cmd="cat-military"]')!.insertAdjacentHTML('beforeend', '<i>Military</i>')
+    } else {
+      const back = document.createElement('button')
+      back.className = 'cmd ghost'
+      back.dataset.cmd = 'back'
+      back.setAttribute('aria-label', 'Back')
+      back.textContent = '‹'
+      back.addEventListener('click', () => { buildCat = null; g.uiDirty = true })
+      dock.appendChild(back)
+      const lists: Record<'economy' | 'military', Buildable[]> = {
+        economy: ['house', 'farm', 'lumbercamp', 'miningcamp', 'towncenter'],
+        military: ['barracks', 'archeryrange', 'watchtower'],
+      }
+      // symbolic icons where a miniature would be muddy
+      const symbolIcons: Partial<Record<Buildable, string>> = {
+        barracks: ICON.swordspear,
+        archeryrange: ICON.target,
+      }
+      for (const kind of lists[buildCat]) {
+        const b = BUILDINGS[kind]
+        dock.appendChild(iconButton(
+          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost },
+          () => { g.placing = kind; g.uiDirty = true }))
+      }
     }
   }
 

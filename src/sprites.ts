@@ -684,6 +684,125 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
   ctx.restore()
 }
 
+export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const { bx, by, walk } = unitBase(ctx, e, t)
+  const f = e.face ?? 1
+  const drawing = e.state === 'attack' && (e.cd ?? 0) > 1.2 // just loosed / drawing
+  ctx.save()
+  lean(ctx, e, 0.2, 0.25)
+  // feet
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath(); ctx.ellipse(bx - 3.4, e.y + 4 + walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(bx + 3.4, e.y + 4 - walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
+  // body: slim tunic
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(bx - 6, by + 4)
+  ctx.quadraticCurveTo(bx - 7, by - 6.5, bx, by - 7.5)
+  ctx.quadraticCurveTo(bx + 7, by - 6.5, bx + 6, by + 4)
+  ctx.quadraticCurveTo(bx, by + 7, bx - 6, by + 4)
+  ctx.closePath(); ctx.fill()
+  // quiver on the back
+  ctx.save()
+  ctx.translate(bx - f * 6.5, by - 4)
+  ctx.rotate(f * 0.35)
+  ctx.fillStyle = '#8B6A4A'
+  rr(ctx, -2.2, -5, 4.4, 10, 2); ctx.fill()
+  ctx.strokeStyle = '#F4E4C6'; ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(-1, -5); ctx.lineTo(-1, -8)
+  ctx.moveTo(1.2, -5); ctx.lineTo(1.2, -8.5)
+  ctx.stroke()
+  ctx.restore()
+  // head with a hood
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(bx, by - 11.5, 5.8, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = c.dark
+  ctx.beginPath(); ctx.arc(bx, by - 12.5, 6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(bx - f * 2, by - 18)
+  ctx.quadraticCurveTo(bx - f * 7, by - 17, bx - f * 8, by - 13)
+  ctx.quadraticCurveTo(bx - f * 5, by - 15.5, bx - f * 2.5, by - 16.5)
+  ctx.closePath(); ctx.fill()
+  // eyes
+  ctx.fillStyle = '#5A4632'
+  ctx.beginPath(); ctx.arc(bx + f * 1.8, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(bx + f * 4.2, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  // bow held forward
+  ctx.save()
+  ctx.translate(bx + f * 7, by - 4)
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 2.2
+  ctx.beginPath()
+  ctx.arc(0, 0, 8, -Math.PI / 2 + 0.25, Math.PI / 2 - 0.25)
+  ctx.stroke()
+  ctx.strokeStyle = '#F4E4C6'
+  ctx.lineWidth = 1
+  const pull = drawing ? -f * 3 : 0
+  ctx.beginPath()
+  ctx.moveTo(0.8, -7.5)
+  ctx.lineTo(pull, 0)
+  ctx.lineTo(0.8, 7.5)
+  ctx.stroke()
+  if (drawing) {
+    ctx.strokeStyle = '#6F5238'
+    ctx.lineWidth = 1.6
+    ctx.beginPath(); ctx.moveTo(pull, 0); ctx.lineTo(8, 0); ctx.stroke()
+  }
+  ctx.restore()
+  ctx.restore()
+}
+
+export function drawArcheryRange(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 19, 38, 11)
+  // open training pavilion on the left
+  ctx.fillStyle = WALL
+  rr(ctx, x - 34, y - 8, 34, 28, 6); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 34, y - 8, 34, 28, 6); ctx.stroke()
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 40, y - 5)
+  ctx.lineTo(x - 19, y - 24)
+  ctx.quadraticCurveTo(x - 17, y - 25.5, x - 15, y - 24)
+  ctx.lineTo(x + 6, y - 5)
+  ctx.quadraticCurveTo(x - 17, y - 10, x - 40, y - 5)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 22, y + 6, 10, 14, 4); ctx.fill()
+  // fence rail toward the target lane
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(x + 2, y + 12); ctx.lineTo(x + 34, y + 12)
+  ctx.moveTo(x + 8, y + 8); ctx.lineTo(x + 8, y + 16)
+  ctx.moveTo(x + 22, y + 8); ctx.lineTo(x + 22, y + 16)
+  ctx.stroke()
+  // round straw target on a tripod
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 2.2
+  ctx.beginPath()
+  ctx.moveTo(x + 24, y + 4); ctx.lineTo(x + 20, y + 14)
+  ctx.moveTo(x + 24, y + 4); ctx.lineTo(x + 28, y + 14)
+  ctx.stroke()
+  ctx.fillStyle = '#E8C97A'
+  ctx.beginPath(); ctx.arc(x + 24, y - 4, 10, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#FBF3E4'
+  ctx.beginPath(); ctx.arc(x + 24, y - 4, 6.6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#C9525E'
+  ctx.beginPath(); ctx.arc(x + 24, y - 4, 3.4, 0, Math.PI * 2); ctx.fill()
+  // an arrow stuck in the target
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 1.8
+  ctx.beginPath(); ctx.moveTo(x + 25, y - 5); ctx.lineTo(x + 31, y - 11); ctx.stroke()
+  ctx.fillStyle = '#F4E4C6'
+  ctx.beginPath(); ctx.arc(x + 31.5, y - 11.5, 1.6, 0, Math.PI * 2); ctx.fill()
+  flag(ctx, x - 36, y - 12, e.team, t + e.seed)
+}
+
 const UNITS_CD_SWORD = 0.9
 
 export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
