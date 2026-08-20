@@ -1,7 +1,7 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
-import { selectArmy, tryPlaceBuilding } from './input'
+import { selectArmy, tryPlaceBuilding, snapPlace } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
 
 const ICON = {
@@ -289,7 +289,7 @@ export function syncUI(g: Game): void {
           { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost },
           () => {
             g.placing = kind
-            g.placePos = { x: g.camera.x, y: g.camera.y } // ghost starts under your thumb
+            g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
             g.uiDirty = true
           }))
       }

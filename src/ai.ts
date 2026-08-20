@@ -5,7 +5,7 @@ import {
   Game, Ent, ResKind, UNITS, BUILDINGS, SOURCE_OF, POP_MAX, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding,
 } from './data'
-import { spawn, nearest, pop, canAfford, pay } from './world'
+import { spawn, nearest, pop, canAfford, canPlaceAt, pay } from './world'
 
 const THINK_EVERY = 0.8
 const VILLAGER_GOAL = 9
@@ -42,16 +42,10 @@ function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm', tc: Ent): Ent | 
   if (!canAfford(g, 1, b.cost)) return null
   for (let tries = 0; tries < 40; tries++) {
     const a = Math.random() * Math.PI * 2
-    const d = tc.r + b.r + 24 + Math.random() * 130
+    const d = tc.r + b.foot + 30 + Math.random() * 130
     const x = tc.x + Math.cos(a) * d
     const y = tc.y + Math.sin(a) * d
-    if (x < 80 || x > WORLD_W - 80 || y < 80 || y > WORLD_H - 80) continue
-    let ok = true
-    for (const e of g.ents) {
-      if (isUnit(e)) continue
-      if (dist(x, y, e.x, e.y) < b.r + e.r + 14) { ok = false; break }
-    }
-    if (!ok) continue
+    if (!canPlaceAt(g, kind, x, y)) continue
     pay(g, 1, b.cost)
     return spawn(g, kind, 1, x, y, false)
   }

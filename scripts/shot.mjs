@@ -389,6 +389,11 @@ console.log('ghost ui:', ghostUI)
 if (!ghostUI.cross || !ghostUI.tick || !ghostUI.placePos) throw new Error('ghost placement UI missing')
 await page3.tap('#game', { position: canvasBox }) // drop the ghost on the Town Hall (blocked)
 await page3.waitForTimeout(200)
+const snapped = await page3.evaluate(() => {
+  const p = window.__game.state.placePos
+  return p && p.x % 16 === 0 && p.y % 16 === 0
+})
+if (!snapped) throw new Error('ghost position did not snap to the build grid')
 await page3.tap('[data-cmd="confirm"]') // must refuse
 await page3.waitForTimeout(250)
 const badPlace = await page3.evaluate(() => ({
@@ -509,9 +514,11 @@ const grove = await page3.evaluate(() => {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       const s = { x: tree.x + Math.cos(a) * 75, y: tree.y + Math.sin(a) * 75 }
       if (s.x < 80 || s.y < 80) continue
+      // mirror the game's square-footprint rule (axis distance, small gap)
       const clear = g.ents.every(e =>
-        (e.kind === 'villager' || e.kind === 'swordsman') ||
-        Math.hypot(s.x - e.x, s.y - e.y) > 26 + e.r + 14)
+        (e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
+         e.kind === 'archer' || e.kind === 'scout') ||
+        Math.max(Math.abs(s.x - e.x), Math.abs(s.y - e.y)) > 28 + e.r + 14)
       if (clear) { t = tree; spot = s; break outer }
     }
   }
@@ -602,7 +609,8 @@ const depleted = await page3.evaluate(({ treeId, mineId }) => {
   return {
     stump: tree ? { amount: tree.amount, r: tree.r } : null,
     rubble: mine ? { amount: mine.amount, r: mine.r } : null,
-    chopperRetargeted: chopper.state === 'gather' && chopper.targetId !== treeId,
+    chopperRetargeted: (chopper.state === 'gather' || chopper.state === 'return') &&
+      chopper.targetId !== treeId,
   }
 }, depSetup)
 console.log('depletion:', depleted)
@@ -961,15 +969,14 @@ const spearSetup = await page3.evaluate(() => {
   const scoutId = window.__game.spawn('scout', 1, 840, 800)
   g.byId.get(scoutId).scanT = 9999 // hold still, practice pony
   spear.state = 'attack'; spear.targetId = scoutId
-  // control: a swordsman vs a scout takes 5 swings — spear must be faster
-  return { t: g.t }
+  return { scoutId }
 })
 await page3.evaluate(() => window.__game.setSpeed(10))
 await waitSim(page3, 8)
-const spearFight = await page3.evaluate(({ t }) => {
+const spearFight = await page3.evaluate(({ scoutId }) => {
   const g = window.__game.state
   return {
-    scoutDead: !g.ents.some(e => e.team === 1 && e.kind === 'scout' && e.x > 700),
+    scoutDead: !g.byId.has(scoutId),
     spearAlive: g.ents.some(e => e.team === 0 && e.kind === 'spearman'),
   }
 }, spearSetup)

@@ -112,17 +112,17 @@ export const UNITS: Record<string, {
 }
 
 export const BUILDINGS: Record<string, {
-  hp: number; r: number; cost: Cost; time: number; pop: number; los: number
+  hp: number; r: number; foot: number; cost: Cost; time: number; pop: number; los: number
   garrisonCap: number; name: string
 }> = {
-  towncenter: { hp: 800, r: 52, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, name: 'Town Hall' },
-  house: { hp: 200, r: 26, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
-  farm: { hp: 120, r: 24, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
-  barracks: { hp: 350, r: 40, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
-  archeryrange: { hp: 300, r: 38, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Archery Range' },
-  watchtower: { hp: 280, r: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, name: 'Watchtower' },
-  lumbercamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
-  miningcamp: { hp: 200, r: 26, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
+  towncenter: { hp: 800, r: 52, foot: 58, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, name: 'Town Hall' },
+  house: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
+  farm: { hp: 120, r: 24, foot: 30, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
+  barracks: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
+  archeryrange: { hp: 300, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Archery Range' },
+  watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, name: 'Watchtower' },
+  lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
+  miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
 }
 
 export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKind; name: string }> = {
@@ -153,6 +153,7 @@ export const SOURCE_OF: Record<ResKind, Kind> = {
 }
 
 export const FOG_CELL = 32
+export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
 export const POP_MAX = 25

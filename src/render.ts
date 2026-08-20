@@ -192,16 +192,21 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     const b = BUILDINGS[g.placing]
     const { x, y } = g.placePos
     const ok = canPlaceAt(g, g.placing, x, y)
-    // footprint
+    // square footprint, squashed to sit on the ground plane
+    const f = b.foot
+    const fh = f * 0.72
     ctx.fillStyle = ok ? 'rgba(143, 191, 106, 0.28)' : 'rgba(201, 82, 94, 0.32)'
-    ctx.beginPath()
-    ctx.ellipse(x, y + b.r * 0.25, b.r + 10, (b.r + 10) * 0.6, 0, 0, Math.PI * 2)
-    ctx.fill()
+    rrFill(ctx, x - f, y - fh + b.r * 0.2, f * 2, fh * 2, 8)
     ctx.strokeStyle = ok ? 'rgba(251, 243, 228, 0.95)' : 'rgba(201, 82, 94, 0.95)'
     ctx.lineWidth = 2.4
     ctx.setLineDash([7, 6])
     ctx.beginPath()
-    ctx.ellipse(x, y + b.r * 0.25, b.r + 10, (b.r + 10) * 0.6, 0, 0, Math.PI * 2)
+    ctx.moveTo(x - f + 8, y - fh + b.r * 0.2)
+    ctx.arcTo(x + f, y - fh + b.r * 0.2, x + f, y - fh + b.r * 0.2 + fh * 2, 8)
+    ctx.arcTo(x + f, y - fh + b.r * 0.2 + fh * 2, x - f, y - fh + b.r * 0.2 + fh * 2, 8)
+    ctx.arcTo(x - f, y - fh + b.r * 0.2 + fh * 2, x - f, y - fh + b.r * 0.2, 8)
+    ctx.arcTo(x - f, y - fh + b.r * 0.2, x + f, y - fh + b.r * 0.2, 8)
+    ctx.closePath()
     ctx.stroke()
     ctx.setLineDash([])
     // half-opacity preview of the building itself

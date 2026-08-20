@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, BUILDINGS, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
 import { entAt, spawn, canAfford, canPlaceAt, pay, toast } from './world'
 
 export interface PointerState {
@@ -32,6 +32,13 @@ export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
 
 function selectedEnts(g: Game): Ent[] {
   return g.selection.map(id => g.byId.get(id)).filter((e): e is Ent => !!e)
+}
+
+export function snapPlace(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.round(x / PLACE_SNAP) * PLACE_SNAP,
+    y: Math.round(y / PLACE_SNAP) * PLACE_SNAP,
+  }
 }
 
 // ---- Commands ----
@@ -99,8 +106,8 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   const { x, y } = screenToWorld(g, canvas, sx, sy)
 
   if (g.placing) {
-    // while placing, taps just move the ghost; the tick/cross buttons decide
-    g.placePos = { x, y }
+    // while placing, taps just move the ghost (snapped); the tick/cross decide
+    g.placePos = snapPlace(x, y)
     return
   }
 
@@ -244,7 +251,7 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
     if (ps.panning) {
       if (ps.dragGhost && g.placing && g.placePos) {
         const w = screenToWorld(g, canvas, ev.clientX, ev.clientY)
-        g.placePos = { x: w.x, y: w.y }
+        g.placePos = snapPlace(w.x, w.y)
       } else {
         g.camera.x -= (p.x - prevX) / g.camera.zoom
         g.camera.y -= (p.y - prevY) / g.camera.zoom

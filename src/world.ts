@@ -280,13 +280,23 @@ export function openDoors(g: Game, b: Ent): void {
   g.uiDirty = true
 }
 
-// is this spot open ground for a building of this kind?
+// is this spot open ground for a building of this kind? Buildings occupy
+// square footprints so villages can be packed in tidy rows.
 export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
-  const b = BUILDINGS[kind]
-  if (x < 70 || x > WORLD_W - 70 || y < 70 || y > WORLD_H - 70) return false
+  const f = BUILDINGS[kind].foot
+  if (x - f < 40 || x + f > WORLD_W - 40 || y - f < 40 || y + f > WORLD_H - 40) return false
   for (const e of g.ents) {
     if (isUnit(e)) continue
-    if (dist(x, y, e.x, e.y) < b.r + e.r + 12) return false
+    if (isBuilding(e)) {
+      // square vs square, snug 6px seam
+      const of = BUILDINGS[e.kind].foot
+      if (Math.abs(x - e.x) < f + of + 6 && Math.abs(y - e.y) < f + of + 6) return false
+    } else {
+      // square vs round resource: nearest point on the square to the circle
+      const px = Math.max(x - f, Math.min(x + f, e.x))
+      const py = Math.max(y - f, Math.min(y + f, e.y))
+      if (dist(px, py, e.x, e.y) < e.r + 10) return false
+    }
   }
   return true
 }
