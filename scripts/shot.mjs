@@ -741,10 +741,11 @@ const towerReady = await page3.evaluate(() => {
   const g = window.__game.state
   const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower' && e.complete)
   if (!tower) return null
-  // an empty tower must still defend itself: send one attacker at it
-  const id = window.__game.spawn('swordsman', 1, tower.x + 160, tower.y)
+  // an empty tower must still defend itself: one attacker, locked onto it
+  // (attack directly so wandering villagers can't lure it out of the test)
+  const id = window.__game.spawn('swordsman', 1, tower.x + 120, tower.y)
   const u = g.byId.get(id)
-  u.state = 'attackmove'; u.tx = tower.x; u.ty = tower.y
+  u.state = 'attack'; u.targetId = tower.id
   return { arrowsBefore: g.arrowsFired, towerHp: tower.hp }
 })
 if (!towerReady) throw new Error('watchtower never completed')
