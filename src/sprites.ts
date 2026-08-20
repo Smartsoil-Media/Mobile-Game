@@ -598,3 +598,66 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
 }
 
 const UNITS_CD_SWORD = 0.9
+
+export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const f = e.face ?? 1
+  const moving = e.state === 'move' || e.state === 'attackmove' || e.state === 'attack'
+  const trot = moving ? Math.sin(t * 12 + (e.phase ?? 0)) : Math.sin(t * 2 + (e.phase ?? 0)) * 0.4
+  const by = e.y - Math.abs(trot) * 2.4
+  shadow(ctx, e.x, e.y + 6, 11, 4)
+  // pony legs
+  ctx.strokeStyle = '#7A5C40'
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(e.x - 5, by - 2); ctx.lineTo(e.x - 5 - trot * 2, e.y + 5)
+  ctx.moveTo(e.x + 5, by - 2); ctx.lineTo(e.x + 5 + trot * 2, e.y + 5)
+  ctx.stroke()
+  // pony body: rounded little horse
+  ctx.fillStyle = '#96714C'
+  ctx.beginPath()
+  ctx.ellipse(e.x, by - 4, 10, 6.5, 0, 0, Math.PI * 2)
+  ctx.fill()
+  // head + ears
+  ctx.beginPath()
+  ctx.ellipse(e.x + f * 10, by - 8, 4.6, 3.8, f * 0.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(e.x + f * 8, by - 11)
+  ctx.lineTo(e.x + f * 9.5, by - 15)
+  ctx.lineTo(e.x + f * 11.5, by - 11)
+  ctx.closePath(); ctx.fill()
+  // mane + tail
+  ctx.fillStyle = '#6F5238'
+  ctx.beginPath(); ctx.arc(e.x + f * 5.5, by - 9.5, 2.6, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath()
+  ctx.ellipse(e.x - f * 10, by - 3 + trot, 2.2, 4.4, f * 0.5, 0, Math.PI * 2)
+  ctx.fill()
+  // saddle in team color
+  ctx.fillStyle = c.main
+  rr(ctx, e.x - 4.5, by - 9.5, 9, 4.5, 2); ctx.fill()
+  // little rider
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(bxr(e.x, f) - 4.5, by - 10)
+  ctx.quadraticCurveTo(bxr(e.x, f) - 5, by - 17, bxr(e.x, f), by - 18)
+  ctx.quadraticCurveTo(bxr(e.x, f) + 5, by - 17, bxr(e.x, f) + 4.5, by - 10)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 20.5, 4.6, 0, Math.PI * 2); ctx.fill()
+  // feathered cap
+  ctx.fillStyle = c.dark
+  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22, 4.8, Math.PI * 0.95, Math.PI * 2.05); ctx.fill()
+  ctx.strokeStyle = '#85B168'
+  ctx.lineWidth = 1.6
+  ctx.beginPath()
+  ctx.moveTo(bxr(e.x, f) - f * 3, by - 25)
+  ctx.quadraticCurveTo(bxr(e.x, f) - f * 6, by - 28, bxr(e.x, f) - f * 8, by - 26)
+  ctx.stroke()
+  // eyes
+  ctx.fillStyle = '#5A4632'
+  ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 1.5, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 3.4, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
+}
+
+function bxr(x: number, f: number): number { return x - f * 1.5 }

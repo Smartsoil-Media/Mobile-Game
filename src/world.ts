@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  NEUTRAL, POP_MAX, FIRST_WAVE_AT, GARRISON_CAP, WORLD_W, WORLD_H,
+  NEUTRAL, POP_MAX, FIRST_WAVE_AT, GARRISON_CAP, FOG_CELL, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 
@@ -58,6 +58,12 @@ export function createGame(): Game {
     particles: [],
     projectiles: [],
     arrowsFired: 0,
+    fog: (() => {
+      const w = Math.ceil(WORLD_W / FOG_CELL)
+      const h = Math.ceil(WORLD_H / FOG_CELL)
+      return { w, h, explored: new Uint8Array(w * h), visible: new Uint8Array(w * h) }
+    })(),
+    visionT: 0,
     wave: { at: FIRST_WAVE_AT, size: 2, count: 0, warned: false },
     toasts: [], started: false, uiDirty: true,
   }
@@ -131,16 +137,59 @@ export function createGame(): Game {
   spawn(g, 'villager', 0, pTC.x + 90, pTC.y + 40)
   spawn(g, 'villager', 0, pTC.x + 70, pTC.y - 60)
   spawn(g, 'villager', 0, pTC.x - 20, pTC.y + 90)
-  // Enemy flavor villagers + guards
+  spawn(g, 'scout', 0, pTC.x - 90, pTC.y - 50)
+  // Enemy flavor villagers, guards and their own scout
   spawn(g, 'villager', 1, eTC.x - 80, eTC.y - 60)
   spawn(g, 'villager', 1, eTC.x + 60, eTC.y + 80)
   spawn(g, 'swordsman', 1, eTC.x - 40, eTC.y + 200)
   spawn(g, 'swordsman', 1, eTC.x + 40, eTC.y + 190)
   spawn(g, 'swordsman', 1, eTC.x + 110, eTC.y + 120)
+  spawn(g, 'scout', 1, eTC.x + 90, eTC.y + 40)
 
   g.camera.x = pTC.x + 80
   g.camera.y = pTC.y - 120
+  updateVision(g) // the home meadow is visible before the first tick
   return g
+}
+
+// ---- Fog of war ----
+
+export function fogIndex(g: Game, x: number, y: number): number {
+  const cx = Math.max(0, Math.min(g.fog.w - 1, Math.floor(x / FOG_CELL)))
+  const cy = Math.max(0, Math.min(g.fog.h - 1, Math.floor(y / FOG_CELL)))
+  return cy * g.fog.w + cx
+}
+
+export function updateVision(g: Game): void {
+  const { w, h, explored, visible } = g.fog
+  visible.fill(0)
+  for (const e of g.ents) {
+    if (e.team !== 0 || e.hidden) continue
+    let los = 0
+    if (isUnit(e)) los = UNITS[e.kind].los
+    else if (isBuilding(e)) los = e.complete ? BUILDINGS[e.kind].los : 100
+    else continue
+    const los2 = los * los
+    const x0 = Math.max(0, Math.floor((e.x - los) / FOG_CELL))
+    const x1 = Math.min(w - 1, Math.floor((e.x + los) / FOG_CELL))
+    const y0 = Math.max(0, Math.floor((e.y - los) / FOG_CELL))
+    const y1 = Math.min(h - 1, Math.floor((e.y + los) / FOG_CELL))
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const dx = cx * FOG_CELL + FOG_CELL / 2 - e.x
+        const dy = cy * FOG_CELL + FOG_CELL / 2 - e.y
+        if (dx * dx + dy * dy <= los2) visible[cy * w + cx] = 1
+      }
+    }
+  }
+  for (let i = 0; i < explored.length; i++) if (visible[i]) explored[i] = 1
+}
+
+// Enemy units exist for the player only in live vision; enemy buildings once seen.
+export function isVisibleToPlayer(g: Game, e: Ent): boolean {
+  if (e.team !== 1) return true
+  const i = fogIndex(g, e.x, e.y)
+  return isUnit(e) ? g.fog.visible[i] === 1 : g.fog.explored[i] === 1
 }
 
 // ---- Queries ----
@@ -195,6 +244,7 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
   let best: Ent | null = null, bd = Infinity
   for (const e of g.ents) {
     if (e.hidden) continue
+    if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }

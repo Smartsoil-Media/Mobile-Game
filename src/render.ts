@@ -1,11 +1,35 @@
 // Camera + world rendering.
 import { Game, Ent, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
+import { isVisibleToPlayer } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
-  drawLumberCamp, drawMiningCamp, drawFarm, drawSite, drawVillager, drawSwordsman,
+  drawLumberCamp, drawMiningCamp, drawFarm, drawSite, drawVillager, drawSwordsman, drawScout,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
+let fogCanvas: HTMLCanvasElement | null = null
+
+// Fog overlay drawn from a tiny grid canvas, scaled up so the bilinear
+// filtering gives soft cloudy edges. Cosy deep-forest dark, not pure black.
+function drawFog(ctx: CanvasRenderingContext2D, g: Game): void {
+  const { w, h, explored, visible } = g.fog
+  if (!fogCanvas) {
+    fogCanvas = document.createElement('canvas')
+    fogCanvas.width = w
+    fogCanvas.height = h
+  }
+  const fctx = fogCanvas.getContext('2d')!
+  const img = fctx.createImageData(w, h)
+  const d = img.data
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4
+    d[o] = 30; d[o + 1] = 42; d[o + 2] = 26
+    d[o + 3] = explored[i] ? (visible[i] ? 0 : 118) : 255
+  }
+  fctx.putImageData(img, 0, 0)
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(fogCanvas, 0, 0, w, h, 0, 0, w * 32, h * 32)
+}
 
 function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
   const c = document.createElement('canvas')
@@ -52,8 +76,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.save()
   ctx.scale(dpr, dpr)
 
-  // beyond-the-map backdrop: deep mossy green
-  ctx.fillStyle = '#75935A'
+  // beyond-the-map backdrop matches the fog dark so unexplored map blends out
+  ctx.fillStyle = '#1E2A1A'
   ctx.fillRect(0, 0, vw, vh)
 
   const cam = g.camera
@@ -93,8 +117,10 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.stroke()
   }
 
-  // entities, painter's order (garrisoned units are inside, not drawn)
-  const sorted = g.ents.filter(e => !e.hidden).sort((a, b) => (a.y + a.r) - (b.y + b.r))
+  // entities, painter's order (garrisoned units inside, enemy units in fog unseen)
+  const sorted = g.ents
+    .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)))
+    .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
@@ -109,6 +135,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
       case 'villager': drawVillager(ctx, e, time); break
       case 'swordsman': drawSwordsman(ctx, e, time); break
+      case 'scout': drawScout(ctx, e, time); break
     }
     // health bar when hurt
     if ((isUnit(e) || isBuilding(e)) && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
@@ -152,6 +179,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.fill()
   }
   ctx.globalAlpha = 1
+
+  drawFog(ctx, g)
 
   ctx.restore()
 }

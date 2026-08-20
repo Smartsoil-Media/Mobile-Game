@@ -180,8 +180,9 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 }
 
 export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
-  // every military unit you own (anything that isn't a villager)
-  const army = g.ents.filter(e => e.team === 0 && isUnit(e) && e.kind !== 'villager' && !e.hidden)
+  // every fighting unit you own (scouts stay out of the battle line)
+  const army = g.ents.filter(e =>
+    e.team === 0 && isUnit(e) && e.kind !== 'villager' && e.kind !== 'scout' && !e.hidden)
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
   g.placing = null // selection is changing hands; drop any pending placement
   g.selection = army.map(e => e.id)

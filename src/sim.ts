@@ -5,7 +5,7 @@ import {
   WAVE_EVERY, WAVE_WARNING, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, pop, toast } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, pop, toast, updateVision } from './world'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
   for (let i = 0; i < n; i++) {
@@ -219,12 +219,22 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
       break
     }
     case 'attack': attackTarget(g, e, dt); break
-    default: { // idle: auto-engage nearby enemy units
+    default: { // idle
       e.scanT = (e.scanT ?? 0) - dt
       if (e.scanT <= 0) {
-        e.scanT = 0.3
-        const foe = nearestEnemyUnit(g, e, s.aggro)
-        if (foe) { e.state = 'attack'; e.targetId = foe.id; e.resume = null }
+        if (s.aggro > 0) { // auto-engage nearby enemy units
+          e.scanT = 0.3
+          const foe = nearestEnemyUnit(g, e, s.aggro)
+          if (foe) { e.state = 'attack'; e.targetId = foe.id; e.resume = null }
+        } else if (e.kind === 'scout' && e.team === 1) {
+          // the enemy scout roams the meadow
+          e.scanT = 2 + Math.random() * 3
+          e.state = 'move'
+          e.tx = 100 + Math.random() * (WORLD_W - 200)
+          e.ty = 100 + Math.random() * (WORLD_H - 200)
+        } else {
+          e.scanT = 0.5
+        }
       }
       break
     }
@@ -392,6 +402,13 @@ export function update(g: Game, dt: number): void {
   }
 
   separation(g)
+
+  // player line of sight, a few times a second
+  g.visionT -= dt
+  if (g.visionT <= 0) {
+    g.visionT = 0.25
+    updateVision(g)
+  }
 
   // deaths
   for (const e of [...g.ents]) {
