@@ -4,7 +4,7 @@ export type Team = 0 | 1
 export const NEUTRAL = -1
 
 export type Kind =
-  | 'villager' | 'swordsman' | 'archer' | 'scout'
+  | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
@@ -82,6 +82,7 @@ export interface Game {
   camera: { x: number; y: number; zoom: number }
   selection: number[]
   placing: Buildable | null
+  placePos: { x: number; y: number } | null
   over: 'win' | 'lose' | null
   overT: number
   particles: Particle[]
@@ -105,6 +106,7 @@ export const UNITS: Record<string, {
 }> = {
   villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 31, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 160, name: 'Villager' },
   swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 180, name: 'Swordsman' },
+  spearman: { hp: 55, dmg: 6, range: 20, cd: 1.0, speed: 37, aggro: 130, cost: cost({ food: 35, wood: 20 }), time: 8, r: 11, los: 180, name: 'Spearman' },
   archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, name: 'Archer' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
 }
@@ -128,6 +130,13 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
   goldmine: { r: 34, amount: 500, gives: 'gold', name: 'Gold Mine' },
   berrybush: { r: 14, amount: 120, gives: 'food', name: 'Berry Bush' },
   stonequarry: { r: 30, amount: 350, gives: 'stone', name: 'Stone Quarry' },
+}
+
+// counter bonuses: extra damage dealt by attacker kind against target kind.
+// Scouts stand in for cavalry until the stable arrives; knights will slot in here.
+export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
+  spearman: { scout: 12 },
+  archer: { spearman: 4 },
 }
 
 // where each carried resource may be dropped off
@@ -168,7 +177,8 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 }
 
 export function isUnit(e: Ent): boolean {
-  return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'archer' || e.kind === 'scout'
+  return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
+    e.kind === 'archer' || e.kind === 'scout'
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||

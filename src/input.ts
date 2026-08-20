@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
 import { Game, Ent, Buildable, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
-import { entAt, spawn, canAfford, pay, toast } from './world'
+import { entAt, spawn, canAfford, canPlaceAt, pay, toast } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -75,18 +75,14 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
-  if (x < 70 || x > WORLD_W - 70 || y < 70 || y > WORLD_H - 70) { toast(g, 'Too close to the meadow edge.'); return false }
-  for (const e of g.ents) {
-    if (dist(x, y, e.x, e.y) < b.r + e.r + (isUnit(e) ? 0 : 12)) {
-      if (!isUnit(e)) { toast(g, "Can't build there — too crowded."); return false }
-    }
-  }
+  if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
   const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
   if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
   pay(g, 0, b.cost)
   const site = spawn(g, kind, 0, x, y, false)
   commandBuild(g, villagers, site)
   g.placing = null
+  g.placePos = null
   g.uiDirty = true
   return true
 }
@@ -102,18 +98,13 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (g.over) return
   const { x, y } = screenToWorld(g, canvas, sx, sy)
 
-  const hit = entAt(g, x, y)
-
   if (g.placing) {
-    // placement only lands on open ground — tapping one of your own things
-    // means you changed your mind, so drop placement and handle the tap normally
-    if (!hit || hit.team !== 0) {
-      tryPlaceBuilding(g, g.placing, x, y)
-      return
-    }
-    g.placing = null
-    g.uiDirty = true
+    // while placing, taps just move the ghost; the tick/cross buttons decide
+    g.placePos = { x, y }
+    return
   }
+
+  const hit = entAt(g, x, y)
 
   // double-tap on one of your units: select all its kind nearby
   const now = performance.now()
@@ -170,7 +161,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   if (myUnits.length) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
-    const soldiers = myUnits.filter(e => e.kind === 'swordsman')
+    const soldiers = myUnits.filter(e => e.kind !== 'villager')
     if (hit && hit.team === 1) {
       commandAttack(g, myUnits, hit)
       return
@@ -194,6 +185,7 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
     e.team === 0 && isUnit(e) && e.kind !== 'villager' && e.kind !== 'scout' && !e.hidden)
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
   g.placing = null // selection is changing hands; drop any pending placement
+  g.placePos = null
   g.selection = army.map(e => e.id)
   // bring the camera to the troops so the button visibly does something
   g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length
@@ -205,7 +197,8 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
 // ---- Pointer plumbing ----
 
 export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
-  const ps: PointerState = { pointers: new Map(), downX: 0, downY: 0, downT: 0, panning: false, pinchDist: 0 }
+  const ps: PointerState & { dragGhost?: boolean } =
+    { pointers: new Map(), downX: 0, downY: 0, downT: 0, panning: false, pinchDist: 0, dragGhost: false }
 
   canvas.addEventListener('pointerdown', ev => {
     canvas.setPointerCapture(ev.pointerId)
@@ -213,6 +206,13 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
     if (ps.pointers.size === 1) {
       ps.downX = ev.clientX; ps.downY = ev.clientY; ps.downT = performance.now()
       ps.panning = false
+      // grabbing the placement ghost? then the finger moves it, not the camera
+      ps.dragGhost = false
+      if (g.placing && g.placePos) {
+        const w = screenToWorld(g, canvas, ev.clientX, ev.clientY)
+        const b = BUILDINGS[g.placing]
+        if (dist(w.x, w.y, g.placePos.x, g.placePos.y) < b.r * 1.5 + 14) ps.dragGhost = true
+      }
     } else if (ps.pointers.size === 2) {
       const [a, b] = [...ps.pointers.values()]
       ps.pinchDist = Math.hypot(b.x - a.x, b.y - a.y)
@@ -242,9 +242,14 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
       ps.panning = true
     }
     if (ps.panning) {
-      g.camera.x -= (p.x - prevX) / g.camera.zoom
-      g.camera.y -= (p.y - prevY) / g.camera.zoom
-      clampCamera(g, canvas)
+      if (ps.dragGhost && g.placing && g.placePos) {
+        const w = screenToWorld(g, canvas, ev.clientX, ev.clientY)
+        g.placePos = { x: w.x, y: w.y }
+      } else {
+        g.camera.x -= (p.x - prevX) / g.camera.zoom
+        g.camera.y -= (p.y - prevY) / g.camera.zoom
+        clampCamera(g, canvas)
+      }
     }
   })
 

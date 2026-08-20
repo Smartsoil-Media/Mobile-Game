@@ -1,6 +1,6 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
-  Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF,
+  Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
@@ -55,20 +55,21 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
   if (Math.abs(t.x - e.x) > 1) e.face = t.x > e.x ? 1 : -1
   if ((e.cd ?? 0) <= 0) {
     e.cd = s.cd
+    const dmg = s.dmg + (DMG_BONUS[e.kind]?.[t.kind] ?? 0) // counters bite harder
     if (e.kind === 'archer') {
       // loose an arrow instead of striking
       g.projectiles.push({
         x: e.x, y: e.y - 12, targetId: t.id, tx: t.x, ty: t.y - 6,
-        speed: 260, dmg: s.dmg, team: e.team,
+        speed: 260, dmg, team: e.team,
       })
       g.arrowsFired++
     } else {
-      t.hp -= s.dmg
+      t.hp -= dmg
       puff(g, t.x + (Math.random() - 0.5) * t.r, t.y - t.r * 0.4, '#FFF3D6', 3, 'hit')
     }
     // defenders fight back: idle victims turn on their attacker
     if (isUnit(t) && (t.state === 'idle' || t.state === 'gather' || t.state === 'return') &&
-      (t.kind === 'swordsman' || t.kind === 'archer')) {
+      (t.kind === 'swordsman' || t.kind === 'spearman' || t.kind === 'archer')) {
       t.state = 'attack'; t.targetId = e.id
     }
   }
@@ -327,7 +328,7 @@ function killEnt(g: Game, e: Ent): void {
   g.byId.delete(e.id)
   const si = g.selection.indexOf(e.id)
   if (si >= 0) { g.selection.splice(si, 1); g.uiDirty = true }
-  if (!g.selection.length && g.placing) g.placing = null
+  if (!g.selection.length && g.placing) { g.placing = null; g.placePos = null }
 }
 
 function separation(g: Game): void {

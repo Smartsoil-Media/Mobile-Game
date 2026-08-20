@@ -54,7 +54,7 @@ export function createGame(): Game {
       { wood: 100, food: 50, gold: 0, stone: 0 }, // the enemy plays fair now
     ],
     camera: { x: 0, y: 0, zoom: 0.62 },
-    selection: [], placing: null, over: null, overT: 0,
+    selection: [], placing: null, placePos: null, over: null, overT: 0,
     particles: [],
     projectiles: [],
     arrowsFired: 0,
@@ -278,6 +278,17 @@ export function openDoors(g: Game, b: Ent): void {
   }
   b.garrison = 0
   g.uiDirty = true
+}
+
+// is this spot open ground for a building of this kind?
+export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
+  const b = BUILDINGS[kind]
+  if (x < 70 || x > WORLD_W - 70 || y < 70 || y > WORLD_H - 70) return false
+  for (const e of g.ents) {
+    if (isUnit(e)) continue
+    if (dist(x, y, e.x, e.y) < b.r + e.r + 12) return false
+  }
+  return true
 }
 
 export function toast(g: Game, text: string): void {

@@ -179,6 +179,12 @@ button.cmd.disabled {
   filter: grayscale(1);
   opacity: 0.55;
 }
+button.cmd .tick {
+  font-size: 26px;
+  line-height: 1;
+  color: #3E5626;
+  font-weight: 700;
+}
 button.cmd.ghost {
   background: transparent;
   border: 2px dashed var(--cream-edge);

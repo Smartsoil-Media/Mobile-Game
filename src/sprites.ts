@@ -684,6 +684,66 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
   ctx.restore()
 }
 
+export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const { bx, by, walk } = unitBase(ctx, e, t)
+  const f = e.face ?? 1
+  const thrusting = e.state === 'attack' && (e.cd ?? 0) > 0.72
+  const lunge = thrusting ? f * 3.5 : 0
+  ctx.save()
+  lean(ctx, e, 0.2, 0.25)
+  // feet
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath(); ctx.ellipse(bx - 3.6, e.y + 4.2 + walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(bx + 3.6, e.y + 4.2 - walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
+  // body
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(bx - 6.5 + lunge, by + 4.4)
+  ctx.quadraticCurveTo(bx - 7.5 + lunge, by - 6, bx + lunge, by - 7.5)
+  ctx.quadraticCurveTo(bx + 7.5 + lunge, by - 6, bx + 6.5 + lunge, by + 4.4)
+  ctx.quadraticCurveTo(bx + lunge, by + 7.5, bx - 6.5 + lunge, by + 4.4)
+  ctx.closePath(); ctx.fill()
+  // small buckler on the off-hand
+  ctx.fillStyle = WOOD
+  ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 4.2, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 1.6, 0, Math.PI * 2); ctx.fill()
+  // head + conical cap
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(bx + lunge, by - 11.5, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = c.dark
+  ctx.beginPath()
+  ctx.moveTo(bx - 6.2 + lunge, by - 13.5)
+  ctx.quadraticCurveTo(bx + lunge, by - 16, bx + 6.2 + lunge, by - 13.5)
+  ctx.lineTo(bx + 1.5 + lunge, by - 21.5)
+  ctx.quadraticCurveTo(bx + lunge, by - 22.5, bx - 1.5 + lunge, by - 21.5)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(bx + lunge, by - 22, 1.3, 0, Math.PI * 2); ctx.fill()
+  // eyes
+  ctx.fillStyle = '#5A4632'
+  ctx.beginPath(); ctx.arc(bx + f * 1.8 + lunge, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(bx + f * 4.2 + lunge, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  // the long spear, angled forward; thrusts on attack
+  ctx.save()
+  ctx.translate(bx + f * 6 + lunge * 1.4, by - 3)
+  ctx.rotate(f * (thrusting ? 0.12 : 0.35))
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 2.2
+  ctx.beginPath(); ctx.moveTo(-f * 6, 6); ctx.lineTo(f * 13, -7); ctx.stroke()
+  ctx.fillStyle = '#C7CCD4'
+  ctx.save()
+  ctx.translate(f * 13, -7)
+  ctx.rotate(f * -0.68)
+  ctx.beginPath()
+  ctx.moveTo(-2.2, 0); ctx.lineTo(0, -6); ctx.lineTo(2.2, 0)
+  ctx.closePath(); ctx.fill()
+  ctx.restore()
+  ctx.restore()
+  ctx.restore()
+}
+
 export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)

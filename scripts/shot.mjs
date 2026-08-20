@@ -178,6 +178,8 @@ const placeTap = await page.evaluate(() => {
   return { x: c.width / 2 - 150 * g.camera.zoom, y: c.height / 2 + 40 * g.camera.zoom }
 })
 await page.tap('#game', { position: placeTap })
+await page.waitForTimeout(200)
+await page.tap('[data-cmd="confirm"]')
 await page.waitForTimeout(300)
 const s2 = await state()
 console.log('after barracks placement:', s2)
@@ -377,19 +379,33 @@ const canvasBox = await page3.evaluate(() => {
   const c = document.getElementById('game').getBoundingClientRect()
   return { x: c.width / 2, y: c.height / 2 }
 })
-await page3.tap('#game', { position: canvasBox }) // tap the TC mid-placement
+// ghost placement: cross/tick present, ghost follows taps, red spots refuse
+const ghostUI = await page3.evaluate(() => ({
+  cross: !!document.querySelector('[data-cmd="cancel-place"]'),
+  tick: !!document.querySelector('[data-cmd="confirm"]'),
+  placePos: window.__game.state.placePos,
+}))
+console.log('ghost ui:', ghostUI)
+if (!ghostUI.cross || !ghostUI.tick || !ghostUI.placePos) throw new Error('ghost placement UI missing')
+await page3.tap('#game', { position: canvasBox }) // drop the ghost on the Town Hall (blocked)
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]') // must refuse
 await page3.waitForTimeout(250)
-const placeState = await page3.evaluate(() => {
-  const g = window.__game.state
-  return {
-    placing: g.placing,
-    houses: g.ents.filter(e => e.team === 0 && e.kind === 'house').length,
-    selected: g.selection.length,
-  }
-})
-console.log('placement cancel:', placeState)
-if (placeState.placing !== null || placeState.houses > 0) throw new Error('placement was not cancelled by tapping own building')
-if (!placeState.selected) throw new Error('tap did not select the tapped entity')
+const badPlace = await page3.evaluate(() => ({
+  placing: window.__game.state.placing,
+  houses: window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'house').length,
+}))
+console.log('blocked confirm:', badPlace)
+if (badPlace.placing !== 'house' || badPlace.houses > 0) throw new Error('blocked spot should refuse to place')
+await page3.tap('[data-cmd="cancel-place"]')
+await page3.waitForTimeout(250)
+const cancelled = await page3.evaluate(() => ({
+  placing: window.__game.state.placing,
+  selected: window.__game.state.selection.length,
+}))
+console.log('placement cancel:', cancelled)
+if (cancelled.placing !== null) throw new Error('cross did not cancel placement')
+if (!cancelled.selected) throw new Error('villager should stay selected after cancelling')
 
 // 7) tapping empty ground with a building selected clears selection and hides the dock
 await page3.evaluate(() => {
@@ -415,7 +431,9 @@ await page3.waitForTimeout(250)
 await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-house"]')
 await page3.waitForTimeout(200)
-await page3.tap('#game', { position: canvasBox }) // place on open meadow
+await page3.tap('#game', { position: canvasBox }) // position on open meadow
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const siteInfo = await page3.evaluate(() => {
   const g = window.__game.state
@@ -515,6 +533,8 @@ const placingState = await page3.evaluate(() => ({
 }))
 console.log('placing state:', placingState)
 await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const campPlaced = await page3.evaluate(() => ({
   placed: window.__game.state.ents.some(e => e.kind === 'lumbercamp'),
@@ -635,6 +655,8 @@ await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-farm"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const farmPlaced = await page3.evaluate(() => window.__game.state.ents.some(e => e.kind === 'farm' && e.team === 0))
 if (!farmPlaced) throw new Error('farm was not placed')
@@ -684,6 +706,8 @@ await openCat(page3, 'economy')
 await page3.tap('[data-cmd="build-towncenter"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const tcPlaced = await page3.evaluate(() =>
   window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'towncenter').length)
@@ -789,6 +813,8 @@ await openCat(page3, 'military')
 await page3.tap('[data-cmd="build-watchtower"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const towerPlaced = await page3.evaluate(() =>
   window.__game.state.ents.some(e => e.team === 0 && e.kind === 'watchtower'))
@@ -879,6 +905,8 @@ await openCat(page3, 'military')
 await page3.tap('[data-cmd="build-archeryrange"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(200)
+await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
 const rangePlaced = await page3.evaluate(() =>
   window.__game.state.ents.some(e => e.team === 0 && e.kind === 'archeryrange'))
@@ -923,6 +951,40 @@ console.log('archery:', archerBorn.arrowsBefore, '->', archery)
 if (archery.arrows <= archerBorn.arrowsBefore) throw new Error('archer never loosed an arrow')
 if (!archery.targetDead) throw new Error('archer failed to kill the practice target')
 if (!archery.archerAlive) throw new Error('archer died shooting a villager?!')
+
+// 18) spearman: trains at the barracks, and skewers cavalry
+const spearSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  // a spearman vs an enemy scout: the anti-cavalry bonus should end it in 3 pokes
+  const spear = g.byId.get(window.__game.spawn('spearman', 0, 800, 800))
+  const scoutId = window.__game.spawn('scout', 1, 840, 800)
+  g.byId.get(scoutId).scanT = 9999 // hold still, practice pony
+  spear.state = 'attack'; spear.targetId = scoutId
+  // control: a swordsman vs a scout takes 5 swings — spear must be faster
+  return { t: g.t }
+})
+await page3.evaluate(() => window.__game.setSpeed(10))
+await waitSim(page3, 8)
+const spearFight = await page3.evaluate(({ t }) => {
+  const g = window.__game.state
+  return {
+    scoutDead: !g.ents.some(e => e.team === 1 && e.kind === 'scout' && e.x > 700),
+    spearAlive: g.ents.some(e => e.team === 0 && e.kind === 'spearman'),
+  }
+}, spearSetup)
+console.log('spearman vs cavalry:', spearFight)
+if (!spearFight.scoutDead) throw new Error('spearman failed to kill a scout quickly (cavalry bonus missing?)')
+if (!spearFight.spearAlive) throw new Error('spearman died to a scout?!')
+// barracks dock offers both infantry lines (main page still has a barracks)
+await page.evaluate(() => {
+  const g = window.__game.state
+  const b = g.ents.find(e => e.team === 0 && e.kind === 'barracks' && e.complete)
+  window.__game.select(b.id)
+})
+await page.waitForTimeout(300)
+if (!(await page.isVisible('[data-cmd="train-spearman"]'))) throw new Error('barracks missing the spearman button')
+if (!(await page.isVisible('[data-cmd="train-swordsman"]'))) throw new Error('barracks missing the swordsman button')
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

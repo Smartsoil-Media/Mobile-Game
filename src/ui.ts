@@ -1,8 +1,8 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
-import { selectArmy } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawArcher } from './sprites'
+import { selectArmy, tryPlaceBuilding } from './input'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -44,6 +44,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     miningcamp: { scale: 0.78, cx: 4.5, cy: -2.5 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
+    spearman: { scale: 1.4, cx: 0, cy: -8 },
     archer: { scale: 1.45, cx: 0, cy: -7 },
   }
   const k = conf[kind] ?? { scale: 1, cx: 0, cy: 0 }
@@ -62,6 +63,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     case 'miningcamp': drawMiningCamp(ctx, fake); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
+    case 'spearman': drawSpearman(ctx, fake, 0); break
     case 'archer': drawArcher(ctx, fake, 0); break
   }
   return c
@@ -94,7 +96,7 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'archer'): void {
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer'): void {
   const s = UNITS[kind]
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
@@ -207,12 +209,20 @@ export function syncUI(g: Game): void {
   if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null }
 
   if (g.placing) {
-    const btn = document.createElement('button')
-    btn.className = 'cmd ghost'
-    btn.dataset.cmd = 'cancel'
-    btn.textContent = 'Cancel'
-    btn.addEventListener('click', () => { g.placing = null; g.uiDirty = true })
-    dock.appendChild(btn)
+    const cross = document.createElement('button')
+    cross.className = 'cmd ghost'
+    cross.dataset.cmd = 'cancel-place'
+    cross.setAttribute('aria-label', 'Cancel placement')
+    cross.textContent = '✕'
+    cross.addEventListener('click', () => { g.placing = null; g.placePos = null; g.uiDirty = true })
+    dock.appendChild(cross)
+    const b = BUILDINGS[g.placing]
+    const tick = iconButton(
+      { cmd: 'confirm', label: `Place ${b.name}`, icon: `<span class="tick">✓</span>`, cost: b.cost },
+      () => {
+        if (g.placePos) tryPlaceBuilding(g, g.placing!, g.placePos.x, g.placePos.y)
+      })
+    dock.appendChild(tick)
   } else if (first && first.kind === 'towncenter' && first.complete) {
     dock.appendChild(iconButton(
       { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
@@ -236,6 +246,9 @@ export function syncUI(g: Game): void {
     dock.appendChild(iconButton(
       { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), cost: UNITS.swordsman.cost },
       () => tryTrain(g, first, 'swordsman')))
+    dock.appendChild(iconButton(
+      { cmd: 'train-spearman', label: 'Train spearman', icon: spriteIcon('spearman'), cost: UNITS.spearman.cost },
+      () => tryTrain(g, first, 'spearman')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
@@ -274,7 +287,11 @@ export function syncUI(g: Game): void {
         const b = BUILDINGS[kind]
         dock.appendChild(iconButton(
           { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost },
-          () => { g.placing = kind; g.uiDirty = true }))
+          () => {
+            g.placing = kind
+            g.placePos = { x: g.camera.x, y: g.camera.y } // ghost starts under your thumb
+            g.uiDirty = true
+          }))
       }
     }
   }

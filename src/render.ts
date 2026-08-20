@@ -1,10 +1,10 @@
 // Camera + world rendering.
-import { Game, Ent, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
-import { isVisibleToPlayer } from './world'
+import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
+import { isVisibleToPlayer, canPlaceAt } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
-  drawVillager, drawSwordsman, drawArcher, drawScout,
+  drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -138,6 +138,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
       case 'villager': drawVillager(ctx, e, time); break
       case 'swordsman': drawSwordsman(ctx, e, time); break
+      case 'spearman': drawSpearman(ctx, e, time); break
       case 'archer': drawArcher(ctx, e, time); break
       case 'scout': drawScout(ctx, e, time); break
     }
@@ -185,6 +186,42 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.globalAlpha = 1
 
   drawFog(ctx, g)
+
+  // placement ghost rides above the fog so it's always legible
+  if (g.placing && g.placePos) {
+    const b = BUILDINGS[g.placing]
+    const { x, y } = g.placePos
+    const ok = canPlaceAt(g, g.placing, x, y)
+    // footprint
+    ctx.fillStyle = ok ? 'rgba(143, 191, 106, 0.28)' : 'rgba(201, 82, 94, 0.32)'
+    ctx.beginPath()
+    ctx.ellipse(x, y + b.r * 0.25, b.r + 10, (b.r + 10) * 0.6, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = ok ? 'rgba(251, 243, 228, 0.95)' : 'rgba(201, 82, 94, 0.95)'
+    ctx.lineWidth = 2.4
+    ctx.setLineDash([7, 6])
+    ctx.beginPath()
+    ctx.ellipse(x, y + b.r * 0.25, b.r + 10, (b.r + 10) * 0.6, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    // half-opacity preview of the building itself
+    ctx.globalAlpha = 0.55
+    const ghost: any = {
+      id: 0, kind: g.placing, team: 0, x, y, r: b.r, hp: 1, maxHp: 1, seed: 7,
+      complete: true, garrison: 0, queue: [],
+    }
+    switch (g.placing) {
+      case 'towncenter': drawTC(ctx, ghost, time); break
+      case 'house': drawHouse(ctx, ghost, time); break
+      case 'farm': drawFarm(ctx, ghost, time); break
+      case 'barracks': drawBarracks(ctx, ghost, time); break
+      case 'archeryrange': drawArcheryRange(ctx, ghost, time); break
+      case 'watchtower': drawWatchtower(ctx, ghost, time); break
+      case 'lumbercamp': drawLumberCamp(ctx, ghost); break
+      case 'miningcamp': drawMiningCamp(ctx, ghost); break
+    }
+    ctx.globalAlpha = 1
+  }
 
   ctx.restore()
 }
