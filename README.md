@@ -2,8 +2,9 @@
 
 A tiny, cosy real-time strategy game in the spirit of Age of Empires, built for
 phones. Gather wood, food, gold and stone; farm, expand with new town halls,
-train little swordsmen, and destroy the enemy town hall before their raiders
-topple yours.
+train little swordsmen, and destroy the enemy town hall before their army
+topples yours. The enemy village plays by the same rules: same starting
+villagers and resources, a real economy, and attacks that grow bolder.
 
 Everything — world, units, buildings, art — is drawn in code on an HTML5 canvas.
 No image assets, no frameworks. The whole game bundles into a single HTML file.
@@ -22,8 +23,8 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army** button selects all your soldiers and jumps the camera to them
 - **Ring the Bell** (Town Hall) shelters your villagers inside — a garrisoned
-  Town Hall shoots arrows at raiders (one per villager, up to 10). Ring again
-  to send everyone back to work.
+  Town Hall shoots arrows at attackers (one per villager, up to 10). Ring
+  again to send everyone back to work.
 
 ## Development
 

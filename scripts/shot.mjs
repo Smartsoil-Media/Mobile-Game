@@ -33,10 +33,10 @@ await page.goto('file://' + resolve('dist/index.html'))
 await page.waitForTimeout(600)
 await page.screenshot({ path: 'shots/1-start.png' })
 
-// start the game; hold enemy raids back so the smoke test can verify the
-// economy/training flow deterministically (raids are checked separately below)
+// start the game; freeze the enemy AI so the smoke test can verify the
+// economy/training flow deterministically (the AI is checked separately below)
 await page.tap('#play-btn')
-await page.evaluate(() => { window.__game.state.wave.at = 99999 })
+await page.evaluate(() => { window.__game.state.ai.enabled = false })
 await page.waitForTimeout(400)
 await page.screenshot({ path: 'shots/2-base.png' })
 
@@ -214,28 +214,67 @@ await page.waitForTimeout(300)
 await page.screenshot({ path: 'shots/5-end.png' })
 if (final?.over !== 'win') throw new Error('did not reach victory: ' + JSON.stringify(final))
 
-// 4) fresh page: verify enemy raids spawn and march
+// 4) fresh page: the enemy AI builds a real economy and army from the same start
 const page3 = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await page3.bringToFront()
 await page3.goto('file://' + resolve('dist/index.html'))
 await page3.tap('#play-btn')
-await page3.evaluate(() => { window.__game.state.wave.at = 2; window.__game.setSpeed(10) })
-await page3.waitForTimeout(1500)
-const raid = await page3.evaluate(() => {
+await page3.evaluate(() => {
+  const g = window.__game.state
+  // the AI must not actually win while we watch it grow
+  const pTC = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  pTC.hp = pTC.maxHp = 100000
+  window.__game.setSpeed(20)
+})
+await waitSim(page3, 300, 180000)
+const aiCheck = await page3.evaluate(() => {
   const g = window.__game.state
   return {
-    raiders: g.ents.filter(e => e.team === 1 && e.kind === 'swordsman' && (e.state === 'attackmove' || e.state === 'attack')).length,
-    waveCount: g.wave.count,
+    res: { ...g.res[1] },
+    vills: g.ents.filter(e => e.team === 1 && e.kind === 'villager').length,
+    barracks: g.ents.filter(e => e.team === 1 && e.kind === 'barracks').length,
+    houses: g.ents.filter(e => e.team === 1 && e.kind === 'house').length,
+    soldiers: g.ents.filter(e => e.team === 1 && e.kind === 'swordsman').length,
+    attacking: g.ai.attacking,
+    over: g.over,
   }
 })
-console.log('raid check:', raid)
-if (raid.waveCount < 1 || raid.raiders < 1) throw new Error('enemy raid did not spawn')
+console.log('enemy AI after 300 sim-s:', aiCheck)
+if (aiCheck.vills <= 3) throw new Error('enemy AI trained no villagers')
+if (aiCheck.barracks < 1) throw new Error('enemy AI built no barracks')
+if (aiCheck.soldiers < 1 && !aiCheck.attacking) throw new Error('enemy AI raised no army')
 
-// 5) bell + garrison: villagers shelter in the TC and it shoots the raiders down
+// freeze and clean up the AI so the remaining feature checks are deterministic
 await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
+  g.ai.enabled = false
+  for (const e of g.ents.filter(e => e.team === 1 && e.kind === 'swordsman')) e.hp = 0
+  for (const v of g.ents.filter(e => e.team === 1 && e.kind === 'villager')) {
+    v.state = 'idle'; v.targetId = undefined
+  }
+  const pTC = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  pTC.maxHp = 800; pTC.hp = 800
+  // the AI's push may have cost the idle player some units — restore the
+  // starting roster so the remaining feature checks have what they expect
+  while (g.ents.filter(e => e.team === 0 && e.kind === 'villager').length < 3) {
+    window.__game.spawn('villager', 0, pTC.x + 60 + Math.random() * 40, pTC.y + 60)
+  }
+  if (!g.ents.some(e => e.team === 0 && e.kind === 'scout')) {
+    window.__game.spawn('scout', 0, pTC.x - 90, pTC.y - 50)
+  }
+})
+await page3.waitForTimeout(300)
+
+// 5) bell + garrison: villagers shelter in the TC and it shoots attackers down
+await page3.evaluate(() => {
+  const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  for (let i = 0; i < 2; i++) {
+    const id = window.__game.spawn('swordsman', 1, tc.x + 260 + i * 30, tc.y - 200)
+    const u = g.byId.get(id)
+    u.state = 'attackmove'; u.tx = tc.x; u.ty = tc.y
+  }
   window.__game.select(tc.id)
 })
 await page3.waitForTimeout(300)
@@ -289,9 +328,6 @@ const released = await page3.evaluate(() => {
 console.log('released:', released)
 if (released.garrison !== 0 || released.hidden !== 0) throw new Error('villagers were not released')
 
-// raid mechanics verified — hold further waves so the remaining UI/economy
-// checks on this page aren't razed mid-test
-await page3.evaluate(() => { window.__game.state.wave.at = 99999 })
 
 // 6) placement mode dies when you tap your own stuff instead of open ground
 await page3.evaluate(() => {
@@ -564,14 +600,14 @@ await page3.tap('[data-cmd="build-farm"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox })
 await page3.waitForTimeout(250)
-const farmPlaced = await page3.evaluate(() => window.__game.state.ents.some(e => e.kind === 'farm'))
+const farmPlaced = await page3.evaluate(() => window.__game.state.ents.some(e => e.kind === 'farm' && e.team === 0))
 if (!farmPlaced) throw new Error('farm was not placed')
 await page3.evaluate(() => window.__game.setSpeed(15))
 await waitSim(page3, 30)
 const farmReady = await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
-  const farm = g.ents.find(e => e.kind === 'farm' && e.complete)
+  const farm = g.ents.find(e => e.kind === 'farm' && e.team === 0 && e.complete)
   if (!farm) return null
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
   window.__game.select(vills[2].id)
@@ -584,7 +620,7 @@ await page3.tap('#game', { position: canvasBox }) // tap the farm -> work it
 await page3.waitForTimeout(250)
 const farmWorking = await page3.evaluate(() => {
   const g = window.__game.state
-  const farm = g.ents.find(e => e.kind === 'farm' && e.complete)
+  const farm = g.ents.find(e => e.kind === 'farm' && e.team === 0 && e.complete)
   const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[2]
   return { state: v.state, onFarm: v.targetId === farm.id }
 })

@@ -1,6 +1,6 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
-import { Game } from './data'
-import { createGame } from './world'
+import { Game, Kind } from './data'
+import { createGame, spawn } from './world'
 import { update } from './sim'
 import { render } from './render'
 import { attachInput, clampCamera, selectArmy } from './input'
@@ -46,4 +46,5 @@ requestAnimationFrame(frame)
   start() { g.started = true; document.getElementById('start-overlay')!.classList.add('hidden') },
   selectArmy() { selectArmy(g, canvas) },
   select(id: number) { g.selection = [id]; g.uiDirty = true },
+  spawn(kind: Kind, team: number, x: number, y: number) { return spawn(g, kind, team, x, y).id },
 }

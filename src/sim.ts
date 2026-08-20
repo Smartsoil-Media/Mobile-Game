@@ -2,10 +2,11 @@
 import {
   Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF,
   CARRY_CAP, GATHER_TICK, GARRISON_CAP, TC_RANGE, TC_VOLLEY, ARROW_DMG,
-  WAVE_EVERY, WAVE_WARNING, WORLD_W, WORLD_H,
+  WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, pop, toast, updateVision } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision } from './world'
+import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
   for (let i = 0; i < n; i++) {
@@ -183,14 +184,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       break
     }
     case 'attack': attackTarget(g, e, dt); break
-    default: { // idle
-      // enemy flavor villagers keep their meadow busy
-      if (e.team === 1) {
-        const res = nearest(g, e.x, e.y, o => isResource(o) && (o.amount ?? 0) > 0, 500)
-        if (res) { e.state = 'gather'; e.targetId = res.id }
-      }
-      break
-    }
+    default: break // idle: villagers wait for orders (the enemy AI assigns its own)
   }
 }
 
@@ -338,36 +332,6 @@ function separation(g: Game): void {
   }
 }
 
-function enemyWaves(g: Game, dt: number): void {
-  if (g.t < g.wave.at) {
-    if (!g.wave.warned && g.t >= g.wave.at - WAVE_WARNING) {
-      g.wave.warned = true
-      toast(g, g.wave.count === 0
-        ? 'Raiders sighted near the enemy camp! Ring the bell or arm up!'
-        : 'Raiders are mustering again!')
-    }
-    return
-  }
-  const barracks = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
-  const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
-  const src = barracks ?? tc
-  if (!src) return
-  const playerTC = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  const target = playerTC ?? g.ents.find(e => e.team === 0)
-  if (!target) return
-  for (let i = 0; i < g.wave.size; i++) {
-    const u = spawn(g, 'swordsman', 1, src.x + (Math.random() - 0.5) * 60, src.y + src.r + 14 + Math.random() * 30)
-    u.state = 'attackmove'
-    u.tx = target.x + (Math.random() - 0.5) * 80
-    u.ty = target.y + (Math.random() - 0.5) * 80
-  }
-  g.wave.count++
-  toast(g, g.wave.count === 1 ? 'Enemy raid! Defend your town!' : `Raid incoming — ${g.wave.size} raiders!`)
-  g.wave.at = g.t + WAVE_EVERY
-  g.wave.size = Math.min(7, g.wave.size + 1)
-  g.wave.warned = false
-}
-
 export function update(g: Game, dt: number): void {
   if (g.over) { g.overT += dt; return }
   g.t += dt
@@ -421,7 +385,7 @@ export function update(g: Game, dt: number): void {
     }
   }
 
-  enemyWaves(g, dt)
+  updateEnemyAI(g, dt)
 
   // particles
   for (const p of g.particles) {

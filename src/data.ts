@@ -88,7 +88,7 @@ export interface Game {
   arrowsFired: number
   fog: Fog
   visionT: number
-  wave: { at: number; size: number; count: number; warned: boolean }
+  ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean
@@ -147,10 +147,6 @@ export const GARRISON_CAP = 10
 export const TC_RANGE = 190
 export const TC_VOLLEY = 1.4
 export const ARROW_DMG = 4
-// raid pacing
-export const FIRST_WAVE_AT = 210
-export const WAVE_EVERY = 90
-export const WAVE_WARNING = 20
 export const WORLD_W = 1920
 export const WORLD_H = 1280
 

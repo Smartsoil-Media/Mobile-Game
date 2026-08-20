@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  NEUTRAL, POP_MAX, FIRST_WAVE_AT, GARRISON_CAP, FOG_CELL, WORLD_W, WORLD_H,
+  NEUTRAL, POP_MAX, GARRISON_CAP, FOG_CELL, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 
@@ -51,7 +51,7 @@ export function createGame(): Game {
     ents: [], byId: new Map(), nextId: 1, t: 0, speed: 1,
     res: [
       { wood: 100, food: 50, gold: 0, stone: 0 },
-      { wood: 9999, food: 9999, gold: 9999, stone: 9999 },
+      { wood: 100, food: 50, gold: 0, stone: 0 }, // the enemy plays fair now
     ],
     camera: { x: 0, y: 0, zoom: 0.62 },
     selection: [], placing: null, over: null, overT: 0,
@@ -64,7 +64,7 @@ export function createGame(): Game {
       return { w, h, explored: new Uint8Array(w * h), visible: new Uint8Array(w * h) }
     })(),
     visionT: 0,
-    wave: { at: FIRST_WAVE_AT, size: 2, count: 0, warned: false },
+    ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     toasts: [], started: false, uiDirty: true,
   }
 
@@ -81,8 +81,6 @@ export function createGame(): Game {
   mark(pTC.x, pTC.y, 90); mark(eTC.x, eTC.y, 90)
   spawn(g, 'towncenter', 0, pTC.x, pTC.y)
   spawn(g, 'towncenter', 1, eTC.x, eTC.y)
-  const eBarracks = spawn(g, 'barracks', 1, eTC.x - 150, eTC.y + 120)
-  mark(eBarracks.x, eBarracks.y, 60)
 
   // Gold mines: one near each base, one contested in the middle
   for (const m of [{ x: 640, y: 1100 }, { x: 1300, y: 170 }, { x: 950, y: 620 }]) {
@@ -138,12 +136,10 @@ export function createGame(): Game {
   spawn(g, 'villager', 0, pTC.x + 70, pTC.y - 60)
   spawn(g, 'villager', 0, pTC.x - 20, pTC.y + 90)
   spawn(g, 'scout', 0, pTC.x - 90, pTC.y - 50)
-  // Enemy flavor villagers, guards and their own scout
+  // The enemy village starts with exactly the same hand
   spawn(g, 'villager', 1, eTC.x - 80, eTC.y - 60)
   spawn(g, 'villager', 1, eTC.x + 60, eTC.y + 80)
-  spawn(g, 'swordsman', 1, eTC.x - 40, eTC.y + 200)
-  spawn(g, 'swordsman', 1, eTC.x + 40, eTC.y + 190)
-  spawn(g, 'swordsman', 1, eTC.x + 110, eTC.y + 120)
+  spawn(g, 'villager', 1, eTC.x + 20, eTC.y - 90)
   spawn(g, 'scout', 1, eTC.x + 90, eTC.y + 40)
 
   g.camera.x = pTC.x + 80
