@@ -43,12 +43,18 @@ const state = () => page.evaluate(() => {
   }
 })
 
+// dock is contextual: hidden with nothing selected
+if (!(await page.isHidden('#dock'))) throw new Error('dock visible with no selection')
+
 // 1) order a villager to chop the nearest tree via a real tap
 await page.evaluate(() => {
   const g = window.__game.state
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   window.__game.select(v.id)
 })
+await page.waitForTimeout(250)
+if (await page.isHidden('#dock')) throw new Error('dock hidden with villager selected')
+if (!(await page.isVisible('button.cmd:has-text("Build House")'))) throw new Error('build buttons missing for villager')
 await page.evaluate(() => {
   // aim the camera so a tree is on screen, then find its screen position
   const g = window.__game.state
@@ -249,6 +255,46 @@ const released = await page3.evaluate(() => {
 })
 console.log('released:', released)
 if (released.garrison !== 0 || released.hidden !== 0) throw new Error('villagers were not released')
+
+// 6) placement mode dies when you tap your own stuff instead of open ground
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(v.id)
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  g.camera.x = tc.x; g.camera.y = tc.y
+})
+await page3.waitForTimeout(250)
+await page3.tap('button.cmd:has-text("Build House")')
+await page3.waitForTimeout(200)
+const canvasBox = await page3.evaluate(() => {
+  const c = document.getElementById('game').getBoundingClientRect()
+  return { x: c.width / 2, y: c.height / 2 }
+})
+await page3.tap('#game', { position: canvasBox }) // tap the TC mid-placement
+await page3.waitForTimeout(250)
+const placeState = await page3.evaluate(() => {
+  const g = window.__game.state
+  return {
+    placing: g.placing,
+    houses: g.ents.filter(e => e.team === 0 && e.kind === 'house').length,
+    selected: g.selection.length,
+  }
+})
+console.log('placement cancel:', placeState)
+if (placeState.placing !== null || placeState.houses > 0) throw new Error('placement was not cancelled by tapping own building')
+if (!placeState.selected) throw new Error('tap did not select the tapped entity')
+
+// 7) tapping empty ground with a building selected clears selection and hides the dock
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+  g.camera.x = 330; g.camera.y = 550 // open meadow
+})
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+if (!(await page3.isHidden('#dock'))) throw new Error('dock still visible after clearing selection')
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

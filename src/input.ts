@@ -98,12 +98,19 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (g.over) return
   const { x, y } = screenToWorld(g, canvas, sx, sy)
 
+  const hit = entAt(g, x, y)
+
   if (g.placing) {
-    tryPlaceBuilding(g, g.placing, x, y)
-    return
+    // placement only lands on open ground — tapping one of your own things
+    // means you changed your mind, so drop placement and handle the tap normally
+    if (!hit || hit.team !== 0) {
+      tryPlaceBuilding(g, g.placing, x, y)
+      return
+    }
+    g.placing = null
+    g.uiDirty = true
   }
 
-  const hit = entAt(g, x, y)
   const sel = selectedEnts(g)
   const myUnits = sel.filter(e => isUnit(e) && e.team === 0)
 
@@ -138,6 +145,7 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
   // every military unit you own (anything that isn't a villager)
   const army = g.ents.filter(e => e.team === 0 && isUnit(e) && e.kind !== 'villager' && !e.hidden)
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
+  g.placing = null // selection is changing hands; drop any pending placement
   g.selection = army.map(e => e.id)
   // bring the camera to the troops so the button visibly does something
   g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length

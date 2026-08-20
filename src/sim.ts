@@ -267,6 +267,7 @@ function killEnt(g: Game, e: Ent): void {
   g.byId.delete(e.id)
   const si = g.selection.indexOf(e.id)
   if (si >= 0) { g.selection.splice(si, 1); g.uiDirty = true }
+  if (!g.selection.length && g.placing) g.placing = null
 }
 
 function separation(g: Game): void {

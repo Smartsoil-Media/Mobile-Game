@@ -86,21 +86,33 @@ export function syncUI(g: Game): void {
   // toasts
   el('toasts').innerHTML = g.toasts.map(t => `<div class="toast">${t.text}</div>`).join('')
 
-  // dock
+  // end-of-game overlays (before any dock early-returns)
+  if (g.over === 'win') {
+    el('end-title').textContent = 'Victory!'
+    el('end-text').textContent = 'The enemy town hall has crumbled. Peace returns to the meadow.'
+    el('end-overlay').classList.remove('hidden')
+  } else if (g.over === 'lose') {
+    el('end-title').textContent = 'Defeat…'
+    el('end-text').textContent = 'Your town hall has fallen. The meadow will remember your stand.'
+    el('end-overlay').classList.remove('hidden')
+  }
+
+  // dock: contextual — only on screen while something is selected or placing
   const info = el('sel-info')
   const dock = el('dock-buttons')
   dock.innerHTML = ''
   const sel = selectedEnts(g)
 
+  if (!sel.length && !g.placing) {
+    el('dock').classList.add('hidden')
+    return
+  }
+  el('dock').classList.remove('hidden')
+
   if (g.placing) {
     const b = BUILDINGS[g.placing]
     info.innerHTML = `<b>Placing ${b.name}</b><span>Tap open grass to build</span>`
     dock.appendChild(button('Cancel', () => { g.placing = null; g.uiDirty = true }, 'ghost'))
-    return
-  }
-
-  if (!sel.length) {
-    info.innerHTML = `<b>Bramblewick</b><span>Tap a villager or building</span>`
     return
   }
 
@@ -149,15 +161,4 @@ export function syncUI(g: Game): void {
   }
 
   info.innerHTML = `<b>${name}${count}</b><span>${sub}</span>`
-
-  // overlays
-  if (g.over === 'win') {
-    el('end-title').textContent = 'Victory!'
-    el('end-text').textContent = 'The enemy town hall has crumbled. Peace returns to the meadow.'
-    el('end-overlay').classList.remove('hidden')
-  } else if (g.over === 'lose') {
-    el('end-title').textContent = 'Defeat…'
-    el('end-text').textContent = 'Your town hall has fallen. The meadow will remember your stand.'
-    el('end-overlay').classList.remove('hidden')
-  }
 }
