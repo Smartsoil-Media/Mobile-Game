@@ -464,8 +464,8 @@ export function drawWatchtower(ctx: CanvasRenderingContext2D, e: Ent, t: number)
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   shadow(ctx, x, y + 13, 20, 8)
-  // round stone base, slightly tapered
-  ctx.fillStyle = '#CFC4AC'
+  // timber palisade body, slightly tapered (stone comes with the upgrade)
+  ctx.fillStyle = '#A9855C'
   ctx.beginPath()
   ctx.moveTo(x - 15, y + 12)
   ctx.lineTo(x - 12, y - 26)
@@ -473,17 +473,28 @@ export function drawWatchtower(ctx: CanvasRenderingContext2D, e: Ent, t: number)
   ctx.lineTo(x + 15, y + 12)
   ctx.quadraticCurveTo(x, y + 16, x - 15, y + 12)
   ctx.closePath(); ctx.fill()
-  ctx.strokeStyle = '#B4A88D'
+  ctx.strokeStyle = WOOD_DARK
   ctx.lineWidth = 1.8
   ctx.stroke()
-  // stone texture
-  ctx.fillStyle = '#BDB197'
-  for (const [ox, oy] of [[-6, 2], [5, -6], [-3, -14], [6, 6]]) {
-    ctx.beginPath(); ctx.ellipse(x + ox, y + oy, 3, 2.2, 0, 0, Math.PI * 2); ctx.fill()
+  // vertical plank seams
+  ctx.strokeStyle = 'rgba(111, 82, 56, 0.55)'
+  ctx.lineWidth = 1.4
+  for (const ox of [-8, -2.5, 3, 8.5]) {
+    ctx.beginPath()
+    ctx.moveTo(x + ox, y - 25)
+    ctx.lineTo(x + ox * 1.15, y + 12)
+    ctx.stroke()
   }
+  // cross-brace
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(x - 12, y + 9); ctx.lineTo(x + 12, y - 4)
+  ctx.moveTo(x + 12, y + 9); ctx.lineTo(x - 12, y - 4)
+  ctx.stroke()
   // arrow slit
-  ctx.fillStyle = '#5F5343'
-  rr(ctx, x - 1.6, y - 12, 3.2, 9, 1.6); ctx.fill()
+  ctx.fillStyle = '#4A3413'
+  rr(ctx, x - 1.6, y - 20, 3.2, 9, 1.6); ctx.fill()
   // timber balcony ring
   ctx.fillStyle = WOOD
   rr(ctx, x - 16, y - 32, 32, 8, 3); ctx.fill()
