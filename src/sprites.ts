@@ -218,6 +218,84 @@ export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   flag(ctx, x + 28, y - 14, e.team, t + e.seed)
 }
 
+export function drawLumberCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 15, 28, 9)
+  // open-sided shelter: two timber posts + sloped thatch roof
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.moveTo(x - 18, y + 12); ctx.lineTo(x - 18, y - 10)
+  ctx.moveTo(x + 18, y + 12); ctx.lineTo(x + 18, y - 6)
+  ctx.stroke()
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 27, y - 8)
+  ctx.quadraticCurveTo(x, y - 22, x + 26, y - 4)
+  ctx.lineTo(x + 22, y + 1)
+  ctx.quadraticCurveTo(x, y - 15, x - 23, y - 2)
+  ctx.closePath(); ctx.fill()
+  // stacked cut logs under the roof
+  ctx.fillStyle = WOOD
+  for (const [ox, oy] of [[-8, 6], [0, 6], [8, 6], [-4, 0], [4, 0]]) {
+    ctx.beginPath(); ctx.arc(x + ox, y + oy + 4, 4.2, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.fillStyle = '#C89B6E'
+  for (const [ox, oy] of [[-8, 6], [0, 6], [8, 6], [-4, 0], [4, 0]]) {
+    ctx.beginPath(); ctx.arc(x + ox, y + oy + 4, 2, 0, Math.PI * 2); ctx.fill()
+  }
+  // axe in a stump beside the shelter
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x + 22, y + 8, 9, 7, 2.5); ctx.fill()
+  ctx.save()
+  ctx.translate(x + 26.5, y + 8)
+  ctx.rotate(-0.6)
+  ctx.strokeStyle = WOOD; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -9); ctx.stroke()
+  ctx.fillStyle = '#C7CCD4'
+  rr(ctx, -0.5, -12, 5, 3.4, 1.5); ctx.fill()
+  ctx.restore()
+}
+
+export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 15, 28, 9)
+  // squat stone hut
+  ctx.fillStyle = '#CFC4AC'
+  rr(ctx, x - 18, y - 6, 36, 21, 6); ctx.fill()
+  ctx.strokeStyle = '#B4A88D'; ctx.lineWidth = 1.8
+  rr(ctx, x - 18, y - 6, 36, 21, 6); ctx.stroke()
+  // stone texture dots
+  ctx.fillStyle = '#BDB197'
+  for (const [ox, oy] of [[-10, 2], [2, 8], [10, 0], [-3, -1]]) {
+    ctx.beginPath(); ctx.ellipse(x + ox, y + oy, 3.4, 2.4, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  // timber roof
+  ctx.fillStyle = WOOD
+  ctx.beginPath()
+  ctx.moveTo(x - 23, y - 3)
+  ctx.lineTo(x - 2, y - 19)
+  ctx.quadraticCurveTo(x, y - 20.5, x + 2, y - 19)
+  ctx.lineTo(x + 23, y - 3)
+  ctx.quadraticCurveTo(x, y - 9, x - 23, y - 3)
+  ctx.closePath(); ctx.fill()
+  // doorway
+  ctx.fillStyle = '#5F5343'
+  rr(ctx, x - 5, y + 4, 10, 11, 4.5); ctx.fill()
+  // gold crate beside the hut
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x + 20, y + 6, 12, 9, 2); ctx.fill()
+  ctx.fillStyle = '#E9B44C'
+  for (const [ox, oy] of [[3, -1], [7, -2.5], [9, 0]]) {
+    ctx.beginPath(); ctx.arc(x + 20 + ox, y + 6 + oy, 2.4, 0, Math.PI * 2); ctx.fill()
+  }
+  // crossed pickaxe sign on the wall
+  ctx.strokeStyle = '#8A7458'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(x - 14, y - 1); ctx.lineTo(x - 8, y + 5); ctx.stroke()
+  ctx.strokeStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
+}
+
 export function drawSite(ctx: CanvasRenderingContext2D, e: Ent): void {
   // construction: wooden frame + rising walls with progress
   const x = e.x, y = e.y, w = e.r * 0.9

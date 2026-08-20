@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
 import { entAt, spawn, canAfford, pay, toast } from './world'
 
 export interface PointerState {
@@ -73,7 +73,7 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
   }
 }
 
-export function tryPlaceBuilding(g: Game, kind: 'house' | 'barracks', x: number, y: number): boolean {
+export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough wood for a ${b.name}.`); return false }
   if (x < 70 || x > WORLD_W - 70 || y < 70 || y > WORLD_H - 70) { toast(g, 'Too close to the meadow edge.'); return false }

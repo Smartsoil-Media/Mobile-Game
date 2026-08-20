@@ -150,7 +150,10 @@ export function nearest(g: Game, x: number, y: number, pred: (e: Ent) => boolean
 }
 
 export function nearestDropoff(g: Game, e: Ent): Ent | null {
-  return nearest(g, e.x, e.y, o => o.kind === 'towncenter' && o.team === e.team && !!o.complete)
+  // camps accept their own resource; the Town Hall accepts everything
+  const camp = e.carryRes === 'gold' ? 'miningcamp' : 'lumbercamp'
+  return nearest(g, e.x, e.y, o =>
+    (o.kind === 'towncenter' || o.kind === camp) && o.team === e.team && !!o.complete)
 }
 
 export function nearestEnemyUnit(g: Game, e: Ent, range: number): Ent | null {

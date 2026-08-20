@@ -11,6 +11,8 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 
 - **Tap** a villager or building to select it
 - **Tap** a tree/mine to gather, the ground to move, an enemy to attack
+- **Lumber/Mining Camps** (75 wood) act as drop-off points near the woods or
+  a mine, so villagers don't trek back to the Town Hall
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army** button selects all your soldiers and jumps the camera to them
 - **Ring the Bell** (Town Hall) shelters your villagers inside — a garrisoned

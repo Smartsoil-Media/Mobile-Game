@@ -5,6 +5,19 @@ import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 mkdirSync('shots', { recursive: true })
+
+// Wait until the game's own clock advances — immune to rAF throttling of
+// background pages, which makes wall-clock waits under-deliver sim time.
+async function waitSim(pg, simSeconds, timeoutMs = 60000) {
+  const t0 = await pg.evaluate(() => window.__game.state.t)
+  const start = Date.now()
+  for (;;) {
+    await pg.waitForTimeout(100)
+    const t = await pg.evaluate(() => window.__game.state.t)
+    if (t - t0 >= simSeconds) return
+    if (Date.now() - start > timeoutMs) throw new Error(`sim only advanced ${(t - t0).toFixed(1)}s of ${simSeconds}s`)
+  }
+}
 const browser = await chromium.launch(
   process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {},
 )
@@ -184,6 +197,7 @@ if (final?.over !== 'win') throw new Error('did not reach victory: ' + JSON.stri
 
 // 4) fresh page: verify enemy raids spawn and march
 const page3 = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
+await page3.bringToFront()
 await page3.goto('file://' + resolve('dist/index.html'))
 await page3.tap('#play-btn')
 await page3.evaluate(() => { window.__game.state.wave.at = 2; window.__game.setSpeed(10) })
@@ -255,6 +269,10 @@ const released = await page3.evaluate(() => {
 })
 console.log('released:', released)
 if (released.garrison !== 0 || released.hidden !== 0) throw new Error('villagers were not released')
+
+// raid mechanics verified — hold further waves so the remaining UI/economy
+// checks on this page aren't razed mid-test
+await page3.evaluate(() => { window.__game.state.wave.at = 99999 })
 
 // 6) placement mode dies when you tap your own stuff instead of open ground
 await page3.evaluate(() => {
@@ -372,6 +390,81 @@ const crew = await page3.evaluate(() => {
 })
 console.log('double-tap crew:', crew)
 if (crew.n < 2 || !crew.allVills) throw new Error('double-tap did not select the nearby villagers')
+
+// 10) lumber camp: place near the grove, complete it, verify it's the drop-off
+const grove = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 300
+  // find a clear spot near a player-side tree, using the game's own clearance rule
+  const trees = g.ents.filter(e => e.kind === 'tree' && e.x < 700 && e.y > 600)
+  let t = null, spot = null
+  outer: for (const tree of trees) {
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      const s = { x: tree.x + Math.cos(a) * 75, y: tree.y + Math.sin(a) * 75 }
+      if (s.x < 80 || s.y < 80) continue
+      const clear = g.ents.every(e =>
+        (e.kind === 'villager' || e.kind === 'swordsman') ||
+        Math.hypot(s.x - e.x, s.y - e.y) > 26 + e.r + 14)
+      if (clear) { t = tree; spot = s; break outer }
+    }
+  }
+  if (!spot) throw new Error('no clear spot near the grove')
+  g.camera.x = spot.x; g.camera.y = spot.y
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(vills[0].id)
+  g.uiDirty = true
+  return { treeId: t.id, spot }
+})
+await page3.waitForTimeout(300)
+await page3.tap('button.cmd:has-text("Build Lumber Camp")')
+await page3.waitForTimeout(200)
+const placingState = await page3.evaluate(() => ({
+  placing: window.__game.state.placing,
+  sel: window.__game.state.selection.length,
+  toasts: window.__game.state.toasts.map(t => t.text),
+}))
+console.log('placing state:', placingState)
+await page3.tap('#game', { position: canvasBox })
+await page3.waitForTimeout(250)
+const campPlaced = await page3.evaluate(() => ({
+  placed: window.__game.state.ents.some(e => e.kind === 'lumbercamp'),
+  toasts: window.__game.state.toasts.map(t => t.text),
+}))
+console.log('camp placement:', campPlaced)
+if (!campPlaced.placed) throw new Error('lumber camp was not placed')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 40) // walk + build
+const campDone = await page3.evaluate(() =>
+  window.__game.state.ents.some(e => e.kind === 'lumbercamp' && e.complete))
+if (!campDone) throw new Error('lumber camp never completed')
+
+const dropoffCheck = await page3.evaluate(({ treeId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.state = 'gather'; v.targetId = treeId; v.gatherT = 0
+  return { woodBefore: g.res[0].wood }
+}, grove)
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 24) // several camp round-trips; a TC round trip alone takes ~14s
+const dropoffResult = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  const camp = g.ents.find(e => e.kind === 'lumbercamp')
+  const tree = g.byId.get(v.targetId)
+  return {
+    wood: g.res[0].wood,
+    vill: { state: v.state, carry: v.carry, x: Math.round(v.x), y: Math.round(v.y), target: v.targetId },
+    camp: camp ? { x: Math.round(camp.x), y: Math.round(camp.y), complete: camp.complete } : null,
+    tree: tree ? { kind: tree.kind, amount: tree.amount, x: Math.round(tree.x), y: Math.round(tree.y) } : null,
+  }
+})
+console.log('lumber camp drop-off:', dropoffCheck, '->', dropoffResult)
+if (dropoffResult.wood - dropoffCheck.woodBefore < 12)
+  throw new Error('camp drop-off too slow — villager likely hauling to the Town Hall')
+await page3.evaluate(() => window.__game.setSpeed(1))
+await page3.waitForTimeout(300)
+await page3.screenshot({ path: 'shots/8-lumber-camp.png' })
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

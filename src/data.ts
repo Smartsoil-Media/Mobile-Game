@@ -5,8 +5,10 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman'
-  | 'towncenter' | 'house' | 'barracks'
+  | 'towncenter' | 'house' | 'barracks' | 'lumbercamp' | 'miningcamp'
   | 'tree' | 'goldmine'
+
+export type Buildable = 'house' | 'barracks' | 'lumbercamp' | 'miningcamp'
 
 export interface Ent {
   id: number
@@ -67,7 +69,7 @@ export interface Game {
   res: { wood: number; gold: number }[]
   camera: { x: number; y: number; zoom: number }
   selection: number[]
-  placing: 'house' | 'barracks' | null
+  placing: Buildable | null
   over: 'win' | 'lose' | null
   overT: number
   particles: Particle[]
@@ -97,6 +99,8 @@ export const BUILDINGS: Record<string, {
   towncenter: { hp: 800, r: 52, cost: { wood: 0, gold: 0 }, time: 0, pop: 5, name: 'Town Hall' },
   house: { hp: 200, r: 26, cost: { wood: 50, gold: 0 }, time: 12, pop: 5, name: 'House' },
   barracks: { hp: 350, r: 40, cost: { wood: 150, gold: 0 }, time: 20, pop: 0, name: 'Barracks' },
+  lumbercamp: { hp: 200, r: 26, cost: { wood: 75, gold: 0 }, time: 13, pop: 0, name: 'Lumber Camp' },
+  miningcamp: { hp: 200, r: 26, cost: { wood: 75, gold: 0 }, time: 13, pop: 0, name: 'Mining Camp' },
 }
 
 export const RESOURCES: Record<string, { r: number; amount: number; gives: 'wood' | 'gold'; name: string }> = {
@@ -130,5 +134,8 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 }
 
 export function isUnit(e: Ent): boolean { return e.kind === 'villager' || e.kind === 'swordsman' }
-export function isBuilding(e: Ent): boolean { return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' }
+export function isBuilding(e: Ent): boolean {
+  return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
+    e.kind === 'lumbercamp' || e.kind === 'miningcamp'
+}
 export function isResource(e: Ent): boolean { return e.kind === 'tree' || e.kind === 'goldmine' }

@@ -154,8 +154,12 @@ export function syncUI(g: Game): void {
     sub = 'Under construction — send villagers to help'
   } else if (sameKind && first.kind === 'villager') {
     sub = 'Tap a tree/mine to gather, a site to build'
-    dock.appendChild(button(`Build House<i>${BUILDINGS.house.cost.wood} ${ICON.wood}</i>`, () => { g.placing = 'house'; g.uiDirty = true }))
-    dock.appendChild(button(`Build Barracks<i>${BUILDINGS.barracks.cost.wood} ${ICON.wood}</i>`, () => { g.placing = 'barracks'; g.uiDirty = true }))
+    const buildables: ('house' | 'barracks' | 'lumbercamp' | 'miningcamp')[] =
+      ['house', 'barracks', 'lumbercamp', 'miningcamp']
+    for (const kind of buildables) {
+      const b = BUILDINGS[kind]
+      dock.appendChild(button(`Build ${b.name}<i>${b.cost.wood} ${ICON.wood}</i>`, () => { g.placing = kind; g.uiDirty = true }))
+    }
   } else if (sameKind && first.kind === 'swordsman') {
     sub = 'Tap the map to move, tap a foe to attack'
   }
