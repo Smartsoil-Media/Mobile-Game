@@ -35,6 +35,8 @@ export interface Ent {
   gatherT?: number
   scanT?: number
   face?: number // -1 left, 1 right
+  heading?: number // radians, direction of last movement step
+  stepped?: boolean // true if the unit actually walked this tick
   phase?: number
   // buildings
   complete?: boolean

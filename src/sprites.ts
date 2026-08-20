@@ -19,6 +19,19 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.closePath()
 }
 
+// Tilt the sprite toward its direction of travel. Caller must save/restore.
+// The heading is mirrored onto the facing side so the lean is symmetric.
+export function lean(ctx: CanvasRenderingContext2D, e: Ent, factor: number, cap: number): void {
+  if (!e.stepped || e.heading === undefined) return
+  const f = (e.face ?? 1) >= 0 ? 1 : -1
+  const h = e.heading
+  const rel = Math.atan2(Math.sin(h), f * Math.cos(h))
+  const tilt = f * Math.max(-cap, Math.min(cap, rel * factor))
+  ctx.translate(e.x, e.y)
+  ctx.rotate(tilt)
+  ctx.translate(-e.x, -e.y)
+}
+
 export function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   ctx.fillStyle = 'rgba(66, 84, 44, 0.18)'
   ctx.beginPath()
@@ -479,18 +492,22 @@ export function drawSite(ctx: CanvasRenderingContext2D, e: Ent): void {
 // ---------- Units ----------
 
 function unitBase(ctx: CanvasRenderingContext2D, e: Ent, t: number): { bx: number; by: number; walk: number } {
-  const moving = e.state === 'move' || e.state === 'attackmove' ||
-    ((e.state === 'gather' || e.state === 'return' || e.state === 'attack' || e.state === 'build'))
+  const moving = e.stepped === true
+  const working = !moving && (e.state === 'gather' || e.state === 'build' || e.state === 'attack')
   const walk = Math.sin(t * 9 + (e.phase ?? 0))
-  const bob = moving ? Math.abs(walk) * 2.2 : Math.sin(t * 2 + (e.phase ?? 0)) * 0.8
+  const bob = moving ? Math.abs(walk) * 2.2
+    : working ? Math.abs(Math.sin(t * 5 + (e.phase ?? 0))) * 1.2
+    : Math.sin(t * 2 + (e.phase ?? 0)) * 0.8
   shadow(ctx, e.x, e.y + 6, 9, 3.6)
-  return { bx: e.x, by: e.y - bob, walk }
+  return { bx: e.x, by: e.y - bob, walk: moving ? walk : 0 }
 }
 
 export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  ctx.save()
+  lean(ctx, e, 0.2, 0.25)
   // feet
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.5, e.y + 4 + walk * 1.2, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
@@ -544,12 +561,15 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
     rr(ctx, -1, -10, f * 5.5, 3.6, 1.6); ctx.fill()
     ctx.restore()
   }
+  ctx.restore()
 }
 
 export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  ctx.save()
+  lean(ctx, e, 0.2, 0.25)
   const striking = e.state === 'attack' && (e.cd ?? 0) > UNITS_CD_SWORD - 0.25
   const lunge = striking ? f * 3 : 0
   // feet
@@ -595,6 +615,7 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
   ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 2
   ctx.beginPath(); ctx.moveTo(-2.6, 0); ctx.lineTo(2.6, 0); ctx.stroke()
   ctx.restore()
+  ctx.restore()
 }
 
 const UNITS_CD_SWORD = 0.9
@@ -602,10 +623,12 @@ const UNITS_CD_SWORD = 0.9
 export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const f = e.face ?? 1
-  const moving = e.state === 'move' || e.state === 'attackmove' || e.state === 'attack'
+  const moving = e.stepped === true
   const trot = moving ? Math.sin(t * 12 + (e.phase ?? 0)) : Math.sin(t * 2 + (e.phase ?? 0)) * 0.4
   const by = e.y - Math.abs(trot) * 2.4
   shadow(ctx, e.x, e.y + 6, 11, 4)
+  ctx.save()
+  lean(ctx, e, 0.45, 0.55) // the pony really points where it's trotting
   // pony legs
   ctx.strokeStyle = '#7A5C40'
   ctx.lineWidth = 2.6
@@ -658,6 +681,7 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   ctx.fillStyle = '#5A4632'
   ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 1.5, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 3.4, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
 }
 
 function bxr(x: number, f: number): number { return x - f * 1.5 }

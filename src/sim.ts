@@ -27,6 +27,8 @@ function moveToward(e: Ent, tx: number, ty: number, speed: number, dt: number): 
   const step = Math.min(speed * dt, d)
   e.x += (dx / d) * step
   e.y += (dy / d) * step
+  e.heading = Math.atan2(dy, dx)
+  e.stepped = true
   if (Math.abs(dx) > 1) e.face = dx > 0 ? 1 : -1
   return d - step < 3
 }
@@ -374,6 +376,7 @@ export function update(g: Game, dt: number): void {
     if (!g.byId.has(e.id)) continue // removed earlier this tick
     if (isUnit(e)) {
       if (e.hidden) continue // safe inside the Town Hall
+      e.stepped = false // set again by moveToward if the unit walks this tick
       e.cd = Math.max(0, (e.cd ?? 0) - dt)
       if (e.kind === 'villager') updateVillager(g, e, dt)
       else updateSoldier(g, e, dt)
