@@ -103,9 +103,9 @@ export const UNITS: Record<string, {
   hp: number; dmg: number; range: number; cd: number
   speed: number; aggro: number; cost: Cost; time: number; r: number; los: number; name: string
 }> = {
-  villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 62, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 120, name: 'Villager' },
-  swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 74, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 150, name: 'Swordsman' },
-  scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 115, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
+  villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 31, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 120, name: 'Villager' },
+  swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 150, name: 'Swordsman' },
+  scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
 }
 
 export const BUILDINGS: Record<string, {

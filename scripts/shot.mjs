@@ -652,7 +652,7 @@ const tcPlaced = await page3.evaluate(() =>
   window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'towncenter').length)
 if (tcPlaced !== 2) throw new Error('second town hall was not placed')
 await page3.evaluate(() => window.__game.setSpeed(20))
-await waitSim(page3, 75) // long walk + 45s build
+await waitSim(page3, 100) // long walk (at half speed now) + 45s build
 const tcDone = await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
@@ -736,7 +736,7 @@ const towerPlaced = await page3.evaluate(() =>
   window.__game.state.ents.some(e => e.team === 0 && e.kind === 'watchtower'))
 if (!towerPlaced) throw new Error('watchtower was not placed')
 await page3.evaluate(() => window.__game.setSpeed(15))
-await waitSim(page3, 35)
+await waitSim(page3, 55) // walk (half speed) + 18s build
 const towerReady = await page3.evaluate(() => {
   const g = window.__game.state
   const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower' && e.complete)
