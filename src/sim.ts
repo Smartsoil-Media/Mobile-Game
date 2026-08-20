@@ -131,10 +131,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         site.complete = true
         site.hp = b.hp
         puff(g, site.x, site.y - site.r * 0.5, '#FBF3E4', 10)
-        if (site.team === 0) {
-          toast(g, `${b.name} finished!`)
-          if (site.kind === 'barracks' && g.hintStage < 3) { g.hintStage = 3 }
-        }
+        if (site.team === 0 && site.kind === 'barracks' && g.hintStage < 3) g.hintStage = 3
         e.state = 'idle'; e.targetId = undefined
       }
       break

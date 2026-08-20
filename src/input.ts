@@ -94,6 +94,11 @@ export function tryPlaceBuilding(g: Game, kind: 'house' | 'barracks', x: number,
 
 // ---- Tap resolution ----
 
+const DOUBLE_TAP_MS = 350
+const GROUP_RADIUS = 170
+let lastTapT = 0
+let lastTapEnt = -1
+
 export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: number): void {
   if (g.over) return
   const { x, y } = screenToWorld(g, canvas, sx, sy)
@@ -111,6 +116,20 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     g.uiDirty = true
   }
 
+  // double-tap on one of your units: select all its kind nearby
+  const now = performance.now()
+  const isDouble = !!hit && hit.id === lastTapEnt && now - lastTapT < DOUBLE_TAP_MS
+  lastTapT = now
+  lastTapEnt = hit ? hit.id : -1
+  if (isDouble && hit && hit.team === 0 && isUnit(hit)) {
+    const crew = g.ents.filter(e =>
+      e.team === 0 && e.kind === hit.kind && !e.hidden &&
+      dist(e.x, e.y, hit.x, hit.y) < GROUP_RADIUS)
+    g.selection = crew.map(e => e.id)
+    g.uiDirty = true
+    return
+  }
+
   const sel = selectedEnts(g)
   const myUnits = sel.filter(e => isUnit(e) && e.team === 0)
 
@@ -119,14 +138,15 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
-      toast(g, villagers.length > 1 ? 'Villagers hurry to help build!' : 'Helping build!')
       return
     }
   }
 
   if (hit && hit.team === 0) {
-    // tapping your own stuff selects it
-    g.selection = [hit.id]
+    // tapping your own stuff toggles: already selected → deselect
+    const i = g.selection.indexOf(hit.id)
+    if (i >= 0) g.selection.splice(i, 1)
+    else g.selection = [hit.id]
     g.uiDirty = true
     return
   }
@@ -161,7 +181,6 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
   g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length
   g.camera.y = army.reduce((s, e) => s + e.y, 0) / army.length
   if (canvas) clampCamera(g, canvas)
-  toast(g, army.length === 1 ? '1 soldier selected' : `${army.length} soldiers selected`)
   g.uiDirty = true
 }
 

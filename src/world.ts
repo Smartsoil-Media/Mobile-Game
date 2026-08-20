@@ -181,13 +181,11 @@ export function ringBell(g: Game, tc: Ent): void {
     v.targetId = tc.id
     called++
   }
-  if (called) toast(g, 'The bell rings! Villagers run for safety.')
-  else toast(g, 'No villagers outside to call in.')
+  if (!called) toast(g, 'No villagers outside to call in.')
   g.uiDirty = true
 }
 
 export function openDoors(g: Game, tc: Ent): void {
-  let released = 0
   for (const v of g.ents) {
     if (v.team !== tc.team || v.kind !== 'villager') continue
     if (v.hidden) {
@@ -197,14 +195,12 @@ export function openDoors(g: Game, tc: Ent): void {
       v.y = tc.y + Math.abs(Math.sin(a)) * (tc.r * 0.7) + 14
       v.state = 'idle'
       v.targetId = undefined
-      released++
     } else if (v.state === 'garrison') {
       v.state = 'idle'
       v.targetId = undefined
     }
   }
   tc.garrison = 0
-  if (released) toast(g, 'The doors open — back to work!')
   g.uiDirty = true
 }
 

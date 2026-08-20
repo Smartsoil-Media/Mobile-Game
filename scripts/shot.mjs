@@ -338,6 +338,41 @@ const houseDone = await page3.evaluate(() =>
   window.__game.state.ents.some(e => e.team === 0 && e.kind === 'house' && e.complete))
 if (!houseDone) throw new Error('house never completed with two builders')
 
+// 9) tap a selected villager to deselect; double-tap to select the nearby crew
+const villTap = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  // the two house-builders are standing together at the finished house
+  const house = g.ents.find(e => e.team === 0 && e.kind === 'house' && e.complete)
+  const near = g.ents.filter(e => e.team === 0 && e.kind === 'villager' &&
+    Math.hypot(e.x - house.x, e.y - house.y) < 120)
+  const v = near[0]
+  window.__game.select(v.id)
+  g.camera.x = v.x; g.camera.y = v.y
+  const c = document.getElementById('game').getBoundingClientRect()
+  return { x: c.width / 2, y: c.height / 2, nearCount: near.length }
+})
+if (villTap.nearCount < 2) throw new Error('setup: expected 2+ villagers at the house')
+await page3.waitForTimeout(500) // stay outside the double-tap window
+await page3.tap('#game', { position: villTap })
+await page3.waitForTimeout(250)
+const afterToggle = await page3.evaluate(() => window.__game.state.selection.length)
+console.log('deselect toggle:', { selected: afterToggle })
+if (afterToggle !== 0) throw new Error('tapping a selected villager did not deselect it')
+if (!(await page3.isHidden('#dock'))) throw new Error('dock still visible after deselect')
+
+await page3.waitForTimeout(500)
+await page3.tap('#game', { position: villTap })
+await page3.tap('#game', { position: villTap })
+await page3.waitForTimeout(250)
+const crew = await page3.evaluate(() => {
+  const g = window.__game.state
+  const sel = g.selection.map(id => g.byId.get(id))
+  return { n: sel.length, allVills: sel.every(e => e && e.kind === 'villager') }
+})
+console.log('double-tap crew:', crew)
+if (crew.n < 2 || !crew.allVills) throw new Error('double-tap did not select the nearby villagers')
+
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html'))
