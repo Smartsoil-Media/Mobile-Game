@@ -140,7 +140,6 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         site.complete = true
         site.hp = b.hp
         puff(g, site.x, site.y - site.r * 0.5, '#FBF3E4', 10)
-        if (site.team === 0 && site.kind === 'barracks' && g.hintStage < 3) g.hintStage = 3
         e.state = 'idle'; e.targetId = undefined
       }
       break
@@ -245,10 +244,7 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     const d = e.r + 18
     const u = spawn(g, q.kind, e.team, e.x + Math.cos(a) * d, e.y + Math.abs(Math.sin(a)) * d + 6)
     puff(g, u.x, u.y, '#FBF3E4', 6)
-    if (e.team === 0) {
-      g.uiDirty = true
-      if (q.kind === 'swordsman' && g.hintStage < 4) g.hintStage = 4
-    }
+    if (e.team === 0) g.uiDirty = true
   }
 }
 
@@ -339,20 +335,6 @@ function enemyWaves(g: Game, dt: number): void {
   g.wave.warned = false
 }
 
-function updateHints(g: Game): void {
-  let hint = ''
-  if (g.hintStage === 0) hint = 'Tap a villager, then tap a tree to gather wood.'
-  else if (g.hintStage === 1) hint = 'Good! Wood pays for buildings. Gold from the mine pays for soldiers.'
-  else if (g.hintStage === 2) hint = 'Select a villager and build a Barracks.'
-  else if (g.hintStage === 3) hint = 'Tap the Barracks to train swordsmen — raiders are coming!'
-  else if (g.hintStage === 4) hint = 'Destroy the enemy Town Hall in the north-east to win!'
-  if (hint !== g.hint) { g.hint = hint; g.uiDirty = true }
-  // stage transitions driven by world state
-  if (g.hintStage === 1 && g.t > 40) { g.hintStage = 2 }
-  if (g.hintStage === 2 && g.ents.some(e => e.team === 0 && e.kind === 'barracks')) g.hintStage = 3
-  if (g.hintStage === 4 && g.t > 60 && g.hint) { /* fades via ui timer */ }
-}
-
 export function update(g: Game, dt: number): void {
   if (g.over) { g.overT += dt; return }
   g.t += dt
@@ -399,7 +381,6 @@ export function update(g: Game, dt: number): void {
   }
 
   enemyWaves(g, dt)
-  updateHints(g)
 
   // particles
   for (const p of g.particles) {

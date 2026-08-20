@@ -42,7 +42,6 @@ export function commandGather(g: Game, villagers: Ent[], res: Ent): void {
     v.targetId = res.id
     v.gatherT = 0
   }
-  if (villagers.length && g.hintStage === 0) g.hintStage = 1
 }
 
 export function commandMove(g: Game, units: Ent[], x: number, y: number): void {

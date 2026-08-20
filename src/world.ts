@@ -54,7 +54,7 @@ export function createGame(): Game {
     projectiles: [],
     arrowsFired: 0,
     wave: { at: FIRST_WAVE_AT, size: 2, count: 0, warned: false },
-    toasts: [], hint: '', hintStage: 0, started: false, uiDirty: true,
+    toasts: [], started: false, uiDirty: true,
   }
 
   const rnd = mulberry(20260819)

@@ -52,7 +52,6 @@ const state = () => page.evaluate(() => {
     enemySoldiers: g.ents.filter(e => e.team === 1 && e.kind === 'swordsman').length,
     playerBarracks: g.ents.filter(e => e.team === 0 && e.kind === 'barracks').length,
     over: g.over,
-    hint: g.hint,
   }
 })
 
@@ -67,7 +66,26 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(250)
 if (await page.isHidden('#dock')) throw new Error('dock hidden with villager selected')
-if (!(await page.isVisible('button.cmd:has-text("Build House")'))) throw new Error('build buttons missing for villager')
+if (!(await page.isVisible('[data-cmd="build-house"]'))) throw new Error('build buttons missing for villager')
+
+// icon dock: 4 sprite-canvas build buttons; barracks (150 wood) greyed at 100 wood
+const dockIcons = await page.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd.icon')].map(b => b.dataset.cmd),
+  canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
+  hintGone: !document.getElementById('hint'),
+  disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
+}))
+console.log('icon dock:', dockIcons)
+if (dockIcons.buttons.length !== 4 || dockIcons.canvases !== 4) throw new Error('expected 4 sprite-icon build buttons')
+if (!dockIcons.hintGone) throw new Error('hint element still present')
+if (!dockIcons.disabled.includes('build-barracks')) throw new Error('unaffordable barracks not greyed out')
+await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
+await page.waitForTimeout(150)
+const allDisabled = await page.evaluate(() =>
+  document.querySelectorAll('#dock-buttons button.disabled').length)
+if (allDisabled !== 4) throw new Error('with 0 wood all build buttons should be greyed out')
+await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
+await page.waitForTimeout(150)
 await page.evaluate(() => {
   // aim the camera so a tree is on screen, then find its screen position
   const g = window.__game.state
@@ -118,7 +136,7 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(300)
 await page.screenshot({ path: 'shots/3-villager-selected.png' })
-await page.tap('button.cmd:has-text("Build Barracks")')
+await page.tap('[data-cmd="build-barracks"]')
 await page.waitForTimeout(200)
 const placeTap = await page.evaluate(() => {
   const g = window.__game.state
@@ -220,7 +238,7 @@ await page3.evaluate(() => {
   window.__game.select(tc.id)
 })
 await page3.waitForTimeout(300)
-await page3.tap('button.cmd:has-text("Ring the Bell")')
+await page3.tap('[data-cmd="bell"]')
 await page3.evaluate(() => window.__game.setSpeed(10))
 await page3.waitForTimeout(1000)
 const gar = await page3.evaluate(() => {
@@ -260,7 +278,7 @@ if (!defense.tcHp) throw new Error('TC died during garrison test')
 
 await page3.evaluate(() => window.__game.setSpeed(1))
 await page3.waitForTimeout(300)
-await page3.tap('button.cmd:has-text("Open the Doors")')
+await page3.tap('[data-cmd="doors"]')
 await page3.waitForTimeout(400)
 const released = await page3.evaluate(() => {
   const g = window.__game.state
@@ -283,7 +301,7 @@ await page3.evaluate(() => {
   g.camera.x = tc.x; g.camera.y = tc.y
 })
 await page3.waitForTimeout(250)
-await page3.tap('button.cmd:has-text("Build House")')
+await page3.tap('[data-cmd="build-house"]')
 await page3.waitForTimeout(200)
 const canvasBox = await page3.evaluate(() => {
   const c = document.getElementById('game').getBoundingClientRect()
@@ -324,7 +342,7 @@ await page3.evaluate(() => {
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
-await page3.tap('button.cmd:has-text("Build House")')
+await page3.tap('[data-cmd="build-house"]')
 await page3.waitForTimeout(200)
 await page3.tap('#game', { position: canvasBox }) // place on open meadow
 await page3.waitForTimeout(250)
@@ -416,7 +434,7 @@ const grove = await page3.evaluate(() => {
   return { treeId: t.id, spot }
 })
 await page3.waitForTimeout(300)
-await page3.tap('button.cmd:has-text("Build Lumber Camp")')
+await page3.tap('[data-cmd="build-lumbercamp"]')
 await page3.waitForTimeout(200)
 const placingState = await page3.evaluate(() => ({
   placing: window.__game.state.placing,

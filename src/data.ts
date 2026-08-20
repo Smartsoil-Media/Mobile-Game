@@ -77,8 +77,6 @@ export interface Game {
   arrowsFired: number
   wave: { at: number; size: number; count: number; warned: boolean }
   toasts: { text: string; t: number }[]
-  hint: string
-  hintStage: number
   started: boolean
   uiDirty: boolean
 }

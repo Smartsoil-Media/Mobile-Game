@@ -1,18 +1,55 @@
-// DOM HUD: resource pills, contextual command dock, hints, toasts, overlays.
-import { Game, Ent, UNITS, BUILDINGS, isUnit, isBuilding } from './data'
+// DOM HUD: resource pills, icon command dock, toasts, overlays.
+import { Game, Ent, UNITS, BUILDINGS, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy } from './input'
-import { GARRISON_CAP } from './data'
+import { drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawVillager, drawSwordsman } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   gold: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="8" fill="#E9B44C"/><circle cx="12" cy="12" r="5.4" fill="#F5D584"/><path d="M12 8.5v7M9.8 10.4h3.4a1.7 1.7 0 0 1 0 3.4H10" stroke="#B8842E" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>`,
   pop: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="8" r="4.2" fill="#F6CFA0"/><path d="M4.5 20c.8-4.4 3.9-6.5 7.5-6.5s6.7 2.1 7.5 6.5z" fill="#6D9DC5"/></svg>`,
   sword: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 19 15.5 8.5M15.5 8.5 19 5l-1 4.5L14.5 13" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 14.5l2 2M5 19l-1.2 1.2" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-  bell: `<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
 function el<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T }
+
+// Menu icons are miniatures of the real in-game sprites, drawn fresh onto
+// tiny canvases so the build menu always matches the world's art.
+function spriteIcon(kind: string): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = c.height = 96
+  c.className = 'sprite-icon'
+  const ctx = c.getContext('2d')!
+  const fake: any = {
+    id: 0, kind, team: 0, x: 0, y: 0, r: 0, hp: 1, maxHp: 1, seed: 3,
+    complete: true, state: 'idle', face: 1, phase: 0, carry: 0, amount: 60,
+  }
+  // scale fits the sprite's bounding box into the 48px icon; (cx, cy) is the
+  // sprite's visual center in its own coordinates
+  const conf: Record<string, { scale: number; cx: number; cy: number }> = {
+    house: { scale: 1.0, cx: 0, cy: -5.5 },
+    barracks: { scale: 0.72, cx: 0, cy: -7.5 },
+    lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
+    miningcamp: { scale: 0.78, cx: 4.5, cy: -2.5 },
+    villager: { scale: 1.6, cx: 0, cy: -6.5 },
+    swordsman: { scale: 1.45, cx: 0, cy: -8 },
+  }
+  const k = conf[kind] ?? { scale: 1, cx: 0, cy: 0 }
+  ctx.scale(2, 2)
+  ctx.translate(24, 24)
+  ctx.scale(k.scale, k.scale)
+  ctx.translate(-k.cx, -k.cy)
+  switch (kind) {
+    case 'house': drawHouse(ctx, fake, 0.2); break
+    case 'barracks': drawBarracks(ctx, fake, 0.2); break
+    case 'lumbercamp': drawLumberCamp(ctx, fake); break
+    case 'miningcamp': drawMiningCamp(ctx, fake); break
+    case 'villager': drawVillager(ctx, fake, 0); break
+    case 'swordsman': drawSwordsman(ctx, fake, 0); break
+  }
+  return c
+}
 
 export function initUI(g: Game): void {
   el('army-btn').innerHTML = ICON.sword + '<span>Army</span>'
@@ -31,14 +68,6 @@ export function initUI(g: Game): void {
 
 function selectedEnts(g: Game): Ent[] {
   return g.selection.map(id => g.byId.get(id)).filter((e): e is Ent => !!e)
-}
-
-function trainCostLabel(kind: 'villager' | 'swordsman'): string {
-  const c = UNITS[kind].cost
-  const parts: string[] = []
-  if (c.wood) parts.push(`${c.wood} ${ICON.wood}`)
-  if (c.gold) parts.push(`${c.gold} ${ICON.gold}`)
-  return parts.join(' ')
 }
 
 function queueLen(g: Game): number {
@@ -61,12 +90,49 @@ function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman'): void {
   g.uiDirty = true
 }
 
-function button(html: string, onClick: () => void, cls = ''): HTMLButtonElement {
+interface IconBtn {
+  cmd: string
+  label: string
+  icon: HTMLElement | string
+  wood?: number
+  gold?: number
+  badge?: string
+}
+
+function iconButton(opts: IconBtn, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button')
-  b.className = 'cmd ' + cls
-  b.innerHTML = html
+  b.className = 'cmd icon'
+  b.dataset.cmd = opts.cmd
+  b.setAttribute('aria-label', opts.label)
+  if (opts.wood) b.dataset.wood = String(opts.wood)
+  if (opts.gold) b.dataset.gold = String(opts.gold)
+  if (typeof opts.icon === 'string') b.insertAdjacentHTML('beforeend', opts.icon)
+  else b.appendChild(opts.icon)
+  const costs: string[] = []
+  if (opts.wood) costs.push(`${opts.wood}${ICON.wood}`)
+  if (opts.gold) costs.push(`${opts.gold}${ICON.gold}`)
+  if (costs.length) b.insertAdjacentHTML('beforeend', `<i>${costs.join(' ')}</i>`)
+  if (opts.badge) b.insertAdjacentHTML('beforeend', `<span class="badge">${opts.badge}</span>`)
   b.addEventListener('click', onClick)
   return b
+}
+
+function queuePill(b: Ent): HTMLElement {
+  const q = document.createElement('div')
+  q.className = 'queue'
+  const t0 = b.queue![0]
+  q.innerHTML = `<div class="qring"><div style="width:${(1 - t0.t / t0.total) * 100}%"></div></div><span>×${b.queue!.length}</span>`
+  return q
+}
+
+function updateAffordability(g: Game): void {
+  const btns = document.querySelectorAll<HTMLButtonElement>('#dock-buttons button.cmd')
+  btns.forEach(b => {
+    const w = Number(b.dataset.wood ?? 0)
+    const gd = Number(b.dataset.gold ?? 0)
+    if (!w && !gd) return
+    b.classList.toggle('disabled', g.res[0].wood < w || g.res[0].gold < gd)
+  })
 }
 
 export function syncUI(g: Game): void {
@@ -74,19 +140,15 @@ export function syncUI(g: Game): void {
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
   el('gold-n').textContent = String(Math.floor(g.res[0].gold))
   el('pop-n').textContent = `${p.used}/${p.cap}`
+  updateAffordability(g)
 
   if (!g.uiDirty) return
   g.uiDirty = false
 
-  // hint bubble
-  const hint = el('hint')
-  if (g.hint && !g.over) { hint.textContent = g.hint; hint.classList.remove('hidden') }
-  else hint.classList.add('hidden')
-
   // toasts
   el('toasts').innerHTML = g.toasts.map(t => `<div class="toast">${t.text}</div>`).join('')
 
-  // end-of-game overlays (before any dock early-returns)
+  // end-of-game overlays
   if (g.over === 'win') {
     el('end-title').textContent = 'Victory!'
     el('end-text').textContent = 'The enemy town hall has crumbled. Peace returns to the meadow.'
@@ -97,72 +159,51 @@ export function syncUI(g: Game): void {
     el('end-overlay').classList.remove('hidden')
   }
 
-  // dock: contextual — only on screen while something is selected or placing
-  const info = el('sel-info')
+  // dock: a row of icon commands for the current selection
   const dock = el('dock-buttons')
   dock.innerHTML = ''
   const sel = selectedEnts(g)
-
-  if (!sel.length && !g.placing) {
-    el('dock').classList.add('hidden')
-    return
-  }
-  el('dock').classList.remove('hidden')
+  const first = sel[0]
+  const sameKind = sel.length > 0 && sel.every(e => e.kind === first.kind)
 
   if (g.placing) {
-    const b = BUILDINGS[g.placing]
-    info.innerHTML = `<b>Placing ${b.name}</b><span>Tap open grass to build</span>`
-    dock.appendChild(button('Cancel', () => { g.placing = null; g.uiDirty = true }, 'ghost'))
-    return
-  }
-
-  const first = sel[0]
-  const sameKind = sel.every(e => e.kind === first.kind)
-  const name = sameKind
-    ? (isUnit(first) ? UNITS[first.kind].name : BUILDINGS[first.kind]?.name ?? first.kind)
-    : 'Group'
-  const count = sel.length > 1 ? ` ×${sel.length}` : ''
-  let sub = ''
-
-  if (first.kind === 'towncenter' && first.complete) {
+    const btn = document.createElement('button')
+    btn.className = 'cmd ghost'
+    btn.dataset.cmd = 'cancel'
+    btn.textContent = 'Cancel'
+    btn.addEventListener('click', () => { g.placing = null; g.uiDirty = true })
+    dock.appendChild(btn)
+  } else if (first && first.kind === 'towncenter' && first.complete) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), wood: UNITS.villager.cost.wood, gold: UNITS.villager.cost.gold },
+      () => tryTrain(g, first, 'villager')))
     const garrison = first.garrison ?? 0
-    sub = garrison > 0 ? `${garrison} villager${garrison > 1 ? 's' : ''} sheltering inside` : 'Trains villagers'
-    dock.appendChild(button(`Train Villager<i>${trainCostLabel('villager')}</i>`, () => tryTrain(g, first, 'villager')))
     if (garrison > 0) {
-      dock.appendChild(button(`${ICON.bell} Open the Doors<i>arrows: ${Math.min(garrison, GARRISON_CAP)}</i>`, () => openDoors(g, first)))
+      dock.appendChild(iconButton(
+        { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${garrison}` },
+        () => openDoors(g, first)))
     } else {
-      dock.appendChild(button(`${ICON.bell} Ring the Bell<i>shelter villagers</i>`, () => ringBell(g, first)))
+      dock.appendChild(iconButton(
+        { cmd: 'bell', label: 'Ring the bell — shelter villagers', icon: ICON.bell },
+        () => ringBell(g, first)))
     }
-    if (first.queue?.length) {
-      const q = document.createElement('div')
-      q.className = 'queue'
-      const t0 = first.queue[0]
-      q.innerHTML = `<div class="qring"><div style="width:${(1 - t0.t / t0.total) * 100}%"></div></div><span>training ×${first.queue.length}</span>`
-      dock.appendChild(q)
-    }
-  } else if (first.kind === 'barracks' && first.complete && first.team === 0) {
-    sub = 'Trains swordsmen'
-    dock.appendChild(button(`Train Swordsman<i>${trainCostLabel('swordsman')}</i>`, () => tryTrain(g, first, 'swordsman')))
-    if (first.queue?.length) {
-      const q = document.createElement('div')
-      q.className = 'queue'
-      const t0 = first.queue[0]
-      q.innerHTML = `<div class="qring"><div style="width:${(1 - t0.t / t0.total) * 100}%"></div></div><span>training ×${first.queue.length}</span>`
-      dock.appendChild(q)
-    }
-  } else if (isBuilding(first) && !first.complete) {
-    sub = 'Under construction — send villagers to help'
+    if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && first.kind === 'barracks' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), wood: UNITS.swordsman.cost.wood, gold: UNITS.swordsman.cost.gold },
+      () => tryTrain(g, first, 'swordsman')))
+    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
-    sub = 'Tap a tree/mine to gather, a site to build'
     const buildables: ('house' | 'barracks' | 'lumbercamp' | 'miningcamp')[] =
       ['house', 'barracks', 'lumbercamp', 'miningcamp']
     for (const kind of buildables) {
       const b = BUILDINGS[kind]
-      dock.appendChild(button(`Build ${b.name}<i>${b.cost.wood} ${ICON.wood}</i>`, () => { g.placing = kind; g.uiDirty = true }))
+      dock.appendChild(iconButton(
+        { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: spriteIcon(kind), wood: b.cost.wood, gold: b.cost.gold },
+        () => { g.placing = kind; g.uiDirty = true }))
     }
-  } else if (sameKind && first.kind === 'swordsman') {
-    sub = 'Tap the map to move, tap a foe to attack'
   }
 
-  info.innerHTML = `<b>${name}${count}</b><span>${sub}</span>`
+  el('dock').classList.toggle('hidden', dock.children.length === 0)
+  updateAffordability(g)
 }
