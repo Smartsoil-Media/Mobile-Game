@@ -93,15 +93,15 @@ const ecoDock = await page.evaluate(() => ({
   disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
 }))
 console.log('economy menu:', ecoDock)
-if (ecoDock.buttons.join(',') !== 'back,build-house,build-farm,build-lumbercamp,build-miningcamp,build-towncenter')
+if (ecoDock.buttons.join(',') !== 'back,build-house,build-farm,build-mill,build-lumbercamp,build-miningcamp,build-towncenter')
   throw new Error('economy menu wrong: ' + ecoDock.buttons.join(','))
-if (ecoDock.canvases !== 5) throw new Error('economy menu should use 5 sprite icons')
+if (ecoDock.canvases !== 6) throw new Error('economy menu should use 6 sprite icons')
 if (!ecoDock.disabled.includes('build-towncenter')) throw new Error('unaffordable town hall not greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
 await page.waitForTimeout(150)
 const allDisabled = await page.evaluate(() =>
   document.querySelectorAll('#dock-buttons button.disabled').length)
-if (allDisabled !== 5) throw new Error('with 0 wood all economy buildings should be greyed out')
+if (allDisabled !== 6) throw new Error('with 0 wood all economy buildings should be greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
 await page.waitForTimeout(150)
 await page.tap('[data-cmd="back"]')
@@ -271,12 +271,21 @@ const aiCheck = await page3.evaluate(() => {
     soldiers: g.ents.filter(e => e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman')).length,
     attacking: g.ai.attacking,
     over: g.over,
+    age: g.age[1],
+    patron: g.patron[1],
+    techs: { ...g.techs[1] },
   }
 })
 console.log('enemy AI after 300 sim-s:', aiCheck)
 if (aiCheck.vills <= 3) throw new Error('enemy AI trained no villagers')
 if (aiCheck.barracks < 1) throw new Error('enemy AI built no barracks')
 if (aiCheck.soldiers < 1 && !aiCheck.attacking) throw new Error('enemy AI raised no army')
+if (aiCheck.age >= 2) {
+  if (!aiCheck.patron) throw new Error('enemy AI reached Feudal without choosing a patron')
+  // its patron's tech must have come with the age
+  const patronTech = { oak: 'steelaxes', river: 'wheelbarrow', mountain: 'minerspicks', fox: 'foxpaths' }[aiCheck.patron]
+  if (!aiCheck.techs[patronTech]) throw new Error("enemy AI's patron tech was not granted")
+}
 
 // freeze and clean up the AI so the remaining feature checks are deterministic
 await page3.evaluate(() => {
@@ -328,8 +337,21 @@ await page3.waitForTimeout(250)
 if (!(await page3.isVisible('[data-cmd="age-up"]'))) throw new Error('age-up button missing on the Town Hall')
 await page3.tap('[data-cmd="age-up"]')
 await page3.waitForTimeout(250)
-const researching = await page3.evaluate(() => !!window.__game.state.ageRes[0])
-if (!researching) throw new Error('age research did not start')
+// the laurel opens the patron-choice menu: four spirits, each with a gift
+const patronMenu = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="patron-"]')].map(b => b.dataset.cmd))
+console.log('patron menu:', patronMenu)
+if (patronMenu.join(',') !== 'patron-oak,patron-river,patron-mountain,patron-fox')
+  throw new Error('expected four patron spirits to choose from, got: ' + patronMenu.join(','))
+await page3.tap('[data-cmd="patron-oak"]')
+await page3.waitForTimeout(250)
+const researching = await page3.evaluate(() => ({
+  res: !!window.__game.state.ageRes[0],
+  patron: window.__game.state.patron[0],
+}))
+console.log('patron picked:', researching)
+if (!researching.res) throw new Error('age research did not start')
+if (researching.patron !== 'oak') throw new Error('patron choice was not stored')
 await page3.evaluate(() => window.__game.setSpeed(15))
 await waitSim(page3, 40)
 const feudal = await page3.evaluate(() => {
@@ -337,20 +359,83 @@ const feudal = await page3.evaluate(() => {
   window.__game.setSpeed(1)
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   window.__game.select(v.id)
-  return { age: g.age[0], pill: document.getElementById('age-n').textContent }
+  return { age: g.age[0], pill: document.getElementById('age-n').textContent, techs: { ...g.techs[0] } }
 })
 console.log('after age-up:', feudal)
 if (feudal.age !== 2 || feudal.pill !== 'II') throw new Error('the Feudal Age never dawned')
+if (!feudal.techs.steelaxes) throw new Error("the Oak Father's gift (Steel Axes) was not granted")
+if (feudal.techs.wheelbarrow || feudal.techs.minerspicks || feudal.techs.foxpaths)
+  throw new Error('only the chosen patron tech should come free')
 await page3.waitForTimeout(250)
 await openCat(page3, 'military')
 const feudalLocks = await page3.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd))
 console.log('feudal locks:', feudalLocks)
 if (feudalLocks.length) throw new Error('locks should lift in the Feudal Age')
-await openCat(page3, 'economy') // leave the menu tidy
+await openCat(page3, 'economy')
+if (!(await page3.isVisible('[data-cmd="build-mill"]'))) throw new Error('mill missing from the economy menu')
 await page3.tap('[data-cmd="back"]')
 // both villages feudal for the remaining feature checks
 await page3.evaluate(() => { window.__game.state.age = [2, 2] })
+
+// 4.6) research the slow way: Miner's Picks at a mining camp
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 500; g.res[0].wood = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const campId = window.__game.spawn('miningcamp', 0, tc.x + 420, tc.y + 200)
+  window.__game.select(campId)
+})
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('[data-cmd="research-minerspicks"]')))
+  throw new Error('research button missing on the mining camp')
+const researchBefore = await page3.evaluate(() => ({
+  food: window.__game.state.res[0].food, wood: window.__game.state.res[0].wood,
+}))
+await page3.tap('[data-cmd="research-minerspicks"]')
+await page3.waitForTimeout(250)
+const researchStart = await page3.evaluate(() => {
+  const g = window.__game.state
+  const camp = g.ents.find(e => e.team === 0 && e.kind === 'miningcamp' && e.research)
+  return { id: camp ? camp.research.id : null, food: g.res[0].food, wood: g.res[0].wood }
+})
+console.log('tech research start:', researchStart)
+if (researchStart.id !== 'minerspicks') throw new Error('tech research did not start')
+if (researchBefore.food - researchStart.food !== 100 || researchBefore.wood - researchStart.wood !== 75)
+  throw new Error('research should cost 100 food + 75 wood')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 34)
+const researched = await page3.evaluate(() => {
+  window.__game.setSpeed(1)
+  return { ...window.__game.state.techs[0] }
+})
+console.log('techs after research:', researched)
+if (!researched.minerspicks) throw new Error("Miner's Picks research never finished")
+
+// 4.7) the mill takes food drop-offs, sparing the long walk home
+const millCheck = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const bush = g.ents.find(e => e.kind === 'berrybush' && (e.amount ?? 0) > 20 &&
+    Math.hypot(e.x - tc.x, e.y - tc.y) > 300) // far enough that the mill is clearly the closer drop-off
+  if (!bush) throw new Error('setup: no far-off berry bush left for the mill test')
+  window.__game.spawn('mill', 0, bush.x + 90, bush.y + 60)
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.x = bush.x + 20; v.y = bush.y + 20
+  v.state = 'gather'; v.targetId = bush.id; v.gatherT = 0; v.carry = 0
+  window.__game.setSpeed(15)
+  return { foodBefore: g.res[0].food }
+})
+await waitSim(page3, 22)
+const millResult = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  return { food: g.res[0].food, mill: g.ents.some(e => e.team === 0 && e.kind === 'mill' && e.complete) }
+})
+console.log('mill drop-off:', millCheck, '->', millResult)
+if (!millResult.mill) throw new Error('mill missing after spawn')
+if (millResult.food - millCheck.foodBefore < 12)
+  throw new Error('mill drop-off too slow — villager likely hauling to the Town Hall')
 
 // 5) bell + garrison: villagers shelter in the TC and it shoots attackers down
 await page3.evaluate(() => {

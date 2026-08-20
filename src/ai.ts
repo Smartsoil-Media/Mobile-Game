@@ -2,7 +2,8 @@
 // It gathers with villagers, trains from real resources, builds houses,
 // a barracks and farms, and attacks in growing pushes.
 import {
-  Game, Ent, ResKind, UNITS, BUILDINGS, SOURCE_OF, POP_MAX, AGE2_COST, AGE2_TIME,
+  Game, Ent, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
+  SOURCE_OF, POP_MAX, AGE2_COST, AGE2_TIME,
   dist, isUnit, isBuilding,
 } from './data'
 import { spawn, nearest, pop, canAfford, canPlaceAt, pay } from './world'
@@ -37,7 +38,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm', tc: Ent): Ent | null {
+function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill', tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 1, b.cost)) return null
   for (let tries = 0; tries < 40; tries++) {
@@ -99,6 +100,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
     }
   } else {
     const barracks = g.ents.some(e => e.team === 1 && e.kind === 'barracks')
+    const mill = g.ents.some(e => e.team === 1 && e.kind === 'mill')
     const farms = g.ents.filter(e => e.team === 1 && e.kind === 'farm').length
     const foodDry = !nearest(g, tc.x, tc.y, o => o.kind === 'berrybush' && (o.amount ?? 0) > 0, 700)
     if (p.cap - p.used - queuedUnits(g) < 2 && p.cap < POP_MAX) {
@@ -107,6 +109,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'barracks', tc)
     } else if (foodDry && farms < 3) {
       tryPlace(g, 'farm', tc)
+    } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {
+      tryPlace(g, 'mill', tc) // a feudal village wants its mill
     }
   }
 
@@ -115,7 +119,23 @@ export function updateEnemyAI(g: Game, dt: number): void {
   if (g.age[1] === 1 && !g.ageRes[1] && rax && vills.length >= 6 &&
     g.res[1].food >= AGE2_COST.food + UNITS.villager.cost.food) {
     pay(g, 1, AGE2_COST)
+    const patrons = Object.keys(PATRONS) as PatronId[]
+    g.patron[1] = patrons[Math.floor(Math.random() * patrons.length)] // the spirits call whom they will
     g.ageRes[1] = { t: AGE2_TIME, total: AGE2_TIME }
+  }
+
+  // -- in Feudal, pick up the techs the patron didn't grant, when flush --
+  if (g.age[1] >= 2 && g.res[1].food > 350) {
+    for (const id of Object.keys(TECHS) as TechId[]) {
+      if (g.techs[1][id]) continue
+      const spec = TECHS[id]
+      const host = g.ents.find(e =>
+        e.team === 1 && e.kind === spec.at && e.complete && !e.research)
+      if (!host || !canAfford(g, 1, spec.cost)) continue
+      pay(g, 1, spec.cost)
+      host.research = { id, t: spec.time, total: spec.time }
+      break // one indulgence per think
+    }
   }
 
   // -- training --
@@ -125,7 +145,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
   }
-  if (rax && (rax.queue?.length ?? 0) < 2 && p.used + queuedUnits(g) < p.cap) {
+  // with a grown village and a standing guard, food goes to the age-up instead of more spears
+  const savingForAge = g.age[1] === 1 && !g.ageRes[1] && vills.length >= 6 && soldiers.length >= 4
+  if (rax && !savingForAge && (rax.queue?.length ?? 0) < 2 && p.used + queuedUnits(g) < p.cap) {
     // Dark Age fields spearmen; Feudal mixes in swordsmen when gold allows
     const kind = (g.age[1] >= 2 && g.res[1].gold >= UNITS.swordsman.cost.gold &&
       Math.random() < 0.6) ? 'swordsman' : 'spearman'

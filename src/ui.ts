@@ -1,8 +1,11 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
-import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, AGE2_COST, AGE2_TIME, isUnit } from './data'
+import {
+  Game, Ent, Buildable, Cost, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
+  AGE2_COST, AGE2_TIME, isUnit,
+} from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy, tryPlaceBuilding, snapPlace } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -18,6 +21,23 @@ const ICON = {
   laurel: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 18.5V7" stroke="#8B6A4A" stroke-width="1.6" stroke-linecap="round"/><path d="M12 17c-4.5-.5-6.5-3-6.8-6.2C8 11 10.5 12.5 12 15M12 17c4.5-.5 6.5-3 6.8-6.2C16 11 13.5 12.5 12 15" fill="#75A055"/><circle cx="12" cy="6" r="2.2" fill="#E9B44C"/></svg>`,
   lock: `<svg class="lockb" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="10" width="12" height="9" rx="2.5" fill="#5A4632"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" stroke="#5A4632" stroke-width="2.2" fill="none"/><circle cx="12" cy="14.5" r="1.6" fill="#FBF3E4"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
+  // patron emblems
+  oak: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><ellipse cx="12" cy="9" rx="3.4" ry="4.2" fill="#75A055"/><ellipse cx="8.8" cy="12.5" rx="3.2" ry="3.8" fill="#75A055" transform="rotate(-35 8.8 12.5)"/><ellipse cx="15.2" cy="12.5" rx="3.2" ry="3.8" fill="#75A055" transform="rotate(35 15.2 12.5)"/><path d="M12 6v11" stroke="#4E7434" stroke-width="1.4" stroke-linecap="round"/><ellipse cx="16.8" cy="18" rx="1.9" ry="2.3" fill="#C89B6E"/><path d="M14.7 17c.6-1 3.6-1 4.2 0z" fill="#8B6A4A"/></svg>`,
+  river: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4.5c2.8 3.2 4.5 5.6 4.5 8a4.5 4.5 0 0 1-9 0c0-2.4 1.7-4.8 4.5-8z" fill="#6D9DC5"/><circle cx="10.4" cy="11.5" r="1.4" fill="#A8C6E0"/><path d="M4.8 19c1.5-1.4 3.1-1.4 4.6 0s3.1 1.4 4.6 0 3.1-1.4 4.6 0" stroke="#4E7EA6" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
+  mountain: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M4.5 17.5 10 6.5l4 6 2.5-3.5 3 8.5z" fill="#A8A395"/><path d="M10 6.5l1.7 2.6L10 11.4 8.2 9.6z" fill="#E6E2D6"/><path d="M16.5 9l1.1 1.5-1.1 1.2-1-1.2z" fill="#E6E2D6"/><circle cx="7.6" cy="16" r="1.5" fill="#E9B44C"/></svg>`,
+  fox: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6 5.5 9.5 9h5L18 5.5l.5 5.5c0 4-2.9 7.5-6.5 7.5S5.5 15 5.5 11z" fill="#D98E4A"/><path d="M6 5.5 9.5 9l-3.2 1z" fill="#8B5A32"/><path d="M18 5.5 14.5 9l3.2 1z" fill="#8B5A32"/><path d="M12 18.5c-1.8 0-3.4-1-4.2-2.6L12 13l4.2 2.9c-.8 1.6-2.4 2.6-4.2 2.6z" fill="#FBF3E4"/><circle cx="9.7" cy="11.3" r="1" fill="#4A3413"/><circle cx="14.3" cy="11.3" r="1" fill="#4A3413"/><circle cx="12" cy="14.3" r="1.1" fill="#4A3413"/></svg>`,
+  // tech icons
+  axe: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M8 19 15.5 8.5" stroke="#8B6A4A" stroke-width="2.2" stroke-linecap="round"/><path d="M12.8 5.8c2.6-1.6 5.4-1.2 7 .4-.5 2.5-2.1 4.6-4.7 5.6z" fill="#C7CCD4"/><path d="M12.8 5.8c1-.3 2-.4 3-.2l-1.9 4.6-1.8-1.5z" fill="#E4E7EC"/></svg>`,
+  barrow: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6.3 8.7c2.2-1.4 6.2-1.4 8.4 0l-.6 1.6H6.9z" fill="#E4CB8F"/><path d="M5 10.3h11.2l-1.9 5H7.9z" fill="#8B6A4A"/><path d="M16.2 10.3h3.3" stroke="#6F5238" stroke-width="1.8" stroke-linecap="round"/><path d="M8.5 15.3l-1.3 3M13.7 15.3l1.3 3" stroke="#6F5238" stroke-width="1.6" stroke-linecap="round"/><circle cx="11" cy="18" r="2.4" fill="#6F5238"/><circle cx="11" cy="18" r="1" fill="#FBF3E4"/></svg>`,
+  pick: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M7 18.5 15 8" stroke="#8B6A4A" stroke-width="2.2" stroke-linecap="round"/><path d="M8.3 6.3c3.6-2.1 8.3-1.5 10.9 1.2l-1 1.4c-2.4-2.2-6-2.6-8.9-1.3z" fill="#C7CCD4"/><circle cx="17.5" cy="16.5" r="1.7" fill="#E9B44C"/></svg>`,
+  paw: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><ellipse cx="12" cy="15" rx="3.7" ry="3" fill="#D98E4A"/><circle cx="7.6" cy="11.4" r="1.7" fill="#D98E4A"/><circle cx="10.6" cy="9.3" r="1.7" fill="#D98E4A"/><circle cx="13.4" cy="9.3" r="1.7" fill="#D98E4A"/><circle cx="16.4" cy="11.4" r="1.7" fill="#D98E4A"/></svg>`,
+}
+
+const TECH_ICON: Record<TechId, string> = {
+  steelaxes: ICON.axe, wheelbarrow: ICON.barrow, minerspicks: ICON.pick, foxpaths: ICON.paw,
+}
+const PATRON_ICON: Record<PatronId, string> = {
+  oak: ICON.oak, river: ICON.river, mountain: ICON.mountain, fox: ICON.fox,
 }
 
 function el<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T }
@@ -44,6 +64,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
     miningcamp: { scale: 0.78, cx: 4.5, cy: -2.5 },
+    mill: { scale: 0.7, cx: 0, cy: -12 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
     spearman: { scale: 1.4, cx: 0, cy: -8 },
@@ -63,6 +84,7 @@ function spriteIcon(kind: string): HTMLCanvasElement {
     case 'barracks': drawBarracks(ctx, fake, 0.2); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
     case 'miningcamp': drawMiningCamp(ctx, fake); break
+    case 'mill': drawMill(ctx, fake, 0.8); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
     case 'spearman': drawSpearman(ctx, fake, 0); break
@@ -164,7 +186,34 @@ function queuePill(b: Ent): HTMLElement {
 
 // which build submenu is open (per selection; resets when the selection changes)
 let buildCat: 'economy' | 'military' | null = null
+let agePick = false // the patron-choice menu on the Town Hall
 let lastSelKey = ''
+
+// research button / progress pill for whichever tech lives in this building
+function researchDock(g: Game, dock: HTMLElement, b: Ent): void {
+  const id = (Object.keys(TECHS) as TechId[]).find(t => TECHS[t].at === b.kind)
+  if (!id) return
+  if (b.research) {
+    const q = document.createElement('div')
+    q.className = 'queue'
+    q.dataset.cmd = 'research-progress'
+    q.innerHTML = `<div class="qring"><div style="width:${(1 - b.research.t / b.research.total) * 100}%"></div></div><span>${TECHS[b.research.id].name}…</span>`
+    dock.appendChild(q)
+    return
+  }
+  if (g.techs[0][id]) return // already known
+  const spec = TECHS[id]
+  dock.appendChild(iconButton(
+    { cmd: `research-${id}`, label: `Research ${spec.name} — ${spec.blurb}`, icon: TECH_ICON[id], cost: spec.cost, locked: g.age[0] < 2 },
+    () => {
+      if (g.age[0] < 2) { toast(g, 'Reach the Feudal Age first!'); return }
+      if (b.research || g.techs[0][id]) return
+      if (!canAfford(g, 0, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
+      pay(g, 0, spec.cost)
+      b.research = { id, t: spec.time, total: spec.time }
+      g.uiDirty = true
+    }))
+}
 
 function updateAffordability(g: Game): void {
   const btns = document.querySelectorAll<HTMLButtonElement>('#dock-buttons button.cmd')
@@ -191,6 +240,20 @@ export function syncUI(g: Game): void {
   el('age-n').textContent = g.age[0] >= 2 ? 'II' : 'I'
   updateAffordability(g)
 
+  // keep visible progress rings moving between full dock rebuilds
+  const sel0 = g.byId.get(g.selection[0] ?? -1)
+  document.querySelectorAll<HTMLElement>('#dock-buttons .queue').forEach(q => {
+    const cmd = q.dataset.cmd
+    let frac = -1
+    if (cmd === 'age-progress' && g.ageRes[0]) frac = 1 - g.ageRes[0].t / g.ageRes[0].total
+    else if (cmd === 'research-progress' && sel0?.research) frac = 1 - sel0.research.t / sel0.research.total
+    else if (!cmd && sel0?.queue?.length) frac = 1 - sel0.queue[0].t / sel0.queue[0].total
+    if (frac >= 0) {
+      const bar = q.querySelector<HTMLElement>('.qring > div')
+      if (bar) bar.style.width = `${frac * 100}%`
+    }
+  })
+
   if (!g.uiDirty) return
   g.uiDirty = false
 
@@ -215,7 +278,7 @@ export function syncUI(g: Game): void {
   const first = sel[0]
   const sameKind = sel.length > 0 && sel.every(e => e.kind === first.kind)
   const selKey = g.selection.join(',')
-  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null }
+  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null; agePick = false }
 
   if (g.placing) {
     const cross = document.createElement('button')
@@ -233,36 +296,63 @@ export function syncUI(g: Game): void {
       })
     dock.appendChild(tick)
   } else if (first && first.kind === 'towncenter' && first.complete) {
-    dock.appendChild(iconButton(
-      { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
-      () => tryTrain(g, first, 'villager')))
-    if (g.age[0] === 1 && !g.ageRes[0]) {
-      dock.appendChild(iconButton(
-        { cmd: 'age-up', label: 'Advance to the Feudal Age', icon: ICON.laurel, cost: AGE2_COST },
-        () => {
-          if (!canAfford(g, 0, AGE2_COST)) { toast(g, 'Not enough food to advance the age.'); return }
-          pay(g, 0, AGE2_COST)
-          g.ageRes[0] = { t: AGE2_TIME, total: AGE2_TIME }
-          g.uiDirty = true
-        }))
-    } else if (g.ageRes[0]) {
-      const q = document.createElement('div')
-      q.className = 'queue'
-      q.dataset.cmd = 'age-progress'
-      q.innerHTML = `<div class="qring"><div style="width:${(1 - g.ageRes[0].t / g.ageRes[0].total) * 100}%"></div></div><span>advancing…</span>`
-      dock.appendChild(q)
-    }
-    const garrison = first.garrison ?? 0
-    if (garrison > 0) {
-      dock.appendChild(iconButton(
-        { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${garrison}` },
-        () => openDoors(g, first)))
+    if (agePick && g.age[0] === 1 && !g.ageRes[0]) {
+      // choose your patron spirit — each brings its gift into the Feudal Age
+      const back = document.createElement('button')
+      back.className = 'cmd ghost'
+      back.dataset.cmd = 'back'
+      back.setAttribute('aria-label', 'Back')
+      back.textContent = '‹'
+      back.addEventListener('click', () => { agePick = false; g.uiDirty = true })
+      dock.appendChild(back)
+      const shortNames: Record<PatronId, string> = { oak: 'Oak', river: 'River', mountain: 'Mountain', fox: 'Fox' }
+      for (const p of Object.keys(PATRONS) as PatronId[]) {
+        const spec = PATRONS[p]
+        const tech = TECHS[spec.tech]
+        const btn = iconButton(
+          { cmd: `patron-${p}`, label: `Follow ${spec.name} — ${tech.name}: ${tech.blurb}`, icon: PATRON_ICON[p], cost: AGE2_COST },
+          () => {
+            if (!canAfford(g, 0, AGE2_COST)) { toast(g, 'Not enough food to advance the age.'); return }
+            pay(g, 0, AGE2_COST)
+            g.patron[0] = p
+            g.ageRes[0] = { t: AGE2_TIME, total: AGE2_TIME }
+            agePick = false
+            toast(g, `${spec.name} hears your call…`)
+            g.uiDirty = true
+          })
+        btn.querySelector('i')!.textContent = shortNames[p] // name over price; the laurel showed the cost
+        dock.appendChild(btn)
+      }
     } else {
       dock.appendChild(iconButton(
-        { cmd: 'bell', label: 'Ring the bell — shelter villagers', icon: ICON.bell },
-        () => ringBell(g, first)))
+        { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
+        () => tryTrain(g, first, 'villager')))
+      if (g.age[0] === 1 && !g.ageRes[0]) {
+        dock.appendChild(iconButton(
+          { cmd: 'age-up', label: 'Advance to the Feudal Age — choose a patron spirit', icon: ICON.laurel, cost: AGE2_COST },
+          () => { agePick = true; g.uiDirty = true }))
+      } else if (g.ageRes[0]) {
+        const q = document.createElement('div')
+        q.className = 'queue'
+        q.dataset.cmd = 'age-progress'
+        q.innerHTML = `<div class="qring"><div style="width:${(1 - g.ageRes[0].t / g.ageRes[0].total) * 100}%"></div></div><span>advancing…</span>`
+        dock.appendChild(q)
+      }
+      const garrison = first.garrison ?? 0
+      if (garrison > 0) {
+        dock.appendChild(iconButton(
+          { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${garrison}` },
+          () => openDoors(g, first)))
+      } else {
+        dock.appendChild(iconButton(
+          { cmd: 'bell', label: 'Ring the bell — shelter villagers', icon: ICON.bell },
+          () => ringBell(g, first)))
+      }
+      researchDock(g, dock, first) // Fox Paths, for those the Fox didn't bless
+      if (first.queue?.length) dock.appendChild(queuePill(first))
     }
-    if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill') && first.complete && first.team === 0) {
+    researchDock(g, dock, first)
   } else if (first && first.kind === 'watchtower' && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
@@ -301,7 +391,7 @@ export function syncUI(g: Game): void {
       back.addEventListener('click', () => { buildCat = null; g.uiDirty = true })
       dock.appendChild(back)
       const lists: Record<'economy' | 'military', Buildable[]> = {
-        economy: ['house', 'farm', 'lumbercamp', 'miningcamp', 'towncenter'],
+        economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter'],
         military: ['barracks', 'archeryrange', 'watchtower'],
       }
       // symbolic icons where a miniature would be muddy

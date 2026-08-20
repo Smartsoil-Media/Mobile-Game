@@ -1,6 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
+  NO_TECHS, GATHER_TECH, GATHER_TECH_MULT, FOX_SPEED_MULT, FOX_LOS_BONUS,
   NEUTRAL, POP_MAX, FOG_CELL, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -67,6 +68,8 @@ export function createGame(): Game {
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     age: [1, 1],
     ageRes: [null, null],
+    patron: [null, null],
+    techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
     toasts: [], started: false, uiDirty: true,
   }
 
@@ -158,13 +161,33 @@ export function fogIndex(g: Game, x: number, y: number): number {
   return cy * g.fog.w + cx
 }
 
+// ---- tech effects ----
+
+// how fast a team's villagers pull from a source of this resource
+export function gatherMult(g: Game, team: number, res: ResKind): number {
+  return g.techs[team]?.[GATHER_TECH[res]] ? GATHER_TECH_MULT : 1
+}
+
+// walking speed for a unit, with the Fox's blessing where it applies
+export function unitSpeed(g: Game, e: Ent): number {
+  const base = UNITS[e.kind].speed
+  if ((e.kind === 'villager' || e.kind === 'scout') && g.techs[e.team]?.foxpaths) {
+    return base * FOX_SPEED_MULT
+  }
+  return base
+}
+
 export function updateVision(g: Game): void {
   const { w, h, explored, visible } = g.fog
   visible.fill(0)
+  const foxEyes = g.techs[0]?.foxpaths
   for (const e of g.ents) {
     if (e.team !== 0 || e.hidden) continue
     let los = 0
-    if (isUnit(e)) los = UNITS[e.kind].los
+    if (isUnit(e)) {
+      los = UNITS[e.kind].los
+      if (foxEyes && (e.kind === 'villager' || e.kind === 'scout')) los += FOX_LOS_BONUS
+    }
     else if (isBuilding(e)) los = e.complete ? BUILDINGS[e.kind].los : 100
     else continue
     const los2 = los * los

@@ -1,11 +1,12 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
   Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
+  PATRONS, TECHS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, gatherMult, unitSpeed } from './world'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -49,7 +50,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
     return
   }
   if (!inRange(e, t, s.range)) {
-    moveToward(e, t.x, t.y, s.speed, dt)
+    moveToward(e, t.x, t.y, unitSpeed(g, e), dt)
     return
   }
   if (Math.abs(t.x - e.x) > 1) e.face = t.x > e.x ? 1 : -1
@@ -76,10 +77,10 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
 }
 
 function updateVillager(g: Game, e: Ent, dt: number): void {
-  const s = UNITS.villager
+  const spd = unitSpeed(g, e)
   switch (e.state) {
     case 'move': {
-      if (moveToward(e, e.tx!, e.ty!, s.speed, dt)) e.state = 'idle'
+      if (moveToward(e, e.tx!, e.ty!, spd, dt)) e.state = 'idle'
       break
     }
     case 'gather': {
@@ -101,9 +102,10 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         else e.state = 'idle'
         break
       }
-      if (!inRange(e, res, 6)) { moveToward(e, res.x, res.y, s.speed, dt); break }
+      if (!inRange(e, res, 6)) { moveToward(e, res.x, res.y, spd, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
-      e.gatherT = (e.gatherT ?? 0) + dt
+      const giving = isFarm ? 'food' : RESOURCES[res.kind].gives
+      e.gatherT = (e.gatherT ?? 0) + dt * gatherMult(g, e.team, giving) // techs quicken the hands
       const tick = isFarm ? GATHER_TICK * 1.5 : GATHER_TICK // farms are steady but slow
       if (e.gatherT >= tick) {
         e.gatherT = 0
@@ -145,7 +147,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'return': {
       const home = nearestDropoff(g, e)
       if (!home) { e.state = 'idle'; break }
-      if (!inRange(e, home, 8)) { moveToward(e, home.x, home.y, s.speed, dt); break }
+      if (!inRange(e, home, 8)) { moveToward(e, home.x, home.y, spd, dt); break }
       if (e.team === 0 || e.team === 1) {
         g.res[e.team][e.carryRes ?? 'wood'] += e.carry ?? 0
         if (e.team === 0) g.uiDirty = true
@@ -165,7 +167,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'build': {
       const site = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
       if (!site || site.complete) { e.state = 'idle'; e.targetId = undefined; break }
-      if (!inRange(e, site, 10)) { moveToward(e, site.x, site.y, s.speed, dt); break }
+      if (!inRange(e, site, 10)) { moveToward(e, site.x, site.y, spd, dt); break }
       if (Math.abs(site.x - e.x) > 1) e.face = site.x > e.x ? 1 : -1
       const b = BUILDINGS[site.kind]
       site.progress = Math.min(1, (site.progress ?? 0) + dt / b.time)
@@ -187,10 +189,9 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
 
 // walk to a garrisonable building and shelter inside (villagers and soldiers alike)
 function garrisonWalk(g: Game, e: Ent, dt: number): void {
-  const s = UNITS[e.kind]
   const b = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
   if (!b || !b.complete || !isBuilding(b)) { e.state = 'idle'; e.targetId = undefined; return }
-  if (!inRange(e, b, 10)) { moveToward(e, b.x, b.y, s.speed * 1.15, dt); return } // hurry!
+  if (!inRange(e, b, 10)) { moveToward(e, b.x, b.y, unitSpeed(g, e) * 1.15, dt); return } // hurry!
   if ((b.garrison ?? 0) < BUILDINGS[b.kind].garrisonCap) {
     b.garrison = (b.garrison ?? 0) + 1
     e.hidden = true
@@ -207,7 +208,7 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
   const s = UNITS[e.kind]
   switch (e.state) {
     case 'move': {
-      if (moveToward(e, e.tx!, e.ty!, s.speed, dt)) e.state = 'idle'
+      if (moveToward(e, e.tx!, e.ty!, unitSpeed(g, e), dt)) e.state = 'idle'
       break
     }
     case 'garrison': garrisonWalk(g, e, dt); break
@@ -293,6 +294,17 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
         })
         g.arrowsFired++
       }
+    }
+  }
+  // a tech brewing inside (steel axes at the lumber camp, etc.)
+  if (e.research) {
+    e.research.t -= dt
+    if (e.research.t <= 0) {
+      const spec = TECHS[e.research.id]
+      g.techs[e.team][e.research.id] = true
+      e.research = undefined
+      if (e.team === 0) toast(g, `${spec.name} — ${spec.blurb.toLowerCase()}!`)
+      g.uiDirty = true
     }
   }
   const q = e.queue[0]
@@ -417,7 +429,13 @@ export function update(g: Game, dt: number): void {
     if (res.t <= 0) {
       g.ageRes[team] = null
       g.age[team] = 2
-      if (team === 0) toast(g, 'The Feudal Age dawns! New arts of war unlock.')
+      const p = g.patron[team]
+      if (p) g.techs[team][PATRONS[p].tech] = true // the patron's gift, free and instant
+      if (team === 0) {
+        toast(g, p
+          ? `The Feudal Age dawns — ${PATRONS[p].name} watches over you, and ${PATRONS[p].blurb}!`
+          : 'The Feudal Age dawns! New arts of war unlock.')
+      }
       g.uiDirty = true
     }
   }

@@ -5,10 +5,10 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout'
-  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'farm' | 'watchtower'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -42,6 +42,7 @@ export interface Ent {
   complete?: boolean
   progress?: number
   queue?: { kind: Kind; t: number; total: number }[]
+  research?: { id: TechId; t: number; total: number } // tech brewing in this building
   garrison?: number
   insideId?: number // which building this hidden unit is sheltering in
   volleyT?: number
@@ -93,6 +94,8 @@ export interface Game {
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
   age: number[] // per team: 1 = Dark Age, 2 = Feudal Age
   ageRes: ({ t: number; total: number } | null)[] // in-flight age research
+  patron: (PatronId | null)[] // per team: the spirit chosen at age-up
+  techs: Record<TechId, boolean>[] // per team: owned economy techs
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean
@@ -126,7 +129,41 @@ export const BUILDINGS: Record<string, {
   watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
+  mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
 }
+
+// ---- economy techs & patron spirits ----
+// Each patron grants its tech instantly and free at age-up; everyone else
+// can research it the slow way at the listed building (Feudal Age only).
+export type TechId = 'steelaxes' | 'wheelbarrow' | 'minerspicks' | 'foxpaths'
+export type PatronId = 'oak' | 'river' | 'mountain' | 'fox'
+
+export const TECH_COST = cost({ food: 100, wood: 75 })
+export const TECH_TIME = 30
+
+export const TECHS: Record<TechId, { name: string; blurb: string; at: Kind; cost: Cost; time: number }> = {
+  steelaxes: { name: 'Steel Axes', blurb: 'Chop wood 20% faster', at: 'lumbercamp', cost: TECH_COST, time: TECH_TIME },
+  wheelbarrow: { name: 'Wheelbarrow', blurb: 'Gather food 20% faster', at: 'mill', cost: TECH_COST, time: TECH_TIME },
+  minerspicks: { name: "Miner's Picks", blurb: 'Mine gold and stone 20% faster', at: 'miningcamp', cost: TECH_COST, time: TECH_TIME },
+  foxpaths: { name: 'Fox Paths', blurb: 'Villagers and scouts walk faster, see further', at: 'towncenter', cost: TECH_COST, time: TECH_TIME },
+}
+
+export const PATRONS: Record<PatronId, { name: string; tech: TechId; blurb: string }> = {
+  oak: { name: 'the Oak Father', tech: 'steelaxes', blurb: 'Steel Axes are yours' },
+  river: { name: 'the River Mother', tech: 'wheelbarrow', blurb: 'the Wheelbarrow is yours' },
+  mountain: { name: 'the Mountain King', tech: 'minerspicks', blurb: "Miner's Picks are yours" },
+  fox: { name: 'the Fox', tech: 'foxpaths', blurb: 'Fox Paths are yours' },
+}
+
+export const NO_TECHS: Record<TechId, boolean> =
+  { steelaxes: false, wheelbarrow: false, minerspicks: false, foxpaths: false }
+
+export const GATHER_TECH: Record<ResKind, TechId> = {
+  wood: 'steelaxes', food: 'wheelbarrow', gold: 'minerspicks', stone: 'minerspicks',
+}
+export const GATHER_TECH_MULT = 1.2
+export const FOX_SPEED_MULT = 1.15
+export const FOX_LOS_BONUS = 40
 
 export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKind; name: string }> = {
   tree: { r: 16, amount: 60, gives: 'wood', name: 'Tree' },
@@ -145,7 +182,7 @@ export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
 // where each carried resource may be dropped off
 export const DROPOFFS: Record<ResKind, Kind[]> = {
   wood: ['towncenter', 'lumbercamp'],
-  food: ['towncenter'],
+  food: ['towncenter', 'mill'],
   gold: ['towncenter', 'miningcamp'],
   stone: ['towncenter', 'miningcamp'],
 }
@@ -190,7 +227,7 @@ export function isUnit(e: Ent): boolean {
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'lumbercamp' || e.kind === 'miningcamp' ||
-    e.kind === 'farm' || e.kind === 'watchtower'
+    e.kind === 'mill' || e.kind === 'farm' || e.kind === 'watchtower'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'

@@ -422,6 +422,55 @@ export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
 }
 
+export function drawMill(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 16, 26, 9)
+  // tapered cream tower with timber bands
+  ctx.fillStyle = WALL
+  ctx.beginPath()
+  ctx.moveTo(x - 14, y + 15)
+  ctx.lineTo(x - 10, y - 16)
+  ctx.lineTo(x + 10, y - 16)
+  ctx.lineTo(x + 14, y + 15)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  ctx.stroke()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.4
+  ctx.beginPath(); ctx.moveTo(x - 12, y + 4); ctx.lineTo(x + 12, y + 4); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(x - 11, y - 6); ctx.lineTo(x + 11, y - 6); ctx.stroke()
+  // thatch cap
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 13, y - 15)
+  ctx.quadraticCurveTo(x, y - 27, x + 13, y - 15)
+  ctx.quadraticCurveTo(x, y - 19, x - 13, y - 15)
+  ctx.closePath(); ctx.fill()
+  // doorway + a plump grain sack
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 5, y + 4, 10, 12, 4.5); ctx.fill()
+  ctx.fillStyle = '#E4CB8F'
+  ctx.beginPath(); ctx.ellipse(x + 18, y + 12, 5, 6, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = '#C4A867'; ctx.lineWidth = 1.4
+  ctx.beginPath(); ctx.moveTo(x + 15, y + 8); ctx.quadraticCurveTo(x + 18, y + 10, x + 21, y + 8); ctx.stroke()
+  // sails on a hub, turning at a sleepy pace
+  const hubY = y - 21
+  ctx.save()
+  ctx.translate(x, hubY)
+  ctx.rotate(t * 0.45 + (e.seed % 7))
+  for (let i = 0; i < 4; i++) {
+    ctx.rotate(Math.PI / 2)
+    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 2.2
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -19); ctx.stroke()
+    ctx.fillStyle = 'rgba(251, 243, 228, 0.92)'
+    rr(ctx, 0.5, -19, 5.5, 14, 2); ctx.fill()
+    ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1
+    rr(ctx, 0.5, -19, 5.5, 14, 2); ctx.stroke()
+  }
+  ctx.restore()
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath(); ctx.arc(x, hubY, 3, 0, Math.PI * 2); ctx.fill()
+}
+
 export function drawFarm(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]

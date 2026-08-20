@@ -33,6 +33,26 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
   Town Hall shoots arrows at attackers (one per villager, up to 10). Ring
   again to send everyone back to work.
 
+## Ages & Patron Spirits
+
+You start in the **Dark Age** (spearmen only; the archery range, watchtower,
+swordsman and new Town Halls are locked). Advancing to the **Feudal Age**
+costs 275 food and 35s at the Town Hall — and when you do, you choose a
+**patron spirit**. Each patron grants one economy tech instantly and free;
+everyone else can research that same tech the slow way (100 food + 75 wood,
+30s) at its home building:
+
+| Patron | Free tech | Effect | Researched by others at |
+| --- | --- | --- | --- |
+| the Oak Father | Steel Axes | +20% wood chopping | Lumber Camp |
+| the River Mother | Wheelbarrow | +20% food gathering | Mill |
+| the Mountain King | Miner's Picks | +20% gold & stone mining | Mining Camp |
+| the Fox | Fox Paths | villagers & scouts walk faster, see further | Town Hall |
+
+The **Mill** (60 wood) is a food drop-off for berries and farms, and home to
+the Wheelbarrow research. The enemy village ages up too, follows its own
+patron, and picks up the remaining techs when it can afford them.
+
 ## Development
 
 ```bash
