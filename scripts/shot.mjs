@@ -753,6 +753,26 @@ console.log('fog shadow:', fogShadow)
 if (!fogShadow.explored || fogShadow.visible) throw new Error('enemy base should drop to shadow')
 if (!fogShadow.scoutAlive) throw new Error('scout died on a safe route')
 
+// non-scouts reveal too: walk a villager into untouched black and check the cell
+const villFog = await page3.evaluate(() => {
+  const g = window.__game.state
+  // find an unexplored cell in the bottom-right wilds, clear of anything
+  const spot = { x: 1500, y: 1150 }
+  const idx = Math.floor(spot.y / 32) * g.fog.w + Math.floor(spot.x / 32)
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.state = 'move'; v.tx = spot.x; v.ty = spot.y
+  return { idx, explored: g.fog.explored[idx] }
+})
+if (villFog.explored) throw new Error('test spot was already explored — pick another')
+await waitSim(page3, 60) // long walk at villager pace
+const villFogAfter = await page3.evaluate(({ idx }) => {
+  const g = window.__game.state
+  return { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }
+}, villFog)
+console.log('villager fog reveal:', villFogAfter)
+if (!villFogAfter.explored || !villFogAfter.visible)
+  throw new Error('a walking villager did not reveal the fog')
+
 // 16) watchtower: fires on its own, shelters units, releases them
 await page3.evaluate(() => {
   const g = window.__game.state
