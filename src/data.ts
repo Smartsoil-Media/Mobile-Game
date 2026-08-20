@@ -36,8 +36,13 @@ export interface Ent {
   scanT?: number
   job?: { state: 'gather' | 'build'; targetId: number } | null // remembered work while sheltering
   face?: number // -1 left, 1 right
-  heading?: number // radians, direction of last movement step
+  heading?: number // radians, smoothed direction of travel
   stepped?: boolean // true if the unit actually walked this tick
+  avoidSide?: number // 1 | -1: which way we're sliding around an obstacle
+  chaseT?: number // keep closing a touch after re-entering attack range
+  stuckT?: number // time spent walking without getting anywhere
+  lastX?: number
+  lastY?: number
   phase?: number
   // buildings
   complete?: boolean

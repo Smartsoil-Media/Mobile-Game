@@ -22,16 +22,54 @@ export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: 
   }
 }
 
-function moveToward(e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
+function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
   const dx = tx - e.x, dy = ty - e.y
   const d = Math.hypot(dx, dy)
   if (d < 3) return true
+  let dirX = dx / d, dirY = dy / d
+
+  // steering: if the stretch just ahead runs into a building, slide along its
+  // edge instead of pinning against it (small round resources need no steering —
+  // the separation push already slides walkers around them naturally)
+  const probe = Math.min(d, e.r + 18)
+  const px = e.x + dirX * probe, py = e.y + dirY * probe
+  let block: Ent | null = null
+  for (const o of g.ents) {
+    if (o === e || !isBuilding(o)) continue
+    const clearance = e.r + o.r * 0.85
+    if (dist(tx, ty, o.x, o.y) < e.r + o.r + 24) continue // that's where we're headed — walk right up
+    if (dist(px, py, o.x, o.y) < clearance) { block = o; break }
+  }
+  if (block) {
+    const ox = e.x - block.x, oy = e.y - block.y
+    const ol = Math.hypot(ox, oy) || 1
+    const nx = ox / ol, ny = oy / ol
+    // pick a side once and stick with it until the way is clear
+    if (!e.avoidSide) e.avoidSide = (dirX * -oy + dirY * ox) >= 0 ? 1 : -1
+    const side = e.avoidSide
+    // tangent around the obstacle, blended slightly outward so we don't hug the wall
+    dirX = -ny * side + nx * 0.35
+    dirY = nx * side + ny * 0.35
+    const dl = Math.hypot(dirX, dirY) || 1
+    dirX /= dl; dirY /= dl
+  } else {
+    e.avoidSide = undefined
+  }
+
   const step = Math.min(speed * dt, d)
-  e.x += (dx / d) * step
-  e.y += (dy / d) * step
-  e.heading = Math.atan2(dy, dx)
+  e.x += dirX * step
+  e.y += dirY * step
   e.stepped = true
-  if (Math.abs(dx) > 1) e.face = dx > 0 ? 1 : -1
+  // turn smoothly rather than snapping — the lean tilt reads calm
+  const want = Math.atan2(dirY, dirX)
+  if (e.heading === undefined) e.heading = want
+  else {
+    let dh = want - e.heading
+    while (dh > Math.PI) dh -= Math.PI * 2
+    while (dh < -Math.PI) dh += Math.PI * 2
+    e.heading += dh * Math.min(1, 10 * dt)
+  }
+  if (Math.abs(dx) > 4) e.face = dx > 0 ? 1 : -1
   return d - step < 3
 }
 
@@ -50,10 +88,17 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
     return
   }
   if (!inRange(e, t, s.range)) {
-    moveToward(e, t.x, t.y, unitSpeed(g, e), dt)
+    e.chaseT = 0.25 // once caught up, dig in a little past the range line
+    moveToward(g, e, t.x, t.y, unitSpeed(g, e), dt)
     return
   }
-  if (Math.abs(t.x - e.x) > 1) e.face = t.x > e.x ? 1 : -1
+  if ((e.chaseT ?? 0) > 0 && !inRange(e, t, Math.max(2, s.range - 10))) {
+    // just re-entered range on a moving target: keep closing so a nudge
+    // doesn't bounce us straight back out (the strikes continue meanwhile)
+    e.chaseT = (e.chaseT ?? 0) - dt
+    moveToward(g, e, t.x, t.y, unitSpeed(g, e), dt)
+  }
+  if (Math.abs(t.x - e.x) > 6) e.face = t.x > e.x ? 1 : -1
   if ((e.cd ?? 0) <= 0) {
     e.cd = s.cd
     const dmg = s.dmg + (DMG_BONUS[e.kind]?.[t.kind] ?? 0) // counters bite harder
@@ -81,7 +126,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
   const spd = unitSpeed(g, e)
   switch (e.state) {
     case 'move': {
-      if (moveToward(e, e.tx!, e.ty!, spd, dt)) e.state = 'idle'
+      if (moveToward(g, e, e.tx!, e.ty!, spd, dt)) e.state = 'idle'
       break
     }
     case 'gather': {
@@ -103,7 +148,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         else e.state = 'idle'
         break
       }
-      if (!inRange(e, res, 6)) { moveToward(e, res.x, res.y, spd, dt); break }
+      if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
       const giving = isFarm ? 'food' : RESOURCES[res.kind].gives
       e.gatherT = (e.gatherT ?? 0) + dt * gatherMult(g, e.team, giving) // techs quicken the hands
@@ -148,7 +193,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'return': {
       const home = nearestDropoff(g, e)
       if (!home) { e.state = 'idle'; break }
-      if (!inRange(e, home, 8)) { moveToward(e, home.x, home.y, spd, dt); break }
+      if (!inRange(e, home, 8)) { moveToward(g, e, home.x, home.y, spd, dt); break }
       if (e.team === 0 || e.team === 1) {
         g.res[e.team][e.carryRes ?? 'wood'] += e.carry ?? 0
         if (e.team === 0) g.uiDirty = true
@@ -168,7 +213,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'build': {
       const site = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
       if (!site || (site.complete && site.hp >= site.maxHp)) { e.state = 'idle'; e.targetId = undefined; break }
-      if (!inRange(e, site, 10)) { moveToward(e, site.x, site.y, spd, dt); break }
+      if (!inRange(e, site, 10)) { moveToward(g, e, site.x, site.y, spd, dt); break }
       if (Math.abs(site.x - e.x) > 1) e.face = site.x > e.x ? 1 : -1
       const b = BUILDINGS[site.kind]
       if (site.complete) {
@@ -206,7 +251,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
 function garrisonWalk(g: Game, e: Ent, dt: number): void {
   const b = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
   if (!b || !b.complete || !isBuilding(b)) { e.state = 'idle'; e.targetId = undefined; return }
-  if (!inRange(e, b, 10)) { moveToward(e, b.x, b.y, unitSpeed(g, e) * 1.15, dt); return } // hurry!
+  if (!inRange(e, b, 10)) { moveToward(g, e, b.x, b.y, unitSpeed(g, e) * 1.15, dt); return } // hurry!
   if ((b.garrison ?? 0) < BUILDINGS[b.kind].garrisonCap) {
     b.garrison = (b.garrison ?? 0) + 1
     e.hidden = true
@@ -223,7 +268,7 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
   const s = UNITS[e.kind]
   switch (e.state) {
     case 'move': {
-      if (moveToward(e, e.tx!, e.ty!, unitSpeed(g, e), dt)) e.state = 'idle'
+      if (moveToward(g, e, e.tx!, e.ty!, unitSpeed(g, e), dt)) e.state = 'idle'
       break
     }
     case 'garrison': garrisonWalk(g, e, dt); break
@@ -238,7 +283,7 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
           break
         }
       }
-      if (moveToward(e, e.tx!, e.ty!, s.speed, dt)) {
+      if (moveToward(g, e, e.tx!, e.ty!, s.speed, dt)) {
         // arrived at destination: hunt anything left nearby, else hold
         const foe = nearestEnemyThing(g, e, 260)
         if (foe) { e.resume = { x: e.tx!, y: e.ty! }; e.state = 'attack'; e.targetId = foe.id }
@@ -373,14 +418,19 @@ function separation(g: Game): void {
     const a = units[i]
     for (let j = i + 1; j < units.length; j++) {
       const b = units[j]
+      if (a.state === 'gather' && b.state === 'gather') continue // workers nestle at a busy bush
       const dx = b.x - a.x, dy = b.y - a.y
       const d = Math.hypot(dx, dy)
       const min = a.r + b.r
       if (d > 0.001 && d < min) {
-        const push = (min - d) / 2
+        // walkers shoulder through a crowd: whoever is standing still steps aside
+        let wa = 0.5, wb = 0.5
+        if (a.stepped && !b.stepped) { wa = 0.12; wb = 0.88 }
+        else if (!a.stepped && b.stepped) { wa = 0.88; wb = 0.12 }
+        const push = min - d
         const nx = dx / d, ny = dy / d
-        a.x -= nx * push; a.y -= ny * push
-        b.x += nx * push; b.y += ny * push
+        a.x -= nx * push * wa; a.y -= ny * push * wa
+        b.x += nx * push * wb; b.y += ny * push * wb
       }
     }
     // push out of buildings and big resources
@@ -437,6 +487,27 @@ export function update(g: Game, dt: number): void {
   }
 
   separation(g)
+
+  // stuck watchdog: a walker who isn't getting anywhere tries the other way around
+  for (const e of g.ents) {
+    if (!isUnit(e) || e.hidden) continue
+    if (e.stepped) {
+      const moved = dist(e.x, e.y, e.lastX ?? e.x, e.lastY ?? e.y)
+      if (moved < 0.4) {
+        e.stuckT = (e.stuckT ?? 0) + dt
+        if (e.stuckT > 0.8) {
+          e.avoidSide = -(e.avoidSide ?? 1)
+          e.stuckT = 0
+        }
+      } else {
+        e.stuckT = 0
+      }
+    } else {
+      e.stuckT = 0
+    }
+    e.lastX = e.x
+    e.lastY = e.y
+  }
 
   // player line of sight, a few times a second
   g.visionT -= dt

@@ -583,11 +583,101 @@ const repaired = await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  return { hp: Math.round(tc.hp), maxHp: tc.maxHp, wood: Math.round(g.res[0].wood) }
+  const v = g.byId.get(g.selection[0])
+  return {
+    hp: Math.round(tc.hp), maxHp: tc.maxHp, wood: Math.round(g.res[0].wood),
+    vill: v ? {
+      state: v.state, target: v.targetId, x: Math.round(v.x), y: Math.round(v.y),
+      dTC: Math.round(Math.hypot(v.x - tc.x, v.y - tc.y)), side: v.avoidSide,
+    } : null,
+    tcPos: { x: tc.x, y: tc.y, id: tc.id },
+  }
 })
 console.log('repaired:', repairSetup, '->', repaired)
 if (repaired.hp - repairSetup.hp < 100) throw new Error('repairs made no progress')
 if (repaired.wood >= repairSetup.wood) throw new Error('repairs should consume wood')
+
+// 5.6) steering: a walk order straight through a building goes around it
+const steer = await page3.evaluate(() => {
+  const g = window.__game.state
+  const bx = 1250, by = 700 // open meadow, far from every other test's furniture
+  window.__game.spawn('barracks', 0, bx, by)
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.x = bx; v.y = by + 110
+  v.state = 'move'; v.tx = bx; v.ty = by - 110; v.targetId = undefined
+  window.__game.setSpeed(15)
+  return { villId: v.id, goal: { x: bx, y: by - 110 } }
+})
+await waitSim(page3, 20)
+const steered = await page3.evaluate(({ villId, goal }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.byId.get(villId)
+  const d = Math.round(Math.hypot(v.x - goal.x, v.y - goal.y))
+  // walk the wanderer home so later tests find the crew where they expect it
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined
+  return { d, state: v.state }
+}, steer)
+console.log('steering around a barracks:', steered)
+if (steered.d > 40) throw new Error('villager got stuck behind the building')
+
+// 5.7) crowded bush: three gatherers nestle in instead of elbowing each other
+const crowd = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const bush = g.ents.reduce((best, e) => {
+    if (e.kind !== 'berrybush' || (e.amount ?? 0) < 30) return best
+    const d = Math.hypot(e.x - tc.x, e.y - tc.y)
+    return !best || d < best.d ? { e, d } : best
+  }, null).e
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager').slice(0, 3)
+  for (const v of vills) { v.state = 'gather'; v.targetId = bush.id; v.gatherT = 0; v.carry = 0 }
+  window.__game.setSpeed(15)
+  return { bushId: bush.id, ids: vills.map(v => v.id), food: g.res[0].food }
+})
+await waitSim(page3, 12)
+const crowded = await page3.evaluate(({ bushId, ids, food }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const bush = g.byId.get(bushId)
+  const working = ids.map(id => g.byId.get(id)).filter(v => v &&
+    (v.state === 'gather' || v.state === 'return')).length
+  return {
+    working,
+    atBush: ids.map(id => g.byId.get(id)).filter(v => v &&
+      Math.hypot(v.x - bush.x, v.y - bush.y) < 60).length,
+    gained: Math.round(g.res[0].food - food),
+  }
+}, crowd)
+console.log('crowded bush:', crowded)
+if (crowded.working < 3) throw new Error('gatherers could not all settle around one bush')
+
+// 5.8) the chase: a scout runs down a fleeing villager without losing it
+const chase = await page3.evaluate(() => {
+  const g = window.__game.state
+  const runnerId = window.__game.spawn('villager', 1, 700, 700)
+  const runner = g.byId.get(runnerId)
+  runner.state = 'move'; runner.tx = 1500; runner.ty = 300 // flees across the meadow
+  const scout = g.ents.find(e => e.team === 0 && e.kind === 'scout')
+  scout.x = 640; scout.y = 760
+  scout.state = 'attack'; scout.targetId = runnerId; scout.resume = null
+  window.__game.setSpeed(15)
+  return { runnerId, scoutId: scout.id }
+})
+await waitSim(page3, 50)
+const chased = await page3.evaluate(({ runnerId, scoutId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const scout = g.byId.get(scoutId)
+  // send the scout home for the fog tests
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  if (scout) { scout.x = tc.x - 90; scout.y = tc.y - 50; scout.state = 'idle'; scout.targetId = undefined }
+  return { runnerDead: !g.byId.has(runnerId), scoutAlive: !!scout }
+}, chase)
+console.log('chase:', chased)
+if (!chased.runnerDead) throw new Error('scout never ran the fleeing villager down')
+if (!chased.scoutAlive) throw new Error('scout died chasing a villager')
 
 
 // 6) placement mode dies when you tap your own stuff instead of open ground
