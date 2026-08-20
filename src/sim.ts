@@ -409,6 +409,19 @@ export function update(g: Game, dt: number): void {
     updateVision(g)
   }
 
+  // age research ticks for both villages
+  for (let team = 0; team < 2; team++) {
+    const res = g.ageRes[team]
+    if (!res) continue
+    res.t -= dt
+    if (res.t <= 0) {
+      g.ageRes[team] = null
+      g.age[team] = 2
+      if (team === 0) toast(g, 'The Feudal Age dawns! New arts of war unlock.')
+      g.uiDirty = true
+    }
+  }
+
   // deaths
   for (const e of [...g.ents]) {
     if ((isUnit(e) || isBuilding(e)) && e.hp <= 0) {

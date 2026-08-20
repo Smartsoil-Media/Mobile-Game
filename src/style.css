@@ -64,6 +64,13 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .pill svg { width: 15px; height: 15px; }
+.pill-age {
+  background: #E9B44C;
+  border-color: #C98F2B;
+  color: #4A3413;
+  min-width: 34px;
+  justify-content: center;
+}
 .pill svg { display: block; }
 
 /* ---- toasts ---- */
@@ -178,6 +185,20 @@ button.cmd .badge {
 button.cmd.disabled {
   filter: grayscale(1);
   opacity: 0.55;
+}
+button.cmd.locked {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+button.cmd .lockb {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  background: var(--cream);
+  border-radius: 50%;
+  padding: 2px;
+  width: 15px;
+  height: 15px;
 }
 button.cmd .tick {
   font-size: 26px;

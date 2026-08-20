@@ -65,6 +65,8 @@ export function createGame(): Game {
     })(),
     visionT: 0,
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
+    age: [1, 1],
+    ageRes: [null, null],
     toasts: [], started: false, uiDirty: true,
   }
 

@@ -91,6 +91,8 @@ export interface Game {
   fog: Fog
   visionT: number
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
+  age: number[] // per team: 1 = Dark Age, 2 = Feudal Age
+  ageRes: ({ t: number; total: number } | null)[] // in-flight age research
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean
@@ -102,25 +104,26 @@ export function cost(c: Partial<Cost>): Cost { return { ...NO_COST, ...c } }
 
 export const UNITS: Record<string, {
   hp: number; dmg: number; range: number; cd: number
-  speed: number; aggro: number; cost: Cost; time: number; r: number; los: number; name: string
+  speed: number; aggro: number; cost: Cost; time: number; r: number; los: number
+  age?: number; name: string
 }> = {
   villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 31, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 160, name: 'Villager' },
-  swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 180, name: 'Swordsman' },
+  swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 180, age: 2, name: 'Swordsman' },
   spearman: { hp: 55, dmg: 6, range: 20, cd: 1.0, speed: 37, aggro: 130, cost: cost({ food: 35, wood: 20 }), time: 8, r: 11, los: 180, name: 'Spearman' },
-  archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, name: 'Archer' },
+  archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, age: 2, name: 'Archer' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
 }
 
 export const BUILDINGS: Record<string, {
   hp: number; r: number; foot: number; cost: Cost; time: number; pop: number; los: number
-  garrisonCap: number; name: string
+  garrisonCap: number; age?: number; name: string
 }> = {
-  towncenter: { hp: 800, r: 52, foot: 58, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, name: 'Town Hall' },
+  towncenter: { hp: 800, r: 52, foot: 58, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
   house: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
   farm: { hp: 120, r: 24, foot: 30, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
   barracks: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
-  archeryrange: { hp: 300, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Archery Range' },
-  watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, name: 'Watchtower' },
+  archeryrange: { hp: 300, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
+  watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
 }
@@ -154,6 +157,9 @@ export const SOURCE_OF: Record<ResKind, Kind> = {
 
 export const FOG_CELL = 32
 export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
+export const AGE2_COST = cost({ food: 275 })
+export const AGE2_TIME = 35
+export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age']
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
 export const POP_MAX = 25

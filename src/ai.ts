@@ -2,7 +2,7 @@
 // It gathers with villagers, trains from real resources, builds houses,
 // a barracks and farms, and attacks in growing pushes.
 import {
-  Game, Ent, ResKind, UNITS, BUILDINGS, SOURCE_OF, POP_MAX, WORLD_W, WORLD_H,
+  Game, Ent, ResKind, UNITS, BUILDINGS, SOURCE_OF, POP_MAX, AGE2_COST, AGE2_TIME,
   dist, isUnit, isBuilding,
 } from './data'
 import { spawn, nearest, pop, canAfford, canPlaceAt, pay } from './world'
@@ -61,7 +61,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
   const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter' && e.complete)
   if (!tc) return
   const vills = g.ents.filter(e => e.team === 1 && e.kind === 'villager' && !e.hidden)
-  const soldiers = g.ents.filter(e => e.team === 1 && e.kind === 'swordsman')
+  const soldiers = g.ents.filter(e =>
+    e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman'))
   const p = pop(g, 1)
 
   // -- economy: keep villagers on quota, spare hands on wood --
@@ -109,6 +110,14 @@ export function updateEnemyAI(g: Game, dt: number): void {
     }
   }
 
+  // -- the march of progress: research the Feudal Age when established --
+  const rax = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
+  if (g.age[1] === 1 && !g.ageRes[1] && rax && vills.length >= 6 &&
+    g.res[1].food >= AGE2_COST.food + UNITS.villager.cost.food) {
+    pay(g, 1, AGE2_COST)
+    g.ageRes[1] = { t: AGE2_TIME, total: AGE2_TIME }
+  }
+
   // -- training --
   const room = p.used + queuedUnits(g) < p.cap
   if ((tc.queue?.length ?? 0) === 0 && vills.length < VILLAGER_GOAL && room &&
@@ -116,11 +125,14 @@ export function updateEnemyAI(g: Game, dt: number): void {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
   }
-  const rax = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
-  if (rax && (rax.queue?.length ?? 0) < 2 &&
-    p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.swordsman.cost)) {
-    pay(g, 1, UNITS.swordsman.cost)
-    rax.queue!.push({ kind: 'swordsman', t: UNITS.swordsman.time, total: UNITS.swordsman.time })
+  if (rax && (rax.queue?.length ?? 0) < 2 && p.used + queuedUnits(g) < p.cap) {
+    // Dark Age fields spearmen; Feudal mixes in swordsmen when gold allows
+    const kind = (g.age[1] >= 2 && g.res[1].gold >= UNITS.swordsman.cost.gold &&
+      Math.random() < 0.6) ? 'swordsman' : 'spearman'
+    if (canAfford(g, 1, UNITS[kind].cost)) {
+      pay(g, 1, UNITS[kind].cost)
+      rax.queue!.push({ kind, t: UNITS[kind].time, total: UNITS[kind].time })
+    }
   }
 
   // -- war: defend the home meadow, push when the army is mustered --

@@ -1,5 +1,5 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
-import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, isUnit } from './data'
+import { Game, Ent, Buildable, Cost, UNITS, BUILDINGS, AGE2_COST, AGE2_TIME, isUnit } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy, tryPlaceBuilding, snapPlace } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
@@ -15,6 +15,8 @@ const ICON = {
   military: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6.5 17.5 16 8M17.5 17.5 8 8" stroke="#AEB4BF" stroke-width="2.4" stroke-linecap="round"/><path d="M15 6.5 17.5 5.5 16.5 8M9 6.5 6.5 5.5 7.5 8" fill="#AEB4BF"/><path d="M6.5 17.5l-1.6 1.6M17.5 17.5l1.6 1.6" stroke="#E9B44C" stroke-width="2.6" stroke-linecap="round"/></svg>`,
   swordspear: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6 18 15 9" stroke="#C7CCD4" stroke-width="2.4" stroke-linecap="round"/><path d="M15 9l2.5-3.5L18.5 9z" fill="#C7CCD4"/><path d="M9.2 15.2l-1.8-1.8M6 18l-1.4 1.4" stroke="#E9B44C" stroke-width="2.4" stroke-linecap="round"/><path d="M18 18 8.5 8.5" stroke="#8B6A4A" stroke-width="2.2" stroke-linecap="round"/><path d="M8.5 8.5 5.5 5.5l1.2 3.8 2.6-.1z" fill="#AEB4BF"/></svg>`,
   target: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><circle cx="12" cy="12" r="8.5" fill="#E8C97A"/><circle cx="12" cy="12" r="6" fill="#FBF3E4"/><circle cx="12" cy="12" r="3.6" fill="#C9525E"/><circle cx="12" cy="12" r="1.4" fill="#FBF3E4"/><path d="M12.5 11.5 18 6" stroke="#6F5238" stroke-width="1.8" stroke-linecap="round"/><path d="M18 6l.8-2.3L16.5 4.6z" fill="#8B6A4A"/></svg>`,
+  laurel: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 18.5V7" stroke="#8B6A4A" stroke-width="1.6" stroke-linecap="round"/><path d="M12 17c-4.5-.5-6.5-3-6.8-6.2C8 11 10.5 12.5 12 15M12 17c4.5-.5 6.5-3 6.8-6.2C16 11 13.5 12.5 12 15" fill="#75A055"/><circle cx="12" cy="6" r="2.2" fill="#E9B44C"/></svg>`,
+  lock: `<svg class="lockb" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="10" width="12" height="9" rx="2.5" fill="#5A4632"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" stroke="#5A4632" stroke-width="2.2" fill="none"/><circle cx="12" cy="14.5" r="1.6" fill="#FBF3E4"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
@@ -98,6 +100,7 @@ function queueLen(g: Game): number {
 
 function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer'): void {
   const s = UNITS[kind]
+  if ((s.age ?? 1) > g.age[0]) { toast(g, 'Reach the Feudal Age first!'); return }
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
   if (!canAfford(g, 0, s.cost)) {
@@ -122,6 +125,7 @@ interface IconBtn {
   icon: HTMLElement | string
   cost?: Cost
   badge?: string
+  locked?: boolean
 }
 
 const COST_KEYS = ['wood', 'food', 'gold', 'stone'] as const
@@ -142,6 +146,10 @@ function iconButton(opts: IconBtn, onClick: () => void): HTMLButtonElement {
   else b.appendChild(opts.icon)
   if (costs.length) b.insertAdjacentHTML('beforeend', `<i>${costs.join(' ')}</i>`)
   if (opts.badge) b.insertAdjacentHTML('beforeend', `<span class="badge">${opts.badge}</span>`)
+  if (opts.locked) {
+    b.classList.add('locked')
+    b.insertAdjacentHTML('beforeend', ICON.lock)
+  }
   b.addEventListener('click', onClick)
   return b
 }
@@ -180,6 +188,7 @@ export function syncUI(g: Game): void {
   el('gold-n').textContent = String(Math.floor(g.res[0].gold))
   el('stone-n').textContent = String(Math.floor(g.res[0].stone))
   el('pop-n').textContent = `${p.used}/${p.cap}`
+  el('age-n').textContent = g.age[0] >= 2 ? 'II' : 'I'
   updateAffordability(g)
 
   if (!g.uiDirty) return
@@ -227,6 +236,22 @@ export function syncUI(g: Game): void {
     dock.appendChild(iconButton(
       { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
       () => tryTrain(g, first, 'villager')))
+    if (g.age[0] === 1 && !g.ageRes[0]) {
+      dock.appendChild(iconButton(
+        { cmd: 'age-up', label: 'Advance to the Feudal Age', icon: ICON.laurel, cost: AGE2_COST },
+        () => {
+          if (!canAfford(g, 0, AGE2_COST)) { toast(g, 'Not enough food to advance the age.'); return }
+          pay(g, 0, AGE2_COST)
+          g.ageRes[0] = { t: AGE2_TIME, total: AGE2_TIME }
+          g.uiDirty = true
+        }))
+    } else if (g.ageRes[0]) {
+      const q = document.createElement('div')
+      q.className = 'queue'
+      q.dataset.cmd = 'age-progress'
+      q.innerHTML = `<div class="qring"><div style="width:${(1 - g.ageRes[0].t / g.ageRes[0].total) * 100}%"></div></div><span>advancing…</span>`
+      dock.appendChild(q)
+    }
     const garrison = first.garrison ?? 0
     if (garrison > 0) {
       dock.appendChild(iconButton(
@@ -244,11 +269,12 @@ export function syncUI(g: Game): void {
       () => openDoors(g, first)))
   } else if (first && first.kind === 'barracks' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
-      { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'), cost: UNITS.swordsman.cost },
-      () => tryTrain(g, first, 'swordsman')))
-    dock.appendChild(iconButton(
       { cmd: 'train-spearman', label: 'Train spearman', icon: spriteIcon('spearman'), cost: UNITS.spearman.cost },
       () => tryTrain(g, first, 'spearman')))
+    dock.appendChild(iconButton(
+      { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'),
+        cost: UNITS.swordsman.cost, locked: g.age[0] < (UNITS.swordsman.age ?? 1) },
+      () => tryTrain(g, first, 'swordsman')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
@@ -285,9 +311,11 @@ export function syncUI(g: Game): void {
       }
       for (const kind of lists[buildCat]) {
         const b = BUILDINGS[kind]
+        const locked = g.age[0] < (b.age ?? 1)
         dock.appendChild(iconButton(
-          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost },
+          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost, locked },
           () => {
+            if (g.age[0] < (b.age ?? 1)) { toast(g, 'Reach the Feudal Age first!'); return }
             g.placing = kind
             g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
             g.uiDirty = true

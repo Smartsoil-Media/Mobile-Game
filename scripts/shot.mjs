@@ -268,7 +268,7 @@ const aiCheck = await page3.evaluate(() => {
     vills: g.ents.filter(e => e.team === 1 && e.kind === 'villager').length,
     barracks: g.ents.filter(e => e.team === 1 && e.kind === 'barracks').length,
     houses: g.ents.filter(e => e.team === 1 && e.kind === 'house').length,
-    soldiers: g.ents.filter(e => e.team === 1 && e.kind === 'swordsman').length,
+    soldiers: g.ents.filter(e => e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman')).length,
     attacking: g.ai.attacking,
     over: g.over,
   }
@@ -283,7 +283,7 @@ await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   g.ai.enabled = false
-  for (const e of g.ents.filter(e => e.team === 1 && e.kind === 'swordsman')) e.hp = 0
+  for (const e of g.ents.filter(e => e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman'))) e.hp = 0
   for (const v of g.ents.filter(e => e.team === 1 && e.kind === 'villager')) {
     v.state = 'idle'; v.targetId = undefined
   }
@@ -299,6 +299,58 @@ await page3.evaluate(() => {
   }
 })
 await page3.waitForTimeout(300)
+
+// 4.5) the Feudal Age: locks in the Dark Age, unlocked by the real age-up flow
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(v.id)
+})
+await page3.waitForTimeout(250)
+await openCat(page3, 'military')
+const darkLocks = await page3.evaluate(() => ({
+  locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
+  age: window.__game.state.age[0],
+  pill: document.getElementById('age-n').textContent,
+}))
+console.log('dark age locks:', darkLocks)
+if (darkLocks.age !== 1 || darkLocks.pill !== 'I') throw new Error('should start in the Dark Age')
+if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange'))
+  throw new Error('feudal buildings not locked in the Dark Age')
+if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+})
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('[data-cmd="age-up"]'))) throw new Error('age-up button missing on the Town Hall')
+await page3.tap('[data-cmd="age-up"]')
+await page3.waitForTimeout(250)
+const researching = await page3.evaluate(() => !!window.__game.state.ageRes[0])
+if (!researching) throw new Error('age research did not start')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 40)
+const feudal = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(v.id)
+  return { age: g.age[0], pill: document.getElementById('age-n').textContent }
+})
+console.log('after age-up:', feudal)
+if (feudal.age !== 2 || feudal.pill !== 'II') throw new Error('the Feudal Age never dawned')
+await page3.waitForTimeout(250)
+await openCat(page3, 'military')
+const feudalLocks = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd))
+console.log('feudal locks:', feudalLocks)
+if (feudalLocks.length) throw new Error('locks should lift in the Feudal Age')
+await openCat(page3, 'economy') // leave the menu tidy
+await page3.tap('[data-cmd="back"]')
+// both villages feudal for the remaining feature checks
+await page3.evaluate(() => { window.__game.state.age = [2, 2] })
 
 // 5) bell + garrison: villagers shelter in the TC and it shoots attackers down
 await page3.evaluate(() => {
