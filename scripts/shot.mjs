@@ -296,6 +296,48 @@ await page3.tap('#game', { position: canvasBox })
 await page3.waitForTimeout(250)
 if (!(await page3.isHidden('#dock'))) throw new Error('dock still visible after clearing selection')
 
+// 8) a second villager tapped onto a construction site joins the build
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(vills[0].id)
+  g.res[0].wood = 200
+  g.camera.x = 330; g.camera.y = 550
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+await page3.tap('button.cmd:has-text("Build House")')
+await page3.waitForTimeout(200)
+await page3.tap('#game', { position: canvasBox }) // place on open meadow
+await page3.waitForTimeout(250)
+const siteInfo = await page3.evaluate(() => {
+  const g = window.__game.state
+  const site = g.ents.find(e => e.team === 0 && e.kind === 'house' && !e.complete)
+  if (!site) return null
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  const other = vills.find(v => v.state !== 'build')
+  window.__game.select(other.id)
+  g.camera.x = site.x; g.camera.y = site.y
+  return { siteId: site.id, otherId: other.id }
+})
+if (!siteInfo) throw new Error('house site was not placed for the join-build test')
+await page3.waitForTimeout(250)
+await page3.tap('#game', { position: canvasBox }) // tap the construction site
+await page3.waitForTimeout(250)
+const joined = await page3.evaluate(({ siteId, otherId }) => {
+  const g = window.__game.state
+  const v = g.byId.get(otherId)
+  return { state: v.state, target: v.targetId === siteId, builders: g.ents.filter(e => e.state === 'build').length }
+}, siteInfo)
+console.log('join build:', joined)
+if (joined.state !== 'build' || !joined.target) throw new Error('second villager did not join construction')
+if (joined.builders < 2) throw new Error('expected at least two builders on the site')
+await page3.evaluate(() => window.__game.setSpeed(10))
+await page3.waitForTimeout(3000) // walk to the site + build together
+const houseDone = await page3.evaluate(() =>
+  window.__game.state.ents.some(e => e.team === 0 && e.kind === 'house' && e.complete))
+if (!houseDone) throw new Error('house never completed with two builders')
+
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html'))

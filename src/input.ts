@@ -114,6 +114,16 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   const sel = selectedEnts(g)
   const myUnits = sel.filter(e => isUnit(e) && e.team === 0)
 
+  // villagers tap an unfinished building: lend a hand instead of selecting it
+  if (hit && hit.team === 0 && isBuilding(hit) && hit.complete === false) {
+    const villagers = myUnits.filter(e => e.kind === 'villager')
+    if (villagers.length) {
+      commandBuild(g, villagers, hit)
+      toast(g, villagers.length > 1 ? 'Villagers hurry to help build!' : 'Helping build!')
+      return
+    }
+  }
+
   if (hit && hit.team === 0) {
     // tapping your own stuff selects it
     g.selection = [hit.id]
