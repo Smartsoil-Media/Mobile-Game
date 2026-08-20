@@ -38,7 +38,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill', tc: Ent): Ent | null {
+function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill' | 'blacksmith', tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 1, b.cost)) return null
   for (let tries = 0; tries < 40; tries++) {
@@ -111,6 +111,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'farm', tc)
     } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {
       tryPlace(g, 'mill', tc) // a feudal village wants its mill
+    } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
+      !g.ents.some(e => e.team === 1 && e.kind === 'blacksmith')) {
+      tryPlace(g, 'blacksmith', tc) // and then a forge for its soldiers
     }
   }
 

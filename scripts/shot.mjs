@@ -84,7 +84,7 @@ if (!(await page.isVisible('[data-cmd="cat-economy"]'))) throw new Error('build 
 const rootDock = await page.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
 console.log('build categories:', rootDock)
-if (rootDock.join(',') !== 'cat-economy,cat-military') throw new Error('expected economy/military category buttons')
+if (rootDock.join(',') !== 'cat-economy,cat-military,cat-study') throw new Error('expected economy/military/study category buttons')
 
 await openCat(page, 'economy')
 const ecoDock = await page.evaluate(() => ({
@@ -327,6 +327,11 @@ if (darkLocks.age !== 1 || darkLocks.pill !== 'I') throw new Error('should start
 if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange'))
   throw new Error('feudal buildings not locked in the Dark Age')
 if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
+await openCat(page3, 'study')
+const studyLocks = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd))
+console.log('study locks (dark):', studyLocks)
+if (!studyLocks.includes('build-blacksmith')) throw new Error('blacksmith should be locked in the Dark Age')
 await page3.evaluate(() => {
   const g = window.__game.state
   g.res[0].food = 400
@@ -412,6 +417,43 @@ const researched = await page3.evaluate(() => {
 console.log('techs after research:', researched)
 if (!researched.minerspicks) throw new Error("Miner's Picks research never finished")
 
+// 4.65) the blacksmith: three upgrades under one roof; iron mail fits standing soldiers too
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 600; g.res[0].gold = 300; g.res[0].wood = 500
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.spawn('spearman', 0, tc.x - 120, tc.y + 240) // enlisted before the mail is forged
+  const smithId = window.__game.spawn('blacksmith', 0, tc.x + 440, tc.y - 40)
+  window.__game.select(smithId)
+})
+await page3.waitForTimeout(250)
+const smithDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="research-"]')].map(b => b.dataset.cmd))
+console.log('blacksmith dock:', smithDock)
+if (smithDock.join(',') !== 'research-forgedblades,research-fletching,research-ironmail')
+  throw new Error('blacksmith upgrades wrong: ' + smithDock.join(','))
+await page3.tap('[data-cmd="research-ironmail"]')
+await page3.waitForTimeout(250)
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 40)
+const mailed = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const old = g.ents.find(e => e.team === 0 && e.kind === 'spearman')
+  const freshId = window.__game.spawn('spearman', 0, old.x + 30, old.y)
+  const fresh = g.byId.get(freshId)
+  return { tech: g.techs[0].ironmail, oldMax: old.maxHp, freshMax: fresh.maxHp }
+})
+console.log('iron mail:', mailed)
+if (!mailed.tech) throw new Error('Iron Mail never finished')
+if (mailed.oldMax !== 70 || mailed.freshMax !== 70)
+  throw new Error(`Iron Mail HP not applied (want 70, got ${mailed.oldMax}/${mailed.freshMax})`)
+await page3.evaluate(() => { // muster out the practice spearmen before the garrison test
+  const g = window.__game.state
+  for (const e of g.ents.filter(e => e.team === 0 && e.kind === 'spearman')) e.hp = 0
+})
+await waitSim(page3, 1)
+
 // 4.7) the mill takes food drop-offs, sparing the long walk home
 const millCheck = await page3.evaluate(() => {
   const g = window.__game.state
@@ -438,15 +480,20 @@ if (millResult.food - millCheck.foodBefore < 12)
   throw new Error('mill drop-off too slow — villager likely hauling to the Town Hall')
 
 // 5) bell + garrison: villagers shelter in the TC and it shoots attackers down
-await page3.evaluate(() => {
+const bellJob = await page3.evaluate(() => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  // one villager is mid-harvest; the doors should send them straight back to it
+  const worker = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  const bush = g.ents.find(e => e.kind === 'berrybush' && (e.amount ?? 0) > 10)
+  worker.state = 'gather'; worker.targetId = bush.id; worker.gatherT = 0
   for (let i = 0; i < 2; i++) {
     const id = window.__game.spawn('swordsman', 1, tc.x + 260 + i * 30, tc.y - 200)
     const u = g.byId.get(id)
     u.state = 'attackmove'; u.tx = tc.x; u.ty = tc.y
   }
   window.__game.select(tc.id)
+  return { workerId: worker.id, bushId: bush.id }
 })
 await page3.waitForTimeout(300)
 await page3.tap('[data-cmd="bell"]')
@@ -491,13 +538,56 @@ await page3.evaluate(() => window.__game.setSpeed(1))
 await page3.waitForTimeout(300)
 await page3.tap('[data-cmd="doors"]')
 await page3.waitForTimeout(400)
-const released = await page3.evaluate(() => {
+const released = await page3.evaluate(({ workerId, bushId }) => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  return { garrison: tc.garrison ?? 0, hidden: g.ents.filter(e => e.hidden).length }
-})
+  const worker = g.byId.get(workerId)
+  return {
+    garrison: tc.garrison ?? 0,
+    hidden: g.ents.filter(e => e.hidden).length,
+    backToWork: worker ? worker.state === 'gather' && worker.targetId === bushId : false,
+  }
+}, bellJob)
 console.log('released:', released)
 if (released.garrison !== 0 || released.hidden !== 0) throw new Error('villagers were not released')
+if (!released.backToWork) throw new Error('doors did not send the villager back to their berry bush')
+
+// 5.5) repairs: hammer the battered Town Hall back to health, for a trickle of wood
+const repairSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 200
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  if (tc.hp >= tc.maxHp) tc.hp = tc.maxHp * 0.5
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.state = 'idle'; v.targetId = undefined
+  window.__game.select(v.id)
+  g.camera.x = tc.x; g.camera.y = tc.y
+  const c = document.getElementById('game').getBoundingClientRect()
+  return { hp: Math.round(tc.hp), wood: g.res[0].wood, pos: { x: c.width / 2, y: c.height / 2 } }
+})
+await page3.waitForTimeout(500) // stay outside the double-tap window
+await page3.tap('#game', { position: repairSetup.pos })
+await page3.waitForTimeout(250)
+const repairOrder = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.byId.get(g.selection[0])
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  return { state: v ? v.state : null, onTC: v ? v.targetId === tc.id : false }
+})
+console.log('repair order:', repairOrder)
+if (repairOrder.state !== 'build' || !repairOrder.onTC)
+  throw new Error('tapping the damaged Town Hall did not start repairs')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 30)
+const repaired = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  return { hp: Math.round(tc.hp), maxHp: tc.maxHp, wood: Math.round(g.res[0].wood) }
+})
+console.log('repaired:', repairSetup, '->', repaired)
+if (repaired.hp - repairSetup.hp < 100) throw new Error('repairs made no progress')
+if (repaired.wood >= repairSetup.wood) throw new Error('repairs should consume wood')
 
 
 // 6) placement mode dies when you tap your own stuff instead of open ground
@@ -995,12 +1085,14 @@ if (towerFight.attackerAlive) throw new Error('tower did not defeat a lone attac
 if (!towerFight.towerAlive) throw new Error('tower died to a lone attacker')
 
 // garrison two villagers by tapping the tower, then open the doors
+// (heal it first — tapping a damaged building now means "repair it")
 await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
   g.selection = [vills[0].id, vills[1].id]
   const tower = g.ents.find(e => e.team === 0 && e.kind === 'watchtower')
+  tower.hp = tower.maxHp
   g.camera.x = tower.x; g.camera.y = tower.y
   g.uiDirty = true
 })

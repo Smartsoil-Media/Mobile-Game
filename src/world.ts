@@ -2,6 +2,7 @@
 import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   NO_TECHS, GATHER_TECH, GATHER_TECH_MULT, FOX_SPEED_MULT, FOX_LOS_BONUS,
+  FORGED_DMG, FLETCH_DMG, IRONMAIL_HP, MELEE_KINDS, INFANTRY_KINDS,
   NEUTRAL, POP_MAX, FOG_CELL, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -27,6 +28,9 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   if (isUnit(e)) {
     const s = UNITS[kind]
     e.r = s.r; e.hp = e.maxHp = s.hp
+    if (INFANTRY_KINDS.includes(kind) && g.techs[team]?.ironmail) {
+      e.hp = e.maxHp = s.hp + IRONMAIL_HP // mailed from the forge
+    }
     e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = Math.random() * 0.3
     e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = Math.random() * Math.PI * 2
     e.resume = null
@@ -168,6 +172,15 @@ export function gatherMult(g: Game, team: number, res: ResKind): number {
   return g.techs[team]?.[GATHER_TECH[res]] ? GATHER_TECH_MULT : 1
 }
 
+// blacksmith bonus damage for a unit kind
+export function dmgBonusFor(g: Game, team: number, kind: Kind): number {
+  const t = g.techs[team]
+  if (!t) return 0
+  if (kind === 'archer') return t.fletching ? FLETCH_DMG : 0
+  if (MELEE_KINDS.includes(kind)) return t.forgedblades ? FORGED_DMG : 0
+  return 0
+}
+
 // walking speed for a unit, with the Fox's blessing where it applies
 export function unitSpeed(g: Game, e: Ent): number {
   const base = UNITS[e.kind].speed
@@ -277,12 +290,37 @@ export function ringBell(g: Game, tc: Ent): void {
   let called = 0
   for (const v of g.ents) {
     if (v.team !== tc.team || v.kind !== 'villager' || v.hidden) continue
+    // remember what they were doing so the doors can send them back to work
+    if ((v.state === 'gather' || v.state === 'return' || v.state === 'build') && v.targetId !== undefined) {
+      v.job = { state: v.state === 'build' ? 'build' : 'gather', targetId: v.targetId }
+    } else {
+      v.job = null
+    }
     v.state = 'garrison'
     v.targetId = tc.id
     called++
   }
   if (!called) toast(g, 'No villagers outside to call in.')
   g.uiDirty = true
+}
+
+// step back out and pick the old job up again, if it still exists
+export function resumeJob(g: Game, v: Ent): void {
+  const job = v.job
+  v.job = null
+  v.state = 'idle'
+  v.targetId = undefined
+  if (!job) return
+  const t = g.byId.get(job.targetId)
+  if (!t) return
+  const stillThere = job.state === 'build'
+    ? isBuilding(t) && (!t.complete || t.hp < t.maxHp)
+    : (t.kind === 'farm' ? !!t.complete && t.team === v.team : (t.amount ?? 0) > 0)
+  if (stillThere) {
+    v.state = job.state
+    v.targetId = job.targetId
+    v.gatherT = 0
+  }
 }
 
 export function openDoors(g: Game, b: Ent): void {
@@ -294,11 +332,9 @@ export function openDoors(g: Game, b: Ent): void {
       const a = Math.random() * Math.PI * 2
       v.x = b.x + Math.cos(a) * (b.r + 18)
       v.y = b.y + Math.abs(Math.sin(a)) * (b.r * 0.7) + 14
-      v.state = 'idle'
-      v.targetId = undefined
+      resumeJob(g, v)
     } else if (v.state === 'garrison' && v.targetId === b.id) {
-      v.state = 'idle'
-      v.targetId = undefined
+      resumeJob(g, v)
     }
   }
   b.garrison = 0

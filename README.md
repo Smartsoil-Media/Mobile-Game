@@ -22,16 +22,21 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
   for +5 pop and forward drop-offs
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army** button selects all your soldiers and jumps the camera to them
-- **Build menu** is split into Economy (house, farm, camps, town hall) and
-  Military (barracks, archery range, watchtower) categories
 - **Archery Range** (175 wood) trains archers — ranged units that shoot
   arrows from a distance (30 food + 35 gold each)
 - **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
   range and shelter up to 5 units — tap a tower with units selected to
   garrison them, select it to open the doors
 - **Ring the Bell** (Town Hall) shelters your villagers inside — a garrisoned
-  Town Hall shoots arrows at attackers (one per villager, up to 10). Ring
-  again to send everyone back to work.
+  Town Hall shoots arrows at attackers (one per villager, up to 10). Open the
+  doors and everyone goes **back to the job they were doing**.
+- **Repairs**: tap a damaged friendly building with villagers selected and
+  they'll hammer it back to health — a full mend costs about half the
+  building's wood price, paid as they work.
+- **Build menu** has three doors: Economy, Military, and **Study** — home of
+  the **Blacksmith** (150 wood, Feudal Age), which forges army upgrades:
+  Forged Blades (+2 melee damage), Fletched Arrows (+2 archer damage), and
+  Iron Mail (+15 infantry health, fitted to soldiers already standing).
 
 ## Ages & Patron Spirits
 

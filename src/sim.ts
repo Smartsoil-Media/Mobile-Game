@@ -1,12 +1,12 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
   Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
-  PATRONS, TECHS,
+  PATRONS, TECHS, IRONMAIL_HP, INFANTRY_KINDS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, gatherMult, unitSpeed } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, gatherMult, unitSpeed, dmgBonusFor, resumeJob } from './world'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -57,6 +57,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
   if ((e.cd ?? 0) <= 0) {
     e.cd = s.cd
     const dmg = s.dmg + (DMG_BONUS[e.kind]?.[t.kind] ?? 0) // counters bite harder
+      + dmgBonusFor(g, e.team, e.kind) // and the blacksmith sharpens everything
     if (e.kind === 'archer') {
       // loose an arrow instead of striking
       g.projectiles.push({
@@ -166,10 +167,24 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     }
     case 'build': {
       const site = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
-      if (!site || site.complete) { e.state = 'idle'; e.targetId = undefined; break }
+      if (!site || (site.complete && site.hp >= site.maxHp)) { e.state = 'idle'; e.targetId = undefined; break }
       if (!inRange(e, site, 10)) { moveToward(e, site.x, site.y, spd, dt); break }
       if (Math.abs(site.x - e.x) > 1) e.face = site.x > e.x ? 1 : -1
       const b = BUILDINGS[site.kind]
+      if (site.complete) {
+        // repairs: same hammering, but timber comes out of the stores
+        const woodRate = b.cost.wood / (2 * b.time) // a full mend costs about half the build price
+        if (g.res[e.team].wood < woodRate * dt) {
+          if (e.team === 0) toast(g, 'Out of wood — repairs halted.')
+          e.state = 'idle'; e.targetId = undefined
+          break
+        }
+        g.res[e.team].wood -= woodRate * dt
+        site.hp = Math.min(site.maxHp, site.hp + site.maxHp * (dt / b.time))
+        if (Math.random() < dt * 6) puff(g, site.x + (Math.random() - 0.5) * site.r, site.y - site.r * 0.5, '#E8DCC0', 1)
+        if (site.hp >= site.maxHp) { e.state = 'idle'; e.targetId = undefined }
+        break
+      }
       site.progress = Math.min(1, (site.progress ?? 0) + dt / b.time)
       site.hp = Math.min(b.hp, site.hp + (b.hp * 0.9) * (dt / b.time))
       if (Math.random() < dt * 6) puff(g, site.x + (Math.random() - 0.5) * site.r, site.y - site.r * 0.5, '#E8DCC0', 1)
@@ -300,9 +315,19 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
   if (e.research) {
     e.research.t -= dt
     if (e.research.t <= 0) {
-      const spec = TECHS[e.research.id]
-      g.techs[e.team][e.research.id] = true
+      const id = e.research.id
+      const spec = TECHS[id]
+      g.techs[e.team][id] = true
       e.research = undefined
+      if (id === 'ironmail') {
+        // the mail is fitted to every soldier already standing
+        for (const u of g.ents) {
+          if (u.team === e.team && INFANTRY_KINDS.includes(u.kind)) {
+            u.maxHp += IRONMAIL_HP
+            u.hp += IRONMAIL_HP
+          }
+        }
+      }
       if (e.team === 0) toast(g, `${spec.name} — ${spec.blurb.toLowerCase()}!`)
       g.uiDirty = true
     }
@@ -330,8 +355,7 @@ function killEnt(g: Game, e: Ent): void {
         const a = Math.random() * Math.PI * 2
         v.x = e.x + Math.cos(a) * (e.r + 20)
         v.y = e.y + Math.sin(a) * (e.r * 0.6) + 16
-        v.state = 'idle'
-        v.targetId = undefined
+        resumeJob(g, v)
       }
     }
   }

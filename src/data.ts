@@ -5,10 +5,10 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout'
-  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -34,6 +34,7 @@ export interface Ent {
   cd?: number
   gatherT?: number
   scanT?: number
+  job?: { state: 'gather' | 'build'; targetId: number } | null // remembered work while sheltering
   face?: number // -1 left, 1 right
   heading?: number // radians, direction of last movement step
   stepped?: boolean // true if the unit actually walked this tick
@@ -130,12 +131,15 @@ export const BUILDINGS: Record<string, {
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
+  blacksmith: { hp: 300, r: 34, foot: 38, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Blacksmith' },
 }
 
 // ---- economy techs & patron spirits ----
 // Each patron grants its tech instantly and free at age-up; everyone else
 // can research it the slow way at the listed building (Feudal Age only).
-export type TechId = 'steelaxes' | 'wheelbarrow' | 'minerspicks' | 'foxpaths'
+export type TechId =
+  | 'steelaxes' | 'wheelbarrow' | 'minerspicks' | 'foxpaths'
+  | 'forgedblades' | 'fletching' | 'ironmail'
 export type PatronId = 'oak' | 'river' | 'mountain' | 'fox'
 
 export const TECH_COST = cost({ food: 100, wood: 75 })
@@ -146,7 +150,17 @@ export const TECHS: Record<TechId, { name: string; blurb: string; at: Kind; cost
   wheelbarrow: { name: 'Wheelbarrow', blurb: 'Gather food 20% faster', at: 'mill', cost: TECH_COST, time: TECH_TIME },
   minerspicks: { name: "Miner's Picks", blurb: 'Mine gold and stone 20% faster', at: 'miningcamp', cost: TECH_COST, time: TECH_TIME },
   foxpaths: { name: 'Fox Paths', blurb: 'Villagers and scouts walk faster, see further', at: 'towncenter', cost: TECH_COST, time: TECH_TIME },
+  // blacksmith upgrades
+  forgedblades: { name: 'Forged Blades', blurb: 'Melee units strike +2 harder', at: 'blacksmith', cost: cost({ food: 100, gold: 50 }), time: 35 },
+  fletching: { name: 'Fletched Arrows', blurb: 'Archers shoot +2 harder', at: 'blacksmith', cost: cost({ wood: 75, gold: 75 }), time: 35 },
+  ironmail: { name: 'Iron Mail', blurb: 'Infantry gain +15 health', at: 'blacksmith', cost: cost({ food: 125, gold: 50 }), time: 35 },
 }
+
+export const FORGED_DMG = 2
+export const FLETCH_DMG = 2
+export const IRONMAIL_HP = 15
+export const MELEE_KINDS: Kind[] = ['swordsman', 'spearman', 'scout']
+export const INFANTRY_KINDS: Kind[] = ['swordsman', 'spearman']
 
 export const PATRONS: Record<PatronId, { name: string; tech: TechId; blurb: string }> = {
   oak: { name: 'the Oak Father', tech: 'steelaxes', blurb: 'Steel Axes are yours' },
@@ -155,8 +169,10 @@ export const PATRONS: Record<PatronId, { name: string; tech: TechId; blurb: stri
   fox: { name: 'the Fox', tech: 'foxpaths', blurb: 'Fox Paths are yours' },
 }
 
-export const NO_TECHS: Record<TechId, boolean> =
-  { steelaxes: false, wheelbarrow: false, minerspicks: false, foxpaths: false }
+export const NO_TECHS: Record<TechId, boolean> = {
+  steelaxes: false, wheelbarrow: false, minerspicks: false, foxpaths: false,
+  forgedblades: false, fletching: false, ironmail: false,
+}
 
 export const GATHER_TECH: Record<ResKind, TechId> = {
   wood: 'steelaxes', food: 'wheelbarrow', gold: 'minerspicks', stone: 'minerspicks',
@@ -227,7 +243,7 @@ export function isUnit(e: Ent): boolean {
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'lumbercamp' || e.kind === 'miningcamp' ||
-    e.kind === 'mill' || e.kind === 'farm' || e.kind === 'watchtower'
+    e.kind === 'mill' || e.kind === 'blacksmith' || e.kind === 'farm' || e.kind === 'watchtower'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'

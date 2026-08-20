@@ -3,7 +3,7 @@ import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, isUnit, isBuilding } from './da
 import { isVisibleToPlayer, canPlaceAt } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
-  drawLumberCamp, drawMiningCamp, drawMill, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
+  drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout,
 } from './sprites'
 
@@ -137,6 +137,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'lumbercamp': e.complete ? drawLumberCamp(ctx, e) : drawSite(ctx, e); break
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
       case 'mill': e.complete ? drawMill(ctx, e, time) : drawSite(ctx, e); break
+      case 'blacksmith': e.complete ? drawBlacksmith(ctx, e, time) : drawSite(ctx, e); break
       case 'villager': drawVillager(ctx, e, time); break
       case 'swordsman': drawSwordsman(ctx, e, time); break
       case 'spearman': drawSpearman(ctx, e, time); break
@@ -226,6 +227,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'lumbercamp': drawLumberCamp(ctx, ghost); break
       case 'miningcamp': drawMiningCamp(ctx, ghost); break
       case 'mill': drawMill(ctx, ghost, time); break
+      case 'blacksmith': drawBlacksmith(ctx, ghost, time); break
     }
     ctx.globalAlpha = 1
   }

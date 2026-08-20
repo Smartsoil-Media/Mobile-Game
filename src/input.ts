@@ -149,6 +149,21 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
+  // villagers tap a battered building: patch it up (soldiers still garrison towers)
+  if (hit && hit.team === 0 && isBuilding(hit) && hit.complete && hit.hp < hit.maxHp) {
+    const villagers = myUnits.filter(e => e.kind === 'villager')
+    if (villagers.length) {
+      commandBuild(g, villagers, hit)
+      if (hit.kind === 'watchtower') {
+        for (const u of myUnits.filter(e => e.kind !== 'villager')) {
+          u.state = 'garrison'
+          u.targetId = hit.id
+        }
+      }
+      return
+    }
+  }
+
   // units tap one of your watchtowers: climb inside
   if (hit && hit.team === 0 && hit.kind === 'watchtower' && hit.complete && myUnits.length) {
     for (const u of myUnits) {

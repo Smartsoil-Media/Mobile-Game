@@ -422,6 +422,56 @@ export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
 }
 
+export function drawBlacksmith(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 20, 34, 11)
+  // stout stone workshop
+  ctx.fillStyle = '#CFC4AC'
+  rr(ctx, x - 26, y - 10, 52, 30, 7); ctx.fill()
+  ctx.strokeStyle = '#B4A88D'; ctx.lineWidth = 2
+  rr(ctx, x - 26, y - 10, 52, 30, 7); ctx.stroke()
+  ctx.fillStyle = '#BDB197'
+  for (const [ox, oy] of [[-16, 4], [-4, 12], [8, 2], [16, 10], [-9, -3]]) {
+    ctx.beginPath(); ctx.ellipse(x + ox, y + oy, 3.6, 2.5, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  // timber roof with a smoking chimney
+  ctx.fillStyle = WOOD
+  ctx.beginPath()
+  ctx.moveTo(x - 32, y - 6)
+  ctx.lineTo(x - 3, y - 26)
+  ctx.quadraticCurveTo(x, y - 28, x + 3, y - 26)
+  ctx.lineTo(x + 32, y - 6)
+  ctx.quadraticCurveTo(x, y - 13, x - 32, y - 6)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#B4A88D'
+  rr(ctx, x + 12, y - 30, 8, 13, 2); ctx.fill()
+  chimneySmoke(ctx, x + 16, y - 32, t * 1.4, e.seed) // the forge never rests
+  // wide doorway, lit by the forge within
+  ctx.fillStyle = '#4A3F31'
+  rr(ctx, x - 11, y - 2, 22, 22, 7); ctx.fill()
+  const glow = 0.55 + Math.sin(t * 5 + e.seed) * 0.18
+  ctx.fillStyle = `rgba(242, 158, 73, ${glow})`
+  ctx.beginPath()
+  ctx.ellipse(x, y + 13, 8, 6, 0, Math.PI, 0)
+  ctx.fill()
+  // anvil on a stump out front
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x + 20, y + 12, 11, 7, 2.5); ctx.fill()
+  ctx.fillStyle = '#7B8087'
+  ctx.beginPath()
+  ctx.moveTo(x + 19, y + 8); ctx.lineTo(x + 32, y + 8)
+  ctx.lineTo(x + 30, y + 11); ctx.lineTo(x + 27, y + 11)
+  ctx.lineTo(x + 27, y + 13); ctx.lineTo(x + 24, y + 13)
+  ctx.lineTo(x + 24, y + 11); ctx.lineTo(x + 21, y + 11)
+  ctx.closePath(); ctx.fill()
+  // crossed-hammer sign on the wall
+  ctx.strokeStyle = '#8A7458'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(x - 21, y - 3); ctx.lineTo(x - 14, y + 4); ctx.moveTo(x - 14, y - 3); ctx.lineTo(x - 21, y + 4); ctx.stroke()
+  ctx.fillStyle = '#C7CCD4'
+  rr(ctx, x - 23.5, y - 5.5, 5, 3.4, 1.2); ctx.fill()
+  rr(ctx, x - 16.5, y - 5.5, 5, 3.4, 1.2); ctx.fill()
+}
+
 export function drawMill(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   shadow(ctx, x, y + 16, 26, 9)
