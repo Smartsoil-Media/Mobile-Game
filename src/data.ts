@@ -19,7 +19,8 @@ export interface Ent {
   maxHp: number
   seed: number
   // units
-  state?: 'idle' | 'move' | 'attackmove' | 'attack' | 'gather' | 'return' | 'build'
+  state?: 'idle' | 'move' | 'attackmove' | 'attack' | 'gather' | 'return' | 'build' | 'garrison'
+  hidden?: boolean // garrisoned inside a building; still alive and counted in pop
   tx?: number
   ty?: number
   targetId?: number
@@ -35,6 +36,8 @@ export interface Ent {
   complete?: boolean
   progress?: number
   queue?: { kind: Kind; t: number; total: number }[]
+  garrison?: number
+  volleyT?: number
   // resources
   amount?: number
 }
@@ -44,6 +47,15 @@ export interface Particle {
   life: number; maxLife: number
   size: number; color: string
   kind: 'puff' | 'spark' | 'hit' | 'leaf'
+}
+
+export interface Projectile {
+  x: number; y: number
+  targetId: number
+  tx: number; ty: number // last known target position
+  speed: number
+  dmg: number
+  team: number
 }
 
 export interface Game {
@@ -59,7 +71,9 @@ export interface Game {
   over: 'win' | 'lose' | null
   overT: number
   particles: Particle[]
-  wave: { at: number; size: number; count: number }
+  projectiles: Projectile[]
+  arrowsFired: number
+  wave: { at: number; size: number; count: number; warned: boolean }
   toasts: { text: string; t: number }[]
   hint: string
   hintStage: number
@@ -93,6 +107,15 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: 'wood
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
 export const POP_MAX = 25
+// Town Hall garrison defense
+export const GARRISON_CAP = 10
+export const TC_RANGE = 190
+export const TC_VOLLEY = 1.4
+export const ARROW_DMG = 4
+// raid pacing
+export const FIRST_WAVE_AT = 210
+export const WAVE_EVERY = 90
+export const WAVE_WARNING = 20
 export const WORLD_W = 1920
 export const WORLD_H = 1280
 

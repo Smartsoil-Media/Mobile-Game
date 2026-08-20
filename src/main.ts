@@ -44,6 +44,6 @@ requestAnimationFrame(frame)
   state: g,
   setSpeed(n: number) { g.speed = n },
   start() { g.started = true; document.getElementById('start-overlay')!.classList.add('hidden') },
-  selectArmy() { selectArmy(g) },
+  selectArmy() { selectArmy(g, canvas) },
   select(id: number) { g.selection = [id]; g.uiDirty = true },
 }

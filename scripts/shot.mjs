@@ -130,6 +130,20 @@ const s3 = await state()
 console.log('after training:', s3)
 if (s3.playerSoldiers < 4) throw new Error('soldiers did not train')
 
+// 2.5) army button: selects every soldier and recenters the camera on them
+await page.tap('#army-btn')
+await page.waitForTimeout(200)
+const armySel = await page.evaluate(() => {
+  const g = window.__game.state
+  const army = g.ents.filter(e => e.team === 0 && e.kind === 'swordsman')
+  const cx = army.reduce((s, e) => s + e.x, 0) / army.length
+  const cy = army.reduce((s, e) => s + e.y, 0) / army.length
+  return { sel: g.selection.length, offCenter: Math.hypot(g.camera.x - cx, g.camera.y - cy) }
+})
+console.log('army select:', armySel)
+if (armySel.sel < s3.playerSoldiers) throw new Error('army button did not select all soldiers')
+if (armySel.offCenter > 250) throw new Error('army button did not recenter the camera')
+
 // 3) march the army on the enemy town hall until victory
 await page.evaluate(() => {
   const g = window.__game.state
@@ -177,6 +191,64 @@ const raid = await page3.evaluate(() => {
 })
 console.log('raid check:', raid)
 if (raid.waveCount < 1 || raid.raiders < 1) throw new Error('enemy raid did not spawn')
+
+// 5) bell + garrison: villagers shelter in the TC and it shoots the raiders down
+await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+})
+await page3.waitForTimeout(300)
+await page3.tap('button.cmd:has-text("Ring the Bell")')
+await page3.evaluate(() => window.__game.setSpeed(10))
+await page3.waitForTimeout(1000)
+const gar = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  return { garrison: tc.garrison ?? 0, hidden: g.ents.filter(e => e.hidden).length }
+})
+console.log('garrison:', gar)
+if (gar.garrison < 1 || gar.hidden < 1) throw new Error('villagers did not garrison')
+
+let defense = null
+let sawArrows = false
+for (let i = 0; i < 40; i++) {
+  await page3.waitForTimeout(500)
+  defense = await page3.evaluate(() => {
+    const g = window.__game.state
+    const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+    return {
+      raiders: g.ents.filter(e => e.team === 1 && e.kind === 'swordsman' && (e.state === 'attackmove' || e.state === 'attack')).length,
+      arrows: g.arrowsFired,
+      tcHp: tc ? Math.round(tc.hp) : 0,
+    }
+  })
+  if (defense.arrows > 0 && !sawArrows) {
+    sawArrows = true
+    await page3.evaluate(() => window.__game.setSpeed(1))
+    await page3.waitForTimeout(300)
+    await page3.screenshot({ path: 'shots/7-garrison-defense.png' })
+    await page3.evaluate(() => window.__game.setSpeed(10))
+  }
+  if (defense.raiders === 0 && i > 2) break
+}
+console.log('defense:', defense, 'sawArrows:', sawArrows)
+if (!sawArrows) throw new Error('garrisoned TC never fired arrows')
+if (defense.raiders > 0) throw new Error('raiders survived the garrisoned TC')
+if (!defense.tcHp) throw new Error('TC died during garrison test')
+
+await page3.evaluate(() => window.__game.setSpeed(1))
+await page3.waitForTimeout(300)
+await page3.tap('button.cmd:has-text("Open the Doors")')
+await page3.waitForTimeout(400)
+const released = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  return { garrison: tc.garrison ?? 0, hidden: g.ents.filter(e => e.hidden).length }
+})
+console.log('released:', released)
+if (released.garrison !== 0 || released.hidden !== 0) throw new Error('villagers were not released')
 
 // landscape sanity shot
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

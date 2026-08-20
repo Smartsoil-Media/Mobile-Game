@@ -1,20 +1,23 @@
 // DOM HUD: resource pills, contextual command dock, hints, toasts, overlays.
 import { Game, Ent, UNITS, BUILDINGS, isUnit, isBuilding } from './data'
-import { pop, canAfford, pay, toast } from './world'
+import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
 import { selectArmy } from './input'
+import { GARRISON_CAP } from './data'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   gold: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="8" fill="#E9B44C"/><circle cx="12" cy="12" r="5.4" fill="#F5D584"/><path d="M12 8.5v7M9.8 10.4h3.4a1.7 1.7 0 0 1 0 3.4H10" stroke="#B8842E" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>`,
   pop: `<svg viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="8" r="4.2" fill="#F6CFA0"/><path d="M4.5 20c.8-4.4 3.9-6.5 7.5-6.5s6.7 2.1 7.5 6.5z" fill="#6D9DC5"/></svg>`,
   sword: `<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 19 15.5 8.5M15.5 8.5 19 5l-1 4.5L14.5 13" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.5 14.5l2 2M5 19l-1.2 1.2" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
 function el<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T }
 
 export function initUI(g: Game): void {
   el('army-btn').innerHTML = ICON.sword + '<span>Army</span>'
-  el('army-btn').addEventListener('click', () => selectArmy(g))
+  const canvas = document.getElementById('game') as HTMLCanvasElement
+  el('army-btn').addEventListener('click', () => selectArmy(g, canvas))
   el('p-wood').insertAdjacentHTML('afterbegin', ICON.wood)
   el('p-gold').insertAdjacentHTML('afterbegin', ICON.gold)
   el('p-pop').insertAdjacentHTML('afterbegin', ICON.pop)
@@ -110,8 +113,14 @@ export function syncUI(g: Game): void {
   let sub = ''
 
   if (first.kind === 'towncenter' && first.complete) {
-    sub = 'Trains villagers'
+    const garrison = first.garrison ?? 0
+    sub = garrison > 0 ? `${garrison} villager${garrison > 1 ? 's' : ''} sheltering inside` : 'Trains villagers'
     dock.appendChild(button(`Train Villager<i>${trainCostLabel('villager')}</i>`, () => tryTrain(g, first, 'villager')))
+    if (garrison > 0) {
+      dock.appendChild(button(`${ICON.bell} Open the Doors<i>arrows: ${Math.min(garrison, GARRISON_CAP)}</i>`, () => openDoors(g, first)))
+    } else {
+      dock.appendChild(button(`${ICON.bell} Ring the Bell<i>shelter villagers</i>`, () => ringBell(g, first)))
+    }
     if (first.queue?.length) {
       const q = document.createElement('div')
       q.className = 'queue'

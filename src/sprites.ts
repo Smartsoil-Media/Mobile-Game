@@ -140,9 +140,24 @@ export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   rr(ctx, x - 9, y + 6, 18, 22, 8); ctx.fill()
   ctx.fillStyle = '#E9B44C'
   ctx.beginPath(); ctx.arc(x + 4, y + 18, 1.8, 0, Math.PI * 2); ctx.fill()
-  // round window
-  ctx.fillStyle = '#FBEFD3'; ctx.beginPath(); ctx.arc(x, y - 24, 5, 0, Math.PI * 2); ctx.fill()
-  ctx.strokeStyle = WOOD; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y - 24, 5, 0, Math.PI * 2); ctx.stroke()
+  // bell arch in the gable — swings while villagers shelter inside
+  ctx.fillStyle = '#FBEFD3'; ctx.beginPath(); ctx.arc(x, y - 24, 6, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = WOOD; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y - 24, 6, 0, Math.PI * 2); ctx.stroke()
+  const ringing = (e.garrison ?? 0) > 0
+  const swing = ringing ? Math.sin(t * 9) * 0.55 : 0
+  ctx.save()
+  ctx.translate(x, y - 28)
+  ctx.rotate(swing)
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath()
+  ctx.moveTo(-3.2, 5.5)
+  ctx.quadraticCurveTo(-3.4, 0.5, 0, 0)
+  ctx.quadraticCurveTo(3.4, 0.5, 3.2, 5.5)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#B8842E'
+  ctx.beginPath(); ctx.arc(0, 6.4, 1.4, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
   // chimney
   ctx.fillStyle = '#B9977C'
   rr(ctx, x + 20, y - 44, 9, 16, 2.5); ctx.fill()

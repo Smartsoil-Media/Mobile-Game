@@ -134,10 +134,16 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (g.selection.length) { g.selection = []; g.uiDirty = true }
 }
 
-export function selectArmy(g: Game): void {
-  const army = g.ents.filter(e => e.team === 0 && e.kind === 'swordsman')
+export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
+  // every military unit you own (anything that isn't a villager)
+  const army = g.ents.filter(e => e.team === 0 && isUnit(e) && e.kind !== 'villager' && !e.hidden)
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
   g.selection = army.map(e => e.id)
+  // bring the camera to the troops so the button visibly does something
+  g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length
+  g.camera.y = army.reduce((s, e) => s + e.y, 0) / army.length
+  if (canvas) clampCamera(g, canvas)
+  toast(g, army.length === 1 ? '1 soldier selected' : `${army.length} soldiers selected`)
   g.uiDirty = true
 }
 

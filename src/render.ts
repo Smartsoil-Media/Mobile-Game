@@ -90,8 +90,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.stroke()
   }
 
-  // entities, painter's order
-  const sorted = [...g.ents].sort((a, b) => (a.y + a.r) - (b.y + b.r))
+  // entities, painter's order (garrisoned units are inside, not drawn)
+  const sorted = g.ents.filter(e => !e.hidden).sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
@@ -111,6 +111,23 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
       rrFill(ctx, e.x - w / 2, y, Math.max(2, w * (e.hp / e.maxHp)), 3, 1.5)
     }
+  }
+
+  // arrows
+  for (const p of g.projectiles) {
+    const dx = p.tx - p.x, dy = p.ty - p.y
+    const d = Math.hypot(dx, dy) || 1
+    const nx = dx / d, ny = dy / d
+    ctx.strokeStyle = '#6F5238'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(p.x - nx * 6, p.y - ny * 6)
+    ctx.lineTo(p.x + nx * 4, p.y + ny * 4)
+    ctx.stroke()
+    ctx.fillStyle = '#FBF3E4'
+    ctx.beginPath()
+    ctx.arc(p.x + nx * 5, p.y + ny * 5, 1.6, 0, Math.PI * 2)
+    ctx.fill()
   }
 
   // particles

@@ -1,7 +1,8 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
   Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES,
-  CARRY_CAP, GATHER_TICK, WORLD_W, WORLD_H,
+  CARRY_CAP, GATHER_TICK, GARRISON_CAP, TC_RANGE, TC_VOLLEY, ARROW_DMG,
+  WAVE_EVERY, WAVE_WARNING, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, pop, toast } from './world'
@@ -37,8 +38,8 @@ function inRange(a: Ent, b: Ent, range: number): boolean {
 function attackTarget(g: Game, e: Ent, dt: number): void {
   const s = UNITS[e.kind]
   const t = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
-  if (!t) {
-    // target gone: resume attack-move or go idle
+  if (!t || t.hidden) {
+    // target gone (or safely garrisoned): resume attack-move or go idle
     if (e.resume) { e.state = 'attackmove'; e.tx = e.resume.x; e.ty = e.resume.y }
     else e.state = 'idle'
     e.targetId = undefined
@@ -138,6 +139,21 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       }
       break
     }
+    case 'garrison': {
+      const tc = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+      if (!tc || !tc.complete) { e.state = 'idle'; e.targetId = undefined; break }
+      if (!inRange(e, tc, 10)) { moveToward(e, tc.x, tc.y, s.speed * 1.15, dt); break } // run!
+      if ((tc.garrison ?? 0) < GARRISON_CAP) {
+        tc.garrison = (tc.garrison ?? 0) + 1
+        e.hidden = true
+        e.carry = 0
+        puff(g, tc.x, tc.y + tc.r * 0.4, '#FBF3E4', 3)
+        g.uiDirty = true
+      }
+      e.state = 'idle'
+      e.targetId = undefined
+      break
+    }
     case 'attack': attackTarget(g, e, dt); break
     default: { // idle
       // enemy flavor villagers keep their meadow busy
@@ -191,6 +207,29 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
 
 function updateBuilding(g: Game, e: Ent, dt: number): void {
   if (!e.complete || !e.queue) return
+  // garrisoned Town Hall rains arrows on nearby raiders
+  if (e.kind === 'towncenter' && (e.garrison ?? 0) > 0) {
+    e.volleyT = (e.volleyT ?? TC_VOLLEY) - dt
+    if (e.volleyT <= 0) {
+      e.volleyT = TC_VOLLEY
+      const inRangeFoes = g.ents
+        .filter(o => isUnit(o) && !o.hidden && o.team >= 0 && o.team !== e.team &&
+          dist(e.x, e.y, o.x, o.y) < TC_RANGE)
+        .sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y))
+      if (inRangeFoes.length) {
+        const arrows = Math.min(e.garrison ?? 0, GARRISON_CAP)
+        for (let i = 0; i < arrows; i++) {
+          const t = inRangeFoes[i % Math.min(inRangeFoes.length, 4)]
+          g.projectiles.push({
+            x: e.x + (Math.random() - 0.5) * 30, y: e.y - e.r * 0.9,
+            targetId: t.id, tx: t.x, ty: t.y,
+            speed: 250 + Math.random() * 40, dmg: ARROW_DMG, team: e.team,
+          })
+          g.arrowsFired++
+        }
+      }
+    }
+  }
   const q = e.queue[0]
   if (!q) return
   q.t -= dt
@@ -208,6 +247,21 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
 }
 
 function killEnt(g: Game, e: Ent): void {
+  // a falling Town Hall spills its garrison out instead of taking them with it
+  if (e.kind === 'towncenter' && (e.garrison ?? 0) > 0) {
+    let left = e.garrison ?? 0
+    for (const v of g.ents) {
+      if (left <= 0) break
+      if (v.team === e.team && v.kind === 'villager' && v.hidden) {
+        v.hidden = false
+        const a = Math.random() * Math.PI * 2
+        v.x = e.x + Math.cos(a) * (e.r + 20)
+        v.y = e.y + Math.sin(a) * (e.r * 0.6) + 16
+        v.state = 'idle'
+        left--
+      }
+    }
+  }
   const i = g.ents.indexOf(e)
   if (i >= 0) g.ents.splice(i, 1)
   g.byId.delete(e.id)
@@ -216,7 +270,7 @@ function killEnt(g: Game, e: Ent): void {
 }
 
 function separation(g: Game): void {
-  const units = g.ents.filter(isUnit)
+  const units = g.ents.filter(e => isUnit(e) && !e.hidden)
   for (let i = 0; i < units.length; i++) {
     const a = units[i]
     for (let j = i + 1; j < units.length; j++) {
@@ -250,7 +304,12 @@ function separation(g: Game): void {
 
 function enemyWaves(g: Game, dt: number): void {
   if (g.t < g.wave.at) {
-    // pre-warn 15s ahead of the first couple of waves
+    if (!g.wave.warned && g.t >= g.wave.at - WAVE_WARNING) {
+      g.wave.warned = true
+      toast(g, g.wave.count === 0
+        ? 'Raiders sighted near the enemy camp! Ring the bell or arm up!'
+        : 'Raiders are mustering again!')
+    }
     return
   }
   const barracks = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
@@ -267,9 +326,10 @@ function enemyWaves(g: Game, dt: number): void {
     u.ty = target.y + (Math.random() - 0.5) * 80
   }
   g.wave.count++
-  toast(g, g.wave.count === 1 ? 'Enemy raid! Defend your town!' : `Another raid is coming — ${g.wave.size} raiders!`)
-  g.wave.at = g.t + 75
+  toast(g, g.wave.count === 1 ? 'Enemy raid! Defend your town!' : `Raid incoming — ${g.wave.size} raiders!`)
+  g.wave.at = g.t + WAVE_EVERY
   g.wave.size = Math.min(7, g.wave.size + 1)
+  g.wave.warned = false
 }
 
 function updateHints(g: Game): void {
@@ -290,13 +350,34 @@ export function update(g: Game, dt: number): void {
   if (g.over) { g.overT += dt; return }
   g.t += dt
 
-  for (const e of g.ents) {
+  for (const e of [...g.ents]) {
+    if (!g.byId.has(e.id)) continue // removed earlier this tick
     if (isUnit(e)) {
+      if (e.hidden) continue // safe inside the Town Hall
       e.cd = Math.max(0, (e.cd ?? 0) - dt)
       if (e.kind === 'villager') updateVillager(g, e, dt)
       else updateSoldier(g, e, dt)
     } else if (isBuilding(e)) {
       updateBuilding(g, e, dt)
+    }
+  }
+
+  // arrows in flight
+  for (const p of [...g.projectiles]) {
+    const t = g.byId.get(p.targetId)
+    if (t && !t.hidden) { p.tx = t.x; p.ty = t.y - 6 }
+    const dx = p.tx - p.x, dy = p.ty - p.y
+    const d = Math.hypot(dx, dy)
+    const step = p.speed * dt
+    if (d <= step + 4) {
+      g.projectiles.splice(g.projectiles.indexOf(p), 1)
+      if (t && !t.hidden && dist(p.tx, p.ty, t.x, t.y - 6) < t.r + 12) {
+        t.hp -= p.dmg
+        puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 2, 'hit')
+      }
+    } else {
+      p.x += (dx / d) * step
+      p.y += (dy / d) * step
     }
   }
 

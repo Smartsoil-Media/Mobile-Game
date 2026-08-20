@@ -1,7 +1,8 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, UNITS, BUILDINGS, RESOURCES,
-  NEUTRAL, POP_MAX, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource,
+  NEUTRAL, POP_MAX, FIRST_WAVE_AT, GARRISON_CAP, WORLD_W, WORLD_H,
+  dist, isUnit, isBuilding, isResource,
 } from './data'
 
 // Deterministic little RNG so the map is the same every run (tweakable later).
@@ -50,7 +51,9 @@ export function createGame(): Game {
     camera: { x: 0, y: 0, zoom: 0.62 },
     selection: [], placing: null, over: null, overT: 0,
     particles: [],
-    wave: { at: 110, size: 2, count: 0 },
+    projectiles: [],
+    arrowsFired: 0,
+    wave: { at: FIRST_WAVE_AT, size: 2, count: 0, warned: false },
     toasts: [], hint: '', hintStage: 0, started: false, uiDirty: true,
   }
 
@@ -151,22 +154,58 @@ export function nearestDropoff(g: Game, e: Ent): Ent | null {
 }
 
 export function nearestEnemyUnit(g: Game, e: Ent, range: number): Ent | null {
-  return nearest(g, e.x, e.y, o => isUnit(o) && o.team >= 0 && o.team !== e.team, range)
+  return nearest(g, e.x, e.y, o => isUnit(o) && !o.hidden && o.team >= 0 && o.team !== e.team, range)
 }
 
 export function nearestEnemyThing(g: Game, e: Ent, range: number): Ent | null {
-  return nearest(g, e.x, e.y, o => (isUnit(o) || isBuilding(o)) && o.team >= 0 && o.team !== e.team, range)
+  return nearest(g, e.x, e.y, o => (isUnit(o) || isBuilding(o)) && !o.hidden && o.team >= 0 && o.team !== e.team, range)
 }
 
 export function entAt(g: Game, x: number, y: number): Ent | null {
   // generous touch hit-test: nearest entity whose radius (+ slack) covers the tap
   let best: Ent | null = null, bd = Infinity
   for (const e of g.ents) {
+    if (e.hidden) continue
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }
   }
   return best
+}
+
+export function ringBell(g: Game, tc: Ent): void {
+  let called = 0
+  for (const v of g.ents) {
+    if (v.team !== tc.team || v.kind !== 'villager' || v.hidden) continue
+    v.state = 'garrison'
+    v.targetId = tc.id
+    called++
+  }
+  if (called) toast(g, 'The bell rings! Villagers run for safety.')
+  else toast(g, 'No villagers outside to call in.')
+  g.uiDirty = true
+}
+
+export function openDoors(g: Game, tc: Ent): void {
+  let released = 0
+  for (const v of g.ents) {
+    if (v.team !== tc.team || v.kind !== 'villager') continue
+    if (v.hidden) {
+      v.hidden = false
+      const a = Math.random() * Math.PI * 2
+      v.x = tc.x + Math.cos(a) * (tc.r + 18)
+      v.y = tc.y + Math.abs(Math.sin(a)) * (tc.r * 0.7) + 14
+      v.state = 'idle'
+      v.targetId = undefined
+      released++
+    } else if (v.state === 'garrison') {
+      v.state = 'idle'
+      v.targetId = undefined
+    }
+  }
+  tc.garrison = 0
+  if (released) toast(g, 'The doors open — back to work!')
+  g.uiDirty = true
 }
 
 export function toast(g: Game, text: string): void {

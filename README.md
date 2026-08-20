@@ -12,7 +12,10 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Tap** a villager or building to select it
 - **Tap** a tree/mine to gather, the ground to move, an enemy to attack
 - **Drag** to pan the camera, **pinch** to zoom
-- **Army** button selects all your soldiers
+- **Army** button selects all your soldiers and jumps the camera to them
+- **Ring the Bell** (Town Hall) shelters your villagers inside — a garrisoned
+  Town Hall shoots arrows at raiders (one per villager, up to 10). Ring again
+  to send everyone back to work.
 
 ## Development
 
