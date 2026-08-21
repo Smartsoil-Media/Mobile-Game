@@ -3,9 +3,10 @@ import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding } from
 import { isVisibleToPlayer, canPlaceAt, wallLinePoints } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
-  drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
+  drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawWall, drawGate,
-  drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout,
+  drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
+  drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -162,8 +163,11 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'lumbercamp': e.complete ? drawLumberCamp(ctx, e) : drawSite(ctx, e); break
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
       case 'mill': e.complete ? drawMill(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
-      case 'blacksmith': e.complete ? drawBlacksmith(ctx, e, time) : drawSite(ctx, e); break
       case 'stable': e.complete ? drawStable(ctx, e, time) : drawSite(ctx, e); break
+      case 'abbeymill': e.complete ? drawAbbeyMill(ctx, e, time) : drawSite(ctx, e); break
+      case 'kingsbarracks': e.complete ? drawKingsBarracks(ctx, e, time) : drawSite(ctx, e); break
+      case 'guildhall': e.complete ? drawGuildhall(ctx, e, time) : drawSite(ctx, e); break
+      case 'whitekeep': e.complete ? drawWhiteKeep(ctx, e, time) : drawSite(ctx, e); break
       case 'wall': e.complete ? drawWall(ctx, e) : drawSite(ctx, e); break
       case 'gate': e.complete
         ? drawGate(ctx, e, time, g.ents.some(u =>
@@ -171,10 +175,11 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
         : drawSite(ctx, e)
         break
       case 'villager': drawVillager(ctx, e, time); break
-      case 'swordsman': drawSwordsman(ctx, e, time); break
-      case 'spearman': drawSpearman(ctx, e, time); break
-      case 'archer': drawArcher(ctx, e, time); break
+      case 'swordsman': drawSwordsman(ctx, e, time, g.champs[e.team]?.infantry); break
+      case 'spearman': drawSpearman(ctx, e, time, g.champs[e.team]?.infantry); break
+      case 'archer': drawArcher(ctx, e, time, g.champs[e.team]?.ranged); break
       case 'scout': drawScout(ctx, e, time); break
+      case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry); break
     }
     // health bar when hurt
     if ((isUnit(e) || isBuilding(e)) && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
@@ -280,9 +285,12 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'lumbercamp': drawLumberCamp(ctx, ghost); break
       case 'miningcamp': drawMiningCamp(ctx, ghost); break
       case 'mill': drawMill(ctx, ghost, time, g.age[0]); break
-      case 'blacksmith': drawBlacksmith(ctx, ghost, time); break
       case 'stable': drawStable(ctx, ghost, time); break
       case 'gate': drawGate(ctx, ghost, time, false); break
+      case 'abbeymill': drawAbbeyMill(ctx, ghost, time); break
+      case 'kingsbarracks': drawKingsBarracks(ctx, ghost, time); break
+      case 'guildhall': drawGuildhall(ctx, ghost, time); break
+      case 'whitekeep': drawWhiteKeep(ctx, ghost, time); break
     }
     ctx.globalAlpha = 1
   }

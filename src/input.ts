@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints } from './world'
 
 export interface PointerState {
@@ -85,10 +85,26 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
   if ((b.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
+  const lm = LANDMARKS[kind as LandmarkKind]
+  if (lm) {
+    if (g.age[0] >= lm.toAge) { toast(g, `The ${AGE_NAMES[lm.toAge]} is already yours.`); return false }
+    if (lm.toAge !== g.age[0] + 1) { toast(g, `Reach the ${AGE_NAMES[lm.toAge - 1]} first!`); return false }
+    if (g.ents.some(e => e.team === 0 && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
+      toast(g, 'A landmark is already rising.')
+      return false
+    }
+  }
   if (kind === 'wall') return tryPlaceWall(g)
   if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
   if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
-  const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
+  let villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
+  if (!villagers.length && lm) {
+    // landmarks are begun from the Town Hall — round up the nearest spare hands
+    villagers = g.ents
+      .filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden && e.state !== 'build')
+      .sort((a, b2) => dist(a.x, a.y, x, y) - dist(b2.x, b2.y, x, y))
+      .slice(0, 2)
+  }
   if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
   pay(g, 0, b.cost)
   const site = spawn(g, kind, 0, x, y, false)
@@ -195,7 +211,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
-      if (hit.kind === 'watchtower') {
+      if (hit.kind === 'watchtower' || hit.kind === 'whitekeep') {
         for (const u of myUnits.filter(e => e.kind !== 'villager')) {
           u.state = 'garrison'
           u.targetId = hit.id
@@ -205,8 +221,8 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
-  // units tap one of your watchtowers: climb inside
-  if (hit && hit.team === 0 && hit.kind === 'watchtower' && hit.complete && myUnits.length) {
+  // units tap one of your watchtowers (or the White Keep): climb inside
+  if (hit && hit.team === 0 && (hit.kind === 'watchtower' || hit.kind === 'whitekeep') && hit.complete && myUnits.length) {
     for (const u of myUnits) {
       u.state = 'garrison'
       u.targetId = hit.id

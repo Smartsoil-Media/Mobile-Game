@@ -34,12 +34,12 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Army panel** (right edge): one chip per unit type you field, with a
   live count — tap a chip to grab all spearmen / swordsmen / archers at
   once; the blue **Army** button below grabs the whole battle line
-- **Archery Range** (175 wood) trains archers — ranged units that shoot
-  arrows from a distance (30 food + 35 gold each)
+- **Archery Range** (175 wood) trains **longbowmen** — ranged units that
+  shoot arrows from a distance (30 food + 35 gold each)
 - **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your
-  eyes on the meadow can be replaced; the **Knight** button waits behind a
-  padlock until the Castle Age (spearmen already carry a +12 bonus against
-  cavalry, knights included)
+  eyes on the meadow can be replaced; **Knights** (60 food + 75 gold) ride
+  out once the Castle Age dawns — fast, armoured lancers (spearmen carry a
+  +12 bonus against cavalry, knights included)
 - **Palisade walls** (3 wood a post, Dark Age) place as a dragged line —
   grab either end of the fence and stretch it; the ✓ shows a live post
   count and price, and your villager builds along the row without being
@@ -54,33 +54,41 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Repairs**: tap a damaged friendly building with villagers selected and
   they'll hammer it back to health — a full mend costs about half the
   building's wood price, paid as they work.
-- **Build menu** has three doors: Economy, Military, and **Study** — home of
-  the **Blacksmith** (150 wood, Feudal Age), which forges army upgrades:
-  Forged Blades (+2 melee damage), Fletched Arrows (+2 archer damage), and
-  Iron Mail (+15 infantry health, fitted to soldiers already standing).
+- **Build menu** has two doors: Economy and Military. The **Mill** (60 wood)
+  is a food drop-off for berries and farms.
 
-## Ages & Patron Spirits
+## Ages & Landmarks — the English
 
-You start in the **Dark Age** (spearmen only; the archery range, watchtower,
-swordsman and new Town Halls are locked). Advancing to the **Feudal Age**
-costs 275 food and 35s at the Town Hall — and when you do, you choose a
-**patron spirit**. There's no age indicator in the HUD: your **architecture
-shows the age** — timber-plank walls in the Dark Age, cream plaster on stone
-footings once Feudal (and scouting the enemy village reveals whether they've
-aged up). Each patron grants one economy tech instantly and free;
-everyone else can research that same tech the slow way (100 food + 75 wood,
-30s) at its home building:
+Both villages play as **the English** (the first civilisation; more to
+come). You start in the **Dark Age** (spearmen only; the archery range,
+stable, watchtower, swordsman and new Town Halls are locked). There's no
+age research bar: **an age is a landmark you build**. Tap the laurel on the
+Town Hall, choose the eco road or the military road, place the landmark,
+and when your villagers finish raising it the new age dawns. Landmarks are
+real buildings on the map — the enemy can raid the site while it rises.
+There's no age indicator in the HUD either: your **architecture shows the
+age** — timber planks in the Dark Age, cream plaster once Feudal, dressed
+stone in the Castle Age.
 
-| Patron | Free tech | Effect | Researched by others at |
-| --- | --- | --- | --- |
-| the Oak Father | Steel Axes | +20% wood chopping | Lumber Camp |
-| the River Mother | Wheelbarrow | +20% food gathering | Mill |
-| the Mountain King | Miner's Picks | +20% gold & stone mining | Mining Camp |
-| the Fox | Fox Paths | villagers & scouts walk faster, see further | Town Hall |
+| To reach | Eco road | Military road |
+| --- | --- | --- |
+| **Feudal Age** | **Abbey Mill** (200f + 100w): a food drop-off that also tithes a steady food trickle | **King's Barracks** (150f + 150w): trains full infantry, and musters **levy spearmen** for 20 food + 10 wood |
+| **Castle Age** | **Guild Hall** (300f + 100g): merchants bring a steady gold trickle | **The White Keep** (250f + 200 stone): an arrow fortress with a long reach — garrison up to 8 for more arrows |
 
-The **Mill** (60 wood) is a food drop-off for berries and farms, and home to
-the Wheelbarrow research. The enemy village ages up too, follows its own
-patron, and picks up the remaining techs when it can afford them.
+## Champions (Castle Age)
+
+Each military hall offers one mighty upgrade — tap the **crown** on the
+building. It retrofits soldiers already standing (gold sparkles included)
+and every recruit after:
+
+| Where | Upgrade | Effect |
+| --- | --- | --- |
+| Barracks / King's Barracks | **Champion Infantry** (150f + 100g) | spearmen & swordsmen +15 health, +3 damage |
+| Archery Range | **Champion Longbows** (100w + 150g) | longbowmen +10 health, +3 damage |
+| Stable | **Champion Knights** (150f + 150g) | knights +20 health, +3 damage |
+
+The enemy village walks the same road: it banks toward its own landmarks,
+counters what you field, and swears in champions when its coffers run deep.
 
 ## Development
 

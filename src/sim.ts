@@ -1,12 +1,13 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
-  Game, Ent, Particle, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
-  PATRONS, TECHS, IRONMAIL_HP, INFANTRY_KINDS,
+  Game, Ent, Particle, LandmarkKind, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
+  CHAMPS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
+  KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, gatherMult, unitSpeed, dmgBonusFor, resumeJob } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob } from './world'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -107,7 +108,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
   if ((e.cd ?? 0) <= 0) {
     e.cd = s.cd
     const dmg = s.dmg + (DMG_BONUS[e.kind]?.[t.kind] ?? 0) // counters bite harder
-      + dmgBonusFor(g, e.team, e.kind) // and the blacksmith sharpens everything
+      + champDmg(g, e.team, e.kind) // and champions hit like it
     if (e.kind === 'archer') {
       // loose an arrow instead of striking
       g.projectiles.push({
@@ -155,8 +156,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       }
       if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
-      const giving = isFarm ? 'food' : RESOURCES[res.kind].gives
-      e.gatherT = (e.gatherT ?? 0) + dt * gatherMult(g, e.team, giving) // techs quicken the hands
+      e.gatherT = (e.gatherT ?? 0) + dt
       const tick = isFarm ? GATHER_TICK * 1.5 : GATHER_TICK // farms are steady but slow
       if (e.gatherT >= tick) {
         e.gatherT = 0
@@ -242,6 +242,18 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         site.complete = true
         site.hp = b.hp
         puff(g, site.x, site.y - site.r * 0.5, '#FBF3E4', 10)
+        // a finished landmark IS the age-up: the new age dawns as the walls rise
+        const lm = LANDMARKS[site.kind as LandmarkKind]
+        if (lm && g.age[site.team] < lm.toAge) {
+          g.age[site.team] = lm.toAge
+          if (site.team === 0) toast(g, `The ${AGE_NAMES[lm.toAge]} dawns — the ${b.name} stands!`)
+          for (const bl of g.ents) {
+            if (bl.team === site.team && isBuilding(bl) && bl.complete) {
+              puff(g, bl.x, bl.y - bl.r * 0.4, '#FBF3E4', 6)
+            }
+          }
+          g.uiDirty = true
+        }
         // keep the hammer swinging: pick up the next site in the row (wall lines!)
         const next = nearest(g, e.x, e.y, o => o.team === e.team && isBuilding(o) && !o.complete, 170)
         if (next) { e.targetId = next.id }
@@ -364,25 +376,50 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
       }
     }
   }
-  // a tech brewing inside (steel axes at the lumber camp, etc.)
+  // a champion upgrade underway in this hall
   if (e.research) {
     e.research.t -= dt
     if (e.research.t <= 0) {
       const id = e.research.id
-      const spec = TECHS[id]
-      g.techs[e.team][id] = true
+      const spec = CHAMPS[id]
+      g.champs[e.team][id] = true
       e.research = undefined
-      if (id === 'ironmail') {
-        // the mail is fitted to every soldier already standing
-        for (const u of g.ents) {
-          if (u.team === e.team && INFANTRY_KINDS.includes(u.kind)) {
-            u.maxHp += IRONMAIL_HP
-            u.hp += IRONMAIL_HP
-          }
+      // veterans already standing are knighted on the spot
+      for (const u of g.ents) {
+        if (u.team === e.team && spec.kinds.includes(u.kind)) {
+          u.maxHp += spec.hp
+          u.hp += spec.hp
+          puff(g, u.x, u.y - u.r, '#E9B44C', 4, 'spark')
         }
       }
-      if (e.team === 0) toast(g, `${spec.name} — ${spec.blurb.toLowerCase()}!`)
+      if (e.team === 0) toast(g, `${spec.name}! ${spec.blurb}.`)
       g.uiDirty = true
+    }
+  }
+  // the eco landmarks earn their keep on their own
+  if (e.kind === 'abbeymill') g.res[e.team].food += LANDMARK_TRICKLE * dt
+  if (e.kind === 'guildhall') g.res[e.team].gold += LANDMARK_TRICKLE * dt
+  // the White Keep rains arrows — more with soldiers on its walls
+  if (e.kind === 'whitekeep') {
+    e.volleyT = (e.volleyT ?? KEEP_VOLLEY) - dt
+    if (e.volleyT <= 0) {
+      e.volleyT = KEEP_VOLLEY
+      const foes = g.ents
+        .filter(o => isUnit(o) && !o.hidden && o.team >= 0 && o.team !== e.team &&
+          dist(e.x, e.y, o.x, o.y) < KEEP_RANGE)
+        .sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y))
+      if (foes.length) {
+        const arrows = KEEP_BASE_ARROWS + Math.min(e.garrison ?? 0, BUILDINGS.whitekeep.garrisonCap)
+        for (let i = 0; i < arrows; i++) {
+          const t = foes[i % Math.min(foes.length, 4)]
+          g.projectiles.push({
+            x: e.x + (Math.random() - 0.5) * 24, y: e.y - e.r * 1.4,
+            targetId: t.id, tx: t.x, ty: t.y,
+            speed: 265 + Math.random() * 30, dmg: KEEP_DMG, team: e.team,
+          })
+          g.arrowsFired++
+        }
+      }
     }
   }
   const q = e.queue[0]
@@ -524,31 +561,6 @@ export function update(g: Game, dt: number): void {
   if (g.visionT <= 0) {
     g.visionT = 0.25
     updateVision(g)
-  }
-
-  // age research ticks for both villages
-  for (let team = 0; team < 2; team++) {
-    const res = g.ageRes[team]
-    if (!res) continue
-    res.t -= dt
-    if (res.t <= 0) {
-      g.ageRes[team] = null
-      g.age[team] = 2
-      const p = g.patron[team]
-      if (p) g.techs[team][PATRONS[p].tech] = true // the patron's gift, free and instant
-      // the village dresses itself in its new age
-      for (const b of g.ents) {
-        if (b.team === team && isBuilding(b) && b.complete) {
-          puff(g, b.x, b.y - b.r * 0.4, '#FBF3E4', 6)
-        }
-      }
-      if (team === 0) {
-        toast(g, p
-          ? `The Feudal Age dawns — ${PATRONS[p].name} watches over you, and ${PATRONS[p].blurb}!`
-          : 'The Feudal Age dawns! New arts of war unlock.')
-      }
-      g.uiDirty = true
-    }
   }
 
   // deaths

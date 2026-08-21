@@ -85,7 +85,7 @@ if (!(await page.isVisible('[data-cmd="cat-economy"]'))) throw new Error('build 
 const rootDock = await page.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
 console.log('build categories:', rootDock)
-if (rootDock.join(',') !== 'cat-economy,cat-military,cat-study') throw new Error('expected economy/military/study category buttons')
+if (rootDock.join(',') !== 'cat-economy,cat-military') throw new Error('expected economy/military category buttons')
 
 await openCat(page, 'economy')
 const ecoDock = await page.evaluate(() => ({
@@ -308,27 +308,22 @@ const aiCheck = await page3.evaluate(() => {
     barracks: g.ents.filter(e => e.team === 1 && e.kind === 'barracks').length,
     houses: g.ents.filter(e => e.team === 1 && e.kind === 'house').length,
     soldiers: g.ents.filter(e => e.team === 1 &&
-      (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer')).length,
+      (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer' || e.kind === 'knight')).length,
     attacking: g.ai.attacking,
     over: g.over,
     age: g.age[1],
-    ageing: !!g.ageRes[1],
-    patron: g.patron[1],
-    techs: { ...g.techs[1] },
+    landmark: g.ents.some(e => e.team === 1 &&
+      ['abbeymill', 'kingsbarracks', 'guildhall', 'whitekeep'].includes(e.kind)),
   }
 })
 console.log('enemy AI after 300 sim-s:', aiCheck)
 if (aiCheck.vills <= 3) throw new Error('enemy AI trained no villagers')
 if (aiCheck.barracks < 1) throw new Error('enemy AI built no barracks')
-// a smart village either fields an army or is banking hard for the Feudal Age
-if (aiCheck.soldiers < 1 && !aiCheck.attacking && aiCheck.age < 2 && !aiCheck.ageing)
+// a smart village either fields an army or has a landmark rising toward Feudal
+if (aiCheck.soldiers < 1 && !aiCheck.attacking && aiCheck.age < 2 && !aiCheck.landmark)
   throw new Error('enemy AI neither raised an army nor advanced its age')
-if (aiCheck.age >= 2) {
-  if (!aiCheck.patron) throw new Error('enemy AI reached Feudal without choosing a patron')
-  // its patron's tech must have come with the age
-  const patronTech = { oak: 'steelaxes', river: 'wheelbarrow', mountain: 'minerspicks', fox: 'foxpaths' }[aiCheck.patron]
-  if (!aiCheck.techs[patronTech]) throw new Error("enemy AI's patron tech was not granted")
-}
+if (aiCheck.age >= 2 && !aiCheck.landmark)
+  throw new Error('enemy AI is Feudal but no landmark stands — the age came from nowhere')
 
 // freeze and clean up the AI so the remaining feature checks are deterministic
 await page3.evaluate(() => {
@@ -336,7 +331,7 @@ await page3.evaluate(() => {
   window.__game.setSpeed(1)
   g.ai.enabled = false
   for (const e of g.ents.filter(e => e.team === 1 &&
-    (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer'))) e.hp = 0
+    (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer' || e.kind === 'knight'))) e.hp = 0
   for (const v of g.ents.filter(e => e.team === 1 && e.kind === 'villager')) {
     v.state = 'idle'; v.targetId = undefined
   }
@@ -373,14 +368,30 @@ if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes
   !darkLocks.locked.includes('build-stable'))
   throw new Error('feudal buildings not locked in the Dark Age')
 if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
-await openCat(page3, 'study')
-const studyLocks = await page3.evaluate(() =>
-  [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd))
-console.log('study locks (dark):', studyLocks)
-if (!studyLocks.includes('build-blacksmith')) throw new Error('blacksmith should be locked in the Dark Age')
+// a clear-ground finder for the landmark placements below, mirroring the
+// game's square-footprint clearance rule with a safety margin
+await page3.evaluate(() => {
+  window.__findSpot = (foot, ax, ay) => {
+    const g = window.__game.state
+    for (let ring = 90; ring < 420; ring += 30) {
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 10) {
+        const s = {
+          x: Math.round((ax + Math.cos(a) * ring) / 16) * 16,
+          y: Math.round((ay + Math.sin(a) * ring) / 16) * 16,
+        }
+        if (s.x < 100 || s.y < 100 || s.x > 1820 || s.y > 1180) continue
+        const clear = g.ents.every(e =>
+          ['villager', 'swordsman', 'spearman', 'archer', 'scout', 'knight'].includes(e.kind) ||
+          Math.max(Math.abs(s.x - e.x), Math.abs(s.y - e.y)) > foot + e.r + 16)
+        if (clear) return s
+      }
+    }
+    return null
+  }
+})
 await page3.evaluate(() => {
   const g = window.__game.state
-  g.res[0].food = 400
+  g.res[0].food = 400; g.res[0].wood = 400
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   window.__game.select(tc.id)
 })
@@ -388,35 +399,72 @@ await page3.waitForTimeout(250)
 if (!(await page3.isVisible('[data-cmd="age-up"]'))) throw new Error('age-up button missing on the Town Hall')
 await page3.tap('[data-cmd="age-up"]')
 await page3.waitForTimeout(250)
-// the laurel opens the patron-choice menu: four spirits, each with a gift
-const patronMenu = await page3.evaluate(() =>
-  [...document.querySelectorAll('#dock-buttons button[data-cmd^="patron-"]')].map(b => b.dataset.cmd))
-console.log('patron menu:', patronMenu)
-if (patronMenu.join(',') !== 'patron-oak,patron-river,patron-mountain,patron-fox')
-  throw new Error('expected four patron spirits to choose from, got: ' + patronMenu.join(','))
-await page3.tap('[data-cmd="patron-oak"]')
+// the laurel opens the landmark choice: the eco road or the military road
+const lmMenu = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="build-"]')].map(b => b.dataset.cmd))
+console.log('feudal landmark menu:', lmMenu)
+if (lmMenu.join(',') !== 'build-abbeymill,build-kingsbarracks')
+  throw new Error('expected the two Feudal landmarks, got: ' + lmMenu.join(','))
+await page3.tap('[data-cmd="build-abbeymill"]')
 await page3.waitForTimeout(250)
-const researching = await page3.evaluate(() => ({
-  res: !!window.__game.state.ageRes[0],
-  patron: window.__game.state.patron[0],
+const lmPlacing = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spot = window.__findSpot(34, tc.x, tc.y)
+  if (spot) g.placePos = spot
+  return { placing: g.placing, spot, food: g.res[0].food, wood: g.res[0].wood }
+})
+console.log('landmark placing:', lmPlacing)
+if (lmPlacing.placing !== 'abbeymill') throw new Error('choosing the Abbey Mill did not open placement')
+if (!lmPlacing.spot) throw new Error('no clear ground found for the Abbey Mill')
+await page3.tap('[data-cmd="confirm"]')
+await page3.waitForTimeout(300)
+const lmSite = await page3.evaluate(() => {
+  const g = window.__game.state
+  const site = g.ents.find(e => e.team === 0 && e.kind === 'abbeymill')
+  return {
+    placed: !!site && !site.complete,
+    builders: g.ents.filter(e => e.team === 0 && e.kind === 'villager' &&
+      e.state === 'build' && e.targetId === site?.id).length,
+    food: g.res[0].food, wood: g.res[0].wood,
+    agePill: !!document.querySelector('[data-cmd="age-progress"]') ||
+      !!document.querySelector('[data-cmd="age-up"]'), // TC dock refreshes on reselect below
+  }
+})
+console.log('landmark site:', lmSite)
+if (!lmSite.placed) throw new Error('the Abbey Mill site was not placed')
+if (lmSite.builders < 1) throw new Error('no villagers were sent to raise the landmark')
+if (lmPlacing.food - lmSite.food !== 200 || lmPlacing.wood - lmSite.wood !== 100)
+  throw new Error('the Abbey Mill should cost 200 food + 100 wood')
+// while it rises, the Town Hall shows progress instead of the laurel
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+})
+await page3.waitForTimeout(250)
+const risingDock = await page3.evaluate(() => ({
+  progress: !!document.querySelector('[data-cmd="age-progress"]'),
+  laurel: !!document.querySelector('[data-cmd="age-up"]'),
 }))
-console.log('patron picked:', researching)
-if (!researching.res) throw new Error('age research did not start')
-if (researching.patron !== 'oak') throw new Error('patron choice was not stored')
-await page3.evaluate(() => window.__game.setSpeed(15))
-await waitSim(page3, 40)
+console.log('rising dock:', risingDock)
+if (!risingDock.progress || risingDock.laurel)
+  throw new Error('Town Hall should show landmark progress while one rises')
+await page3.evaluate(() => window.__game.setSpeed(20))
+await waitSim(page3, 80)
 const feudal = await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   window.__game.select(v.id)
-  return { age: g.age[0], techs: { ...g.techs[0] } }
+  return {
+    age: g.age[0],
+    landmarkDone: g.ents.some(e => e.team === 0 && e.kind === 'abbeymill' && e.complete),
+  }
 })
 console.log('after age-up:', feudal)
+if (!feudal.landmarkDone) throw new Error('the Abbey Mill never finished')
 if (feudal.age !== 2) throw new Error('the Feudal Age never dawned')
-if (!feudal.techs.steelaxes) throw new Error("the Oak Father's gift (Steel Axes) was not granted")
-if (feudal.techs.wheelbarrow || feudal.techs.minerspicks || feudal.techs.foxpaths)
-  throw new Error('only the chosen patron tech should come free')
 await page3.waitForTimeout(250)
 await openCat(page3, 'military')
 const feudalLocks = await page3.evaluate(() =>
@@ -428,77 +476,6 @@ if (!(await page3.isVisible('[data-cmd="build-mill"]'))) throw new Error('mill m
 await page3.tap('[data-cmd="back"]')
 // both villages feudal for the remaining feature checks
 await page3.evaluate(() => { window.__game.state.age = [2, 2] })
-
-// 4.6) research the slow way: Miner's Picks at a mining camp
-await page3.evaluate(() => {
-  const g = window.__game.state
-  g.res[0].food = 500; g.res[0].wood = 400
-  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  const campId = window.__game.spawn('miningcamp', 0, tc.x + 420, tc.y + 200)
-  window.__game.select(campId)
-})
-await page3.waitForTimeout(250)
-if (!(await page3.isVisible('[data-cmd="research-minerspicks"]')))
-  throw new Error('research button missing on the mining camp')
-const researchBefore = await page3.evaluate(() => ({
-  food: window.__game.state.res[0].food, wood: window.__game.state.res[0].wood,
-}))
-await page3.tap('[data-cmd="research-minerspicks"]')
-await page3.waitForTimeout(250)
-const researchStart = await page3.evaluate(() => {
-  const g = window.__game.state
-  const camp = g.ents.find(e => e.team === 0 && e.kind === 'miningcamp' && e.research)
-  return { id: camp ? camp.research.id : null, food: g.res[0].food, wood: g.res[0].wood }
-})
-console.log('tech research start:', researchStart)
-if (researchStart.id !== 'minerspicks') throw new Error('tech research did not start')
-if (researchBefore.food - researchStart.food !== 100 || researchBefore.wood - researchStart.wood !== 75)
-  throw new Error('research should cost 100 food + 75 wood')
-await page3.evaluate(() => window.__game.setSpeed(15))
-await waitSim(page3, 34)
-const researched = await page3.evaluate(() => {
-  window.__game.setSpeed(1)
-  return { ...window.__game.state.techs[0] }
-})
-console.log('techs after research:', researched)
-if (!researched.minerspicks) throw new Error("Miner's Picks research never finished")
-
-// 4.65) the blacksmith: three upgrades under one roof; iron mail fits standing soldiers too
-await page3.evaluate(() => {
-  const g = window.__game.state
-  g.res[0].food = 600; g.res[0].gold = 300; g.res[0].wood = 500
-  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  window.__game.spawn('spearman', 0, tc.x - 120, tc.y + 240) // enlisted before the mail is forged
-  const smithId = window.__game.spawn('blacksmith', 0, tc.x + 440, tc.y - 40)
-  window.__game.select(smithId)
-})
-await page3.waitForTimeout(250)
-const smithDock = await page3.evaluate(() =>
-  [...document.querySelectorAll('#dock-buttons button[data-cmd^="research-"]')].map(b => b.dataset.cmd))
-console.log('blacksmith dock:', smithDock)
-if (smithDock.join(',') !== 'research-forgedblades,research-fletching,research-ironmail')
-  throw new Error('blacksmith upgrades wrong: ' + smithDock.join(','))
-await page3.tap('[data-cmd="research-ironmail"]')
-await page3.waitForTimeout(250)
-await page3.evaluate(() => window.__game.setSpeed(15))
-await waitSim(page3, 40)
-const mailed = await page3.evaluate(() => {
-  const g = window.__game.state
-  window.__game.setSpeed(1)
-  const old = g.ents.find(e => e.team === 0 && e.kind === 'spearman')
-  const freshId = window.__game.spawn('spearman', 0, old.x + 30, old.y)
-  const fresh = g.byId.get(freshId)
-  return { tech: g.techs[0].ironmail, oldMax: old.maxHp, freshMax: fresh.maxHp }
-})
-console.log('iron mail:', mailed)
-if (!mailed.tech) throw new Error('Iron Mail never finished')
-if (mailed.oldMax !== 70 || mailed.freshMax !== 70)
-  throw new Error(`Iron Mail HP not applied (want 70, got ${mailed.oldMax}/${mailed.freshMax})`)
-await page3.evaluate(() => { // muster out the practice spearmen before the garrison test
-  const g = window.__game.state
-  for (const e of g.ents.filter(e => e.team === 0 && e.kind === 'spearman')) e.hp = 0
-})
-await waitSim(page3, 1)
 
 // 4.66) the stable: trains scouts now, teases knights until the Castle Age
 await page3.evaluate(() => {
@@ -514,9 +491,10 @@ const stableDock = await page3.evaluate(() => ({
   locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
 }))
 console.log('stable dock:', stableDock)
-if (stableDock.buttons.join(',') !== 'train-scout,train-knight')
+if (stableDock.buttons.join(',') !== 'train-scout,train-knight,champ-cavalry')
   throw new Error('stable dock wrong: ' + stableDock.buttons.join(','))
 if (!stableDock.locked.includes('train-knight')) throw new Error('knight should be locked until the Castle Age')
+if (!stableDock.locked.includes('champ-cavalry')) throw new Error('champions should be locked until the Castle Age')
 await page3.tap('[data-cmd="train-knight"]')
 await page3.waitForTimeout(250)
 const knightRefused = await page3.evaluate(() => {
@@ -544,6 +522,185 @@ await page3.evaluate(() => { // retire the extra scout so fog tests keep a singl
   const scouts = g.ents.filter(e => e.team === 0 && e.kind === 'scout')
   for (const s of scouts.slice(1)) s.hp = 0
 })
+await waitSim(page3, 1)
+
+// 4.663) the Castle Age: a second landmark — the Guild Hall — and its gold trickle
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 600; g.res[0].gold = 300
+  for (const v of g.ents.filter(e => e.team === 0 && e.kind === 'villager')) {
+    v.state = 'idle'; v.targetId = undefined // no miners — the trickle check must be pure
+  }
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+})
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('[data-cmd="age-up"]'))) throw new Error('Castle age-up laurel missing on the Town Hall')
+await page3.tap('[data-cmd="age-up"]')
+await page3.waitForTimeout(250)
+const castleMenu = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="build-"]')].map(b => b.dataset.cmd))
+console.log('castle landmark menu:', castleMenu)
+if (castleMenu.join(',') !== 'build-guildhall,build-whitekeep')
+  throw new Error('expected the two Castle landmarks, got: ' + castleMenu.join(','))
+await page3.tap('[data-cmd="build-guildhall"]')
+await page3.waitForTimeout(250)
+const ghPlacing = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spot = window.__findSpot(38, tc.x, tc.y)
+  if (spot) g.placePos = spot
+  return { placing: g.placing, spot }
+})
+if (ghPlacing.placing !== 'guildhall' || !ghPlacing.spot) throw new Error('Guild Hall placement did not open')
+await page3.tap('[data-cmd="confirm"]')
+await page3.waitForTimeout(300)
+const ghSite = await page3.evaluate(() => ({
+  placed: window.__game.state.ents.some(e => e.team === 0 && e.kind === 'guildhall' && !e.complete),
+}))
+if (!ghSite.placed) throw new Error('the Guild Hall site was not placed')
+await page3.evaluate(() => window.__game.setSpeed(20))
+await waitSim(page3, 90)
+const castle = await page3.evaluate(() => {
+  const g = window.__game.state
+  return {
+    age: g.age[0],
+    done: g.ents.some(e => e.team === 0 && e.kind === 'guildhall' && e.complete),
+    gold: g.res[0].gold,
+  }
+})
+console.log('castle age:', castle)
+if (!castle.done) throw new Error('the Guild Hall never finished')
+if (castle.age !== 3) throw new Error('the Castle Age never dawned')
+await waitSim(page3, 20) // merchants at work: the Guild Hall trickles gold on its own
+const trickled = await page3.evaluate(() => {
+  window.__game.setSpeed(1)
+  return { gold: window.__game.state.res[0].gold }
+})
+console.log('guild hall trickle:', castle.gold, '->', trickled.gold)
+if (trickled.gold - castle.gold < 5) throw new Error('the Guild Hall trickled no gold')
+// the castle skyline: stone walls on the aged buildings
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  g.camera.x = tc.x; g.camera.y = tc.y
+})
+await page3.waitForTimeout(400)
+await page3.screenshot({ path: 'shots/16-castle.png' })
+
+// 4.664) champions: the barracks swears in champion infantry, veterans included
+const champSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 500; g.res[0].gold = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spearId = window.__game.spawn('spearman', 0, tc.x - 120, tc.y + 240) // enlisted before the honours
+  const spot = window.__findSpot(44, tc.x + 260, tc.y - 160)
+  const raxId = window.__game.spawn('barracks', 0, spot.x, spot.y)
+  window.__game.select(raxId)
+  return { spearId, raxId, food: g.res[0].food, gold: g.res[0].gold }
+})
+await page3.waitForTimeout(250)
+const champDock = await page3.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
+  locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
+}))
+console.log('barracks dock (castle):', champDock)
+if (!champDock.buttons.includes('champ-infantry')) throw new Error('champion button missing on the barracks')
+if (champDock.locked.includes('champ-infantry')) throw new Error('champion should be unlocked in the Castle Age')
+await page3.tap('[data-cmd="champ-infantry"]')
+await page3.waitForTimeout(250)
+const champStart = await page3.evaluate(({ raxId }) => {
+  const g = window.__game.state
+  const rax = g.byId.get(raxId)
+  return {
+    id: rax.research ? rax.research.id : null,
+    food: g.res[0].food, gold: g.res[0].gold,
+    pill: !!document.querySelector('[data-cmd="research-progress"]'),
+  }
+}, champSetup)
+console.log('champion research start:', champStart)
+if (champStart.id !== 'infantry') throw new Error('champion research did not start')
+if (!champStart.pill) throw new Error('champion progress pill missing')
+// the Abbey Mill and Guild Hall trickle a hair of food/gold while we look
+if (Math.round(champSetup.food - champStart.food) !== 150 || Math.round(champSetup.gold - champStart.gold) !== 100)
+  throw new Error('Champion Infantry should cost 150 food + 100 gold')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 34)
+const champDone = await page3.evaluate(({ spearId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const old = g.byId.get(spearId)
+  const freshId = window.__game.spawn('spearman', 0, old.x + 30, old.y)
+  const fresh = g.byId.get(freshId)
+  const out = { champ: g.champs[0].infantry, oldMax: old.maxHp, freshMax: fresh.maxHp }
+  old.hp = 0; fresh.hp = 0 // muster the practice spears out again
+  return out
+}, champSetup)
+console.log('champion infantry:', champDone)
+if (!champDone.champ) throw new Error('Champion Infantry never finished')
+if (champDone.oldMax !== 70 || champDone.freshMax !== 70)
+  throw new Error(`champion HP not applied (want 70, got ${champDone.oldMax}/${champDone.freshMax})`)
+
+// knights ride in the Castle Age: the stable's lock lifts, and one takes the field
+const knightCheck = await page3.evaluate(({ raxId }) => {
+  const g = window.__game.state
+  const rax = g.byId.get(raxId); if (rax) rax.hp = 0 // the practice barracks retires
+  const stable = g.ents.find(e => e.team === 0 && e.kind === 'stable' && e.complete)
+  window.__game.select(stable.id)
+  return { ok: !!stable }
+}, champSetup)
+if (!knightCheck.ok) throw new Error('stable went missing before the knight check')
+await page3.waitForTimeout(250)
+const stableCastle = await page3.evaluate(() => ({
+  locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
+  champ: !!document.querySelector('[data-cmd="champ-cavalry"]'),
+}))
+console.log('stable dock (castle):', stableCastle)
+if (stableCastle.locked.includes('train-knight')) throw new Error('knight still locked in the Castle Age')
+if (!stableCastle.champ) throw new Error('Champion Knights button missing on the stable')
+const knightBorn = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const id = window.__game.spawn('knight', 0, tc.x + 120, tc.y - 90)
+  const k = g.byId.get(id)
+  g.camera.x = k.x; g.camera.y = k.y
+  return { id, hp: k.maxHp, speed: 50 }
+})
+await page3.waitForTimeout(400)
+await page3.screenshot({ path: 'shots/17-knight.png' })
+if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + knightBorn.hp)
+await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
+await waitSim(page3, 1)
+
+// 4.665) the White Keep stands guard: its own arrows cut a raider down
+const keepSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spot = window.__findSpot(34, tc.x - 260, tc.y + 200)
+  const keepId = window.__game.spawn('whitekeep', 0, spot.x, spot.y)
+  const raiderId = window.__game.spawn('swordsman', 1, spot.x + 140, spot.y)
+  const raider = g.byId.get(raiderId)
+  raider.state = 'attack'; raider.targetId = keepId
+  window.__game.setSpeed(10)
+  return { keepId, raiderId, arrows: g.arrowsFired }
+})
+await waitSim(page3, 25)
+const keepFight = await page3.evaluate(({ keepId, raiderId, arrows }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const keep = g.byId.get(keepId)
+  const out = {
+    fired: g.arrowsFired - arrows,
+    raiderDead: !g.byId.has(raiderId),
+    keepAlive: !!keep,
+  }
+  if (keep) keep.hp = 0 // the practice keep comes down again
+  return out
+}, keepSetup)
+console.log('white keep defense:', keepFight)
+if (keepFight.fired < 5) throw new Error('the White Keep barely fired')
+if (!keepFight.raiderDead) throw new Error('the White Keep failed to stop a lone raider')
+if (!keepFight.keepAlive) throw new Error('the White Keep fell to a lone raider?!')
 await waitSim(page3, 1)
 
 // 4.67) palisades: drag a fence line, posts chain-build, gates let friends through

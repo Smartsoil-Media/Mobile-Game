@@ -1,8 +1,7 @@
 // World creation and shared queries/helpers.
 import {
-  Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  NO_TECHS, GATHER_TECH, GATHER_TECH_MULT, FOX_SPEED_MULT, FOX_LOS_BONUS,
-  FORGED_DMG, FLETCH_DMG, IRONMAIL_HP, MELEE_KINDS, INFANTRY_KINDS,
+  Game, Ent, Kind, Cost, ResKind, ChampId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
+  CHAMPS, NO_CHAMPS,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -28,8 +27,9 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   if (isUnit(e)) {
     const s = UNITS[kind]
     e.r = s.r; e.hp = e.maxHp = s.hp
-    if (INFANTRY_KINDS.includes(kind) && g.techs[team]?.ironmail) {
-      e.hp = e.maxHp = s.hp + IRONMAIL_HP // mailed from the forge
+    const champ = champOf(kind)
+    if (champ && g.champs[team]?.[champ]) {
+      e.hp = e.maxHp = s.hp + CHAMPS[champ].hp // born a champion
     }
     e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = Math.random() * 0.3
     e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = Math.random() * Math.PI * 2
@@ -71,9 +71,7 @@ export function createGame(): Game {
     visionT: 0,
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     age: [1, 1],
-    ageRes: [null, null],
-    patron: [null, null],
-    techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
+    champs: [{ ...NO_CHAMPS }, { ...NO_CHAMPS }],
     toasts: [], started: false, uiDirty: true,
   }
 
@@ -176,11 +174,20 @@ export function fogIndex(g: Game, x: number, y: number): number {
   return cy * g.fog.w + cx
 }
 
-// ---- tech effects ----
+// ---- champion effects ----
 
-// how fast a team's villagers pull from a source of this resource
-export function gatherMult(g: Game, team: number, res: ResKind): number {
-  return g.techs[team]?.[GATHER_TECH[res]] ? GATHER_TECH_MULT : 1
+// which champion line (if any) a unit kind belongs to
+export function champOf(kind: Kind): ChampId | null {
+  for (const id of Object.keys(CHAMPS) as ChampId[]) {
+    if (CHAMPS[id].kinds.includes(kind)) return id
+  }
+  return null
+}
+
+// bonus damage a team's unit kind carries from its champion upgrade
+export function champDmg(g: Game, team: number, kind: Kind): number {
+  const id = champOf(kind)
+  return id && g.champs[team]?.[id] ? CHAMPS[id].dmg : 0
 }
 
 // which resource this villager is currently working (gathering or hauling)
@@ -193,35 +200,18 @@ export function gatherResOf(g: Game, v: Ent): ResKind | null {
   return null
 }
 
-// blacksmith bonus damage for a unit kind
-export function dmgBonusFor(g: Game, team: number, kind: Kind): number {
-  const t = g.techs[team]
-  if (!t) return 0
-  if (kind === 'archer') return t.fletching ? FLETCH_DMG : 0
-  if (MELEE_KINDS.includes(kind)) return t.forgedblades ? FORGED_DMG : 0
-  return 0
-}
-
-// walking speed for a unit, with the Fox's blessing where it applies
+// walking speed for a unit (a hook for future civ or upgrade effects)
 export function unitSpeed(g: Game, e: Ent): number {
-  const base = UNITS[e.kind].speed
-  if ((e.kind === 'villager' || e.kind === 'scout') && g.techs[e.team]?.foxpaths) {
-    return base * FOX_SPEED_MULT
-  }
-  return base
+  return UNITS[e.kind].speed
 }
 
 export function updateVision(g: Game): void {
   const { w, h, explored, visible } = g.fog
   visible.fill(0)
-  const foxEyes = g.techs[0]?.foxpaths
   for (const e of g.ents) {
     if (e.team !== 0 || e.hidden) continue
     let los = 0
-    if (isUnit(e)) {
-      los = UNITS[e.kind].los
-      if (foxEyes && (e.kind === 'villager' || e.kind === 'scout')) los += FOX_LOS_BONUS
-    }
+    if (isUnit(e)) los = UNITS[e.kind].los
     else if (isBuilding(e)) los = e.complete ? BUILDINGS[e.kind].los : 100
     else continue
     const los2 = los * los

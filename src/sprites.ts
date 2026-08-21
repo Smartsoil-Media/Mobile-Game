@@ -37,8 +37,32 @@ export function lean(ctx: CanvasRenderingContext2D, e: Ent, factor: number, cap:
 }
 
 // Building walls wear their age: rough timber planks in the Dark Age,
-// cream plaster on a stone footing once the village turns Feudal.
+// cream plaster on a stone footing once Feudal, dressed stone in the Castle Age.
 function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, age: number): void {
+  if (age >= 3) {
+    ctx.fillStyle = '#D9D4C4'
+    rr(ctx, x, y, w, h, r); ctx.fill()
+    ctx.strokeStyle = '#B4AE9B'; ctx.lineWidth = 2
+    rr(ctx, x, y, w, h, r); ctx.stroke()
+    // coursed stone blocks
+    ctx.strokeStyle = 'rgba(140, 133, 112, 0.4)'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    for (let sy = y + 8; sy < y + h - 4; sy += 8) {
+      ctx.moveTo(x + 2.5, sy)
+      ctx.lineTo(x + w - 2.5, sy)
+    }
+    let stagger = false
+    for (let sy = y + 2; sy < y + h - 4; sy += 8) {
+      for (let sx = x + (stagger ? 12 : 7); sx < x + w - 5; sx += 11) {
+        ctx.moveTo(sx, sy + 1.5)
+        ctx.lineTo(sx, sy + 6.5)
+      }
+      stagger = !stagger
+    }
+    ctx.stroke()
+    return
+  }
   if (age >= 2) {
     ctx.fillStyle = WALL
     rr(ctx, x, y, w, h, r); ctx.fill()
@@ -510,6 +534,191 @@ export function drawGate(ctx: CanvasRenderingContext2D, e: Ent, t: number, open 
   }
 }
 
+// ---------- Landmarks ----------
+
+export function drawAbbeyMill(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 18, 32, 10)
+  // abbey hall: cream with arched windows
+  ctx.fillStyle = WALL
+  rr(ctx, x - 26, y - 12, 44, 32, 7); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 26, y - 12, 44, 32, 7); ctx.stroke()
+  ctx.fillStyle = '#8FB2D6'
+  for (const ox of [-16, -4, 8]) {
+    ctx.beginPath()
+    ctx.moveTo(x + ox - 2.6, y + 2)
+    ctx.lineTo(x + ox - 2.6, y - 4)
+    ctx.quadraticCurveTo(x + ox, y - 7.5, x + ox + 2.6, y - 4)
+    ctx.lineTo(x + ox + 2.6, y + 2)
+    ctx.closePath(); ctx.fill()
+  }
+  // steep roof with a little bell gable
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 32, y - 9)
+  ctx.lineTo(x - 4, y - 30)
+  ctx.quadraticCurveTo(x - 2, y - 31.5, x, y - 30)
+  ctx.lineTo(x + 24, y - 9)
+  ctx.quadraticCurveTo(x - 4, y - 15, x - 32, y - 9)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#FBEFD3'
+  ctx.beginPath(); ctx.arc(x - 3, y - 24, 4.4, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = WOOD; ctx.lineWidth = 1.4
+  ctx.beginPath(); ctx.arc(x - 3, y - 24, 4.4, 0, Math.PI * 2); ctx.stroke()
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(x - 3, y - 23.2, 2, 0, Math.PI * 2); ctx.fill()
+  // the mill wing: small tower + turning sails
+  ctx.fillStyle = TIMBER
+  ctx.beginPath()
+  ctx.moveTo(x + 18, y + 20); ctx.lineTo(x + 21, y - 6)
+  ctx.lineTo(x + 31, y - 6); ctx.lineTo(x + 34, y + 20)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = TIMBER_EDGE; ctx.lineWidth = 1.8; ctx.stroke()
+  const hub = { x: x + 26, y: y - 10 }
+  ctx.save()
+  ctx.translate(hub.x, hub.y)
+  ctx.rotate(t * 0.45 + (e.seed % 5))
+  for (let i = 0; i < 4; i++) {
+    ctx.rotate(Math.PI / 2)
+    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 2
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -15); ctx.stroke()
+    ctx.fillStyle = 'rgba(251, 243, 228, 0.92)'
+    rr(ctx, 0.5, -15, 4.5, 11, 1.8); ctx.fill()
+  }
+  ctx.restore()
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath(); ctx.arc(hub.x, hub.y, 2.4, 0, Math.PI * 2); ctx.fill()
+}
+
+export function drawKingsBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 22, 42, 12)
+  // stout stone-based hall
+  ctx.fillStyle = '#CFC4AC'
+  rr(ctx, x - 32, y + 8, 64, 14, 5); ctx.fill()
+  ctx.fillStyle = WALL
+  rr(ctx, x - 32, y - 14, 64, 26, 7); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 32, y - 14, 64, 22, 7); ctx.stroke()
+  // twin-peaked roof in royal color
+  ctx.fillStyle = c.dark
+  ctx.beginPath()
+  ctx.moveTo(x - 38, y - 10)
+  ctx.lineTo(x - 16, y - 30)
+  ctx.lineTo(x + 4, y - 10)
+  ctx.quadraticCurveTo(x - 16, y - 15, x - 38, y - 10)
+  ctx.closePath(); ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(x - 2, y - 10)
+  ctx.lineTo(x + 18, y - 30)
+  ctx.lineTo(x + 38, y - 10)
+  ctx.quadraticCurveTo(x + 18, y - 15, x - 2, y - 10)
+  ctx.closePath(); ctx.fill()
+  // great door + crown sign
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 9, y + 2, 18, 20, 7); ctx.fill()
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath()
+  ctx.moveTo(x - 20, y - 2)
+  ctx.lineTo(x - 20, y - 8); ctx.lineTo(x - 17.5, y - 4.5); ctx.lineTo(x - 15, y - 9)
+  ctx.lineTo(x - 12.5, y - 4.5); ctx.lineTo(x - 10, y - 8); ctx.lineTo(x - 10, y - 2)
+  ctx.closePath(); ctx.fill()
+  // crossed halberds sign
+  ctx.strokeStyle = '#8B6A4A'; ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x + 12, y - 6); ctx.lineTo(x + 24, y + 4)
+  ctx.moveTo(x + 24, y - 6); ctx.lineTo(x + 12, y + 4)
+  ctx.stroke()
+  flag(ctx, x - 16, y - 26, e.team, t + e.seed)
+  flag(ctx, x + 18, y - 26, e.team, t + e.seed + 2)
+}
+
+export function drawGuildhall(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 20, 34, 11)
+  // tall half-timbered hall
+  ctx.fillStyle = WALL
+  rr(ctx, x - 24, y - 22, 48, 42, 7); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 24, y - 22, 48, 42, 7); ctx.stroke()
+  ctx.strokeStyle = '#B98E5A'; ctx.lineWidth = 2.4
+  ctx.beginPath()
+  ctx.moveTo(x - 22, y - 8); ctx.lineTo(x + 22, y - 8)
+  ctx.moveTo(x - 14, y - 21); ctx.lineTo(x - 14, y - 8)
+  ctx.moveTo(x + 14, y - 21); ctx.lineTo(x + 14, y - 8)
+  ctx.moveTo(x - 22, y - 8); ctx.lineTo(x - 10, y + 18)
+  ctx.moveTo(x + 22, y - 8); ctx.lineTo(x + 10, y + 18)
+  ctx.stroke()
+  // jettied roof
+  ctx.fillStyle = ROOF_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 30, y - 19)
+  ctx.lineTo(x - 3, y - 36)
+  ctx.quadraticCurveTo(x, y - 37.5, x + 3, y - 36)
+  ctx.lineTo(x + 30, y - 19)
+  ctx.quadraticCurveTo(x, y - 24, x - 30, y - 19)
+  ctx.closePath(); ctx.fill()
+  // hanging coin sign
+  ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(x - 24, y - 4); ctx.lineTo(x - 30, y - 4); ctx.moveTo(x - 30, y - 4); ctx.lineTo(x - 30, y + 1); ctx.stroke()
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(x - 30, y + 5, 4.4, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#F5D584'
+  ctx.beginPath(); ctx.arc(x - 30, y + 5, 2.6, 0, Math.PI * 2); ctx.fill()
+  // door + crates of goods
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 7, y + 4, 14, 16, 6); ctx.fill()
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x + 14, y + 10, 11, 9, 2); ctx.fill()
+  rr(ctx, x + 18, y + 3, 8, 7, 2); ctx.fill()
+}
+
+export function drawWhiteKeep(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 18, 28, 10)
+  // the white tower, tall and proud
+  ctx.fillStyle = '#E9E5D8'
+  ctx.beginPath()
+  ctx.moveTo(x - 20, y + 16)
+  ctx.lineTo(x - 17, y - 34)
+  ctx.lineTo(x + 17, y - 34)
+  ctx.lineTo(x + 20, y + 16)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = '#C2BCA8'; ctx.lineWidth = 2
+  ctx.stroke()
+  // stone coursing
+  ctx.strokeStyle = 'rgba(140, 133, 112, 0.35)'; ctx.lineWidth = 1.2
+  ctx.beginPath()
+  for (let sy = y - 26; sy < y + 12; sy += 9) { ctx.moveTo(x - 17.5, sy); ctx.lineTo(x + 17.5, sy) }
+  ctx.stroke()
+  // crenellations
+  ctx.fillStyle = '#E9E5D8'
+  for (const ox of [-17, -7.5, 2, 11.5]) rr(ctx, x + ox, y - 41, 6.5, 8, 1.5), ctx.fill()
+  ctx.strokeStyle = '#C2BCA8'; ctx.lineWidth = 1.4
+  for (const ox of [-17, -7.5, 2, 11.5]) rr(ctx, x + ox, y - 41, 6.5, 8, 1.5), ctx.stroke()
+  // arrow slits + arched door
+  ctx.fillStyle = '#6B6656'
+  for (const sy of [-24, -12]) rr(ctx, x - 1.5, y + sy, 3, 8, 1.5), ctx.fill()
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 6, y + 16); ctx.lineTo(x - 6, y + 6)
+  ctx.quadraticCurveTo(x, y + 1, x + 6, y + 6); ctx.lineTo(x + 6, y + 16)
+  ctx.closePath(); ctx.fill()
+  // the great banner
+  ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 2.4
+  ctx.beginPath(); ctx.moveTo(x, y - 41); ctx.lineTo(x, y - 54); ctx.stroke()
+  const wave = Math.sin(t * 3 + e.seed) * 1.8
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(x, y - 54)
+  ctx.quadraticCurveTo(x + 10, y - 56 + wave, x + 18, y - 51 + wave)
+  ctx.quadraticCurveTo(x + 10, y - 47 + wave, x, y - 45)
+  ctx.closePath(); ctx.fill()
+}
+
 export function drawStable(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
@@ -890,7 +1099,7 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   ctx.restore()
 }
 
-export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
@@ -920,9 +1129,9 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
   ctx.beginPath(); ctx.arc(bx + lunge, by - 13.5, 6.4, Math.PI * 0.98, Math.PI * 2.02); ctx.fill()
   ctx.fillStyle = '#AEB4BF'
   rr(ctx, bx - 6.6 + lunge, by - 14.2, 13.2, 2.4, 1.2); ctx.fill()
-  // plume
-  ctx.fillStyle = c.main
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 19.5, 2.6, 0, Math.PI * 2); ctx.fill()
+  // plume — champions wear the gold
+  ctx.fillStyle = champ ? '#E9B44C' : c.main
+  ctx.beginPath(); ctx.arc(bx + lunge, by - 19.5, champ ? 3.1 : 2.6, 0, Math.PI * 2); ctx.fill()
   // eyes
   ctx.fillStyle = '#5A4632'
   ctx.beginPath(); ctx.arc(bx + f * 2 + lunge, by - 11, 1, 0, Math.PI * 2); ctx.fill()
@@ -944,7 +1153,7 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number):
   ctx.restore()
 }
 
-export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
@@ -980,7 +1189,11 @@ export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   ctx.quadraticCurveTo(bx + lunge, by - 22.5, bx - 1.5 + lunge, by - 21.5)
   ctx.closePath(); ctx.fill()
   ctx.fillStyle = '#E9B44C'
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 22, 1.3, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(bx + lunge, by - 22, champ ? 2.2 : 1.3, 0, Math.PI * 2); ctx.fill()
+  if (champ) { // champions wear a golden band on the cap
+    ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 1.6
+    ctx.beginPath(); ctx.moveTo(bx - 5.6 + lunge, by - 14); ctx.lineTo(bx + 5.6 + lunge, by - 14); ctx.stroke()
+  }
   // eyes
   ctx.fillStyle = '#5A4632'
   ctx.beginPath(); ctx.arc(bx + f * 1.8 + lunge, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
@@ -1004,7 +1217,7 @@ export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   ctx.restore()
 }
 
-export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
@@ -1038,7 +1251,7 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number): vo
   // head with a hood
   ctx.fillStyle = SKIN
   ctx.beginPath(); ctx.arc(bx, by - 11.5, 5.8, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = c.dark
+  ctx.fillStyle = champ ? '#C98F2B' : c.dark // champion longbows hood in gold-braid
   ctx.beginPath(); ctx.arc(bx, by - 12.5, 6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill()
   ctx.beginPath()
   ctx.moveTo(bx - f * 2, by - 18)
@@ -1190,3 +1403,76 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
 }
 
 function bxr(x: number, f: number): number { return x - f * 1.5 }
+
+export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const f = e.face ?? 1
+  const moving = e.stepped === true
+  const trot = moving ? Math.sin(t * 11 + (e.phase ?? 0)) : Math.sin(t * 2 + (e.phase ?? 0)) * 0.4
+  const by = e.y - Math.abs(trot) * 2.6
+  shadow(ctx, e.x, e.y + 6, 13, 4.5)
+  ctx.save()
+  lean(ctx, e, 0.4, 0.5)
+  // charger legs
+  ctx.strokeStyle = '#6B4F37'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(e.x - 6, by - 2); ctx.lineTo(e.x - 6 - trot * 2.2, e.y + 5.5)
+  ctx.moveTo(e.x + 6, by - 2); ctx.lineTo(e.x + 6 + trot * 2.2, e.y + 5.5)
+  ctx.stroke()
+  // the charger, broad and proud, in a team caparison
+  ctx.fillStyle = '#84603F'
+  ctx.beginPath(); ctx.ellipse(e.x, by - 5, 11.5, 7.5, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = champ ? '#E9B44C' : c.main
+  ctx.beginPath(); ctx.ellipse(e.x, by - 3, 10.5, 5.5, 0, 0, Math.PI); ctx.fill() // skirt
+  ctx.fillStyle = '#84603F'
+  ctx.beginPath(); ctx.ellipse(e.x + f * 11, by - 9.5, 5, 4.2, f * 0.4, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(e.x + f * 9, by - 12.5)
+  ctx.lineTo(e.x + f * 10.5, by - 17)
+  ctx.lineTo(e.x + f * 12.5, by - 12.5)
+  ctx.closePath(); ctx.fill()
+  // chamfron (face armor)
+  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.ellipse(e.x + f * 12.5, by - 9.5, 2.8, 2.2, f * 0.4, 0, Math.PI * 2); ctx.fill()
+  // armored rider
+  ctx.fillStyle = '#AEB4BF'
+  ctx.beginPath()
+  ctx.moveTo(bxr(e.x, f) - 5, by - 11)
+  ctx.quadraticCurveTo(bxr(e.x, f) - 5.5, by - 19, bxr(e.x, f), by - 20)
+  ctx.quadraticCurveTo(bxr(e.x, f) + 5.5, by - 19, bxr(e.x, f) + 5, by - 11)
+  ctx.closePath(); ctx.fill()
+  // great helm with a plume
+  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22.5, 4.8, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#5A4632'
+  rr(ctx, bxr(e.x, f) - 4.4, by - 23.4, 8.8, 1.8, 0.9); ctx.fill() // visor slit
+  ctx.fillStyle = champ ? '#E9B44C' : c.main
+  ctx.beginPath()
+  ctx.ellipse(bxr(e.x, f) - f * 1.5, by - 28, 2, 3.2, f * -0.4, 0, Math.PI * 2)
+  ctx.fill()
+  // kite shield
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(bxr(e.x, f) - f * 7, by - 17)
+  ctx.quadraticCurveTo(bxr(e.x, f) - f * 11, by - 15, bxr(e.x, f) - f * 9.5, by - 8)
+  ctx.quadraticCurveTo(bxr(e.x, f) - f * 8.5, by - 6, bxr(e.x, f) - f * 6, by - 8.5)
+  ctx.quadraticCurveTo(bxr(e.x, f) - f * 4.5, by - 14, bxr(e.x, f) - f * 7, by - 17)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#FBF3E4'
+  ctx.beginPath(); ctx.arc(bxr(e.x, f) - f * 7.8, by - 12, 1.6, 0, Math.PI * 2); ctx.fill()
+  // couched lance, dips on the charge
+  const striking = e.state === 'attack' && (e.cd ?? 0) > 0.65
+  ctx.save()
+  ctx.translate(bxr(e.x, f) + f * 3, by - 14)
+  ctx.rotate(f * (striking ? 0.32 : 0.18))
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 2.4
+  ctx.beginPath(); ctx.moveTo(-f * 4, 0); ctx.lineTo(f * 17, 0); ctx.stroke()
+  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath()
+  ctx.moveTo(f * 17, -1.8); ctx.lineTo(f * 21.5, 0); ctx.lineTo(f * 17, 1.8)
+  ctx.closePath(); ctx.fill()
+  ctx.restore()
+  ctx.restore()
+}

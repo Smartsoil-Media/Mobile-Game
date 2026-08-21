@@ -5,10 +5,12 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
-  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower' | 'wall' | 'gate'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
+  | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+  | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -48,7 +50,7 @@ export interface Ent {
   complete?: boolean
   progress?: number
   queue?: { kind: Kind; t: number; total: number }[]
-  research?: { id: TechId; t: number; total: number } // tech brewing in this building
+  research?: { id: ChampId; t: number; total: number } // a champion upgrade underway here
   garrison?: number
   insideId?: number // which building this hidden unit is sheltering in
   volleyT?: number
@@ -99,10 +101,8 @@ export interface Game {
   fog: Fog
   visionT: number
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
-  age: number[] // per team: 1 = Dark Age, 2 = Feudal Age
-  ageRes: ({ t: number; total: number } | null)[] // in-flight age research
-  patron: (PatronId | null)[] // per team: the spirit chosen at age-up
-  techs: Record<TechId, boolean>[] // per team: owned economy techs
+  age: number[] // per team: 1 = Dark, 2 = Feudal, 3 = Castle (advanced by landmarks)
+  champs: Record<ChampId, boolean>[] // per team: bought champion upgrades
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean
@@ -120,7 +120,7 @@ export const UNITS: Record<string, {
   villager: { hp: 30, dmg: 3, range: 16, cd: 1.0, speed: 31, aggro: 0, cost: cost({ food: 50 }), time: 7, r: 10, los: 160, name: 'Villager' },
   swordsman: { hp: 70, dmg: 9, range: 18, cd: 0.9, speed: 37, aggro: 130, cost: cost({ food: 40, gold: 25 }), time: 9, r: 11, los: 180, age: 2, name: 'Swordsman' },
   spearman: { hp: 55, dmg: 6, range: 20, cd: 1.0, speed: 37, aggro: 130, cost: cost({ food: 35, wood: 20 }), time: 8, r: 11, los: 180, name: 'Spearman' },
-  archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, age: 2, name: 'Archer' },
+  archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, age: 2, name: 'Longbowman' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
   knight: { hp: 110, dmg: 11, range: 16, cd: 0.9, speed: 50, aggro: 140, cost: cost({ food: 60, gold: 75 }), time: 12, r: 13, los: 220, age: 3, name: 'Knight' },
 }
@@ -139,57 +139,55 @@ export const BUILDINGS: Record<string, {
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
-  blacksmith: { hp: 300, r: 34, foot: 38, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Blacksmith' },
   wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
   gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
+  // English landmarks — building one IS the age-up; it dawns when the walls rise
+  abbeymill: { hp: 400, r: 30, foot: 34, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
+  kingsbarracks: { hp: 500, r: 40, foot: 44, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
+  guildhall: { hp: 500, r: 34, foot: 38, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
+  whitekeep: { hp: 900, r: 30, foot: 34, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
 }
 
-// ---- economy techs & patron spirits ----
-// Each patron grants its tech instantly and free at age-up; everyone else
-// can research it the slow way at the listed building (Feudal Age only).
-export type TechId =
-  | 'steelaxes' | 'wheelbarrow' | 'minerspicks' | 'foxpaths'
-  | 'forgedblades' | 'fletching' | 'ironmail'
-export type PatronId = 'oak' | 'river' | 'mountain' | 'fox'
-
-export const TECH_COST = cost({ food: 100, wood: 75 })
-export const TECH_TIME = 30
-
-export const TECHS: Record<TechId, { name: string; blurb: string; at: Kind; cost: Cost; time: number }> = {
-  steelaxes: { name: 'Steel Axes', blurb: 'Chop wood 20% faster', at: 'lumbercamp', cost: TECH_COST, time: TECH_TIME },
-  wheelbarrow: { name: 'Wheelbarrow', blurb: 'Gather food 20% faster', at: 'mill', cost: TECH_COST, time: TECH_TIME },
-  minerspicks: { name: "Miner's Picks", blurb: 'Mine gold and stone 20% faster', at: 'miningcamp', cost: TECH_COST, time: TECH_TIME },
-  foxpaths: { name: 'Fox Paths', blurb: 'Villagers and scouts walk faster, see further', at: 'towncenter', cost: TECH_COST, time: TECH_TIME },
-  // blacksmith upgrades
-  forgedblades: { name: 'Forged Blades', blurb: 'Melee units strike +2 harder', at: 'blacksmith', cost: cost({ food: 100, gold: 50 }), time: 35 },
-  fletching: { name: 'Fletched Arrows', blurb: 'Archers shoot +2 harder', at: 'blacksmith', cost: cost({ wood: 75, gold: 75 }), time: 35 },
-  ironmail: { name: 'Iron Mail', blurb: 'Infantry gain +15 health', at: 'blacksmith', cost: cost({ food: 125, gold: 50 }), time: 35 },
+// ---- landmarks: the age-up IS a building, eco path or military path ----
+export type LandmarkKind = 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
+export const LANDMARKS: Record<LandmarkKind, { toAge: number; path: 'eco' | 'military'; blurb: string }> = {
+  abbeymill: { toAge: 2, path: 'eco', blurb: 'A mill whose tithes trickle in food on their own' },
+  kingsbarracks: { toAge: 2, path: 'military', blurb: 'Musters spearmen for nearly half the price' },
+  guildhall: { toAge: 3, path: 'eco', blurb: 'Merchants bring a steady trickle of gold' },
+  whitekeep: { toAge: 3, path: 'military', blurb: 'A stone fortress that rains arrows on raiders' },
 }
+export const LANDMARK_TRICKLE = 0.4 // food/gold per second from the eco landmarks
+export const KEEP_RANGE = 260
+export const KEEP_VOLLEY = 1.5
+export const KEEP_DMG = 5
+export const KEEP_BASE_ARROWS = 2
+// the cheap spear levy at the King's Barracks
+export const LEVY_SPEAR_COST = cost({ food: 20, wood: 10 })
+export const LEVY_SPEAR_TIME = 6
 
-export const FORGED_DMG = 2
-export const FLETCH_DMG = 2
-export const IRONMAIL_HP = 15
-export const MELEE_KINDS: Kind[] = ['swordsman', 'spearman', 'scout']
-export const INFANTRY_KINDS: Kind[] = ['swordsman', 'spearman']
-
-export const PATRONS: Record<PatronId, { name: string; tech: TechId; blurb: string }> = {
-  oak: { name: 'the Oak Father', tech: 'steelaxes', blurb: 'Steel Axes are yours' },
-  river: { name: 'the River Mother', tech: 'wheelbarrow', blurb: 'the Wheelbarrow is yours' },
-  mountain: { name: 'the Mountain King', tech: 'minerspicks', blurb: "Miner's Picks are yours" },
-  fox: { name: 'the Fox', tech: 'foxpaths', blurb: 'Fox Paths are yours' },
+// ---- champions: one mighty upgrade per military hall, Castle Age ----
+export type ChampId = 'infantry' | 'ranged' | 'cavalry'
+export const CHAMPS: Record<ChampId, {
+  name: string; blurb: string; at: Kind[]; kinds: Kind[]
+  cost: Cost; time: number; hp: number; dmg: number
+}> = {
+  infantry: {
+    name: 'Champion Infantry', blurb: 'Spearmen and swordsmen: +15 health, +3 damage',
+    at: ['barracks', 'kingsbarracks'], kinds: ['spearman', 'swordsman'],
+    cost: cost({ food: 150, gold: 100 }), time: 30, hp: 15, dmg: 3,
+  },
+  ranged: {
+    name: 'Champion Longbows', blurb: 'Longbowmen: +10 health, +3 damage',
+    at: ['archeryrange'], kinds: ['archer'],
+    cost: cost({ wood: 100, gold: 150 }), time: 30, hp: 10, dmg: 3,
+  },
+  cavalry: {
+    name: 'Champion Knights', blurb: 'Knights: +20 health, +3 damage',
+    at: ['stable'], kinds: ['knight'],
+    cost: cost({ food: 150, gold: 150 }), time: 30, hp: 20, dmg: 3,
+  },
 }
-
-export const NO_TECHS: Record<TechId, boolean> = {
-  steelaxes: false, wheelbarrow: false, minerspicks: false, foxpaths: false,
-  forgedblades: false, fletching: false, ironmail: false,
-}
-
-export const GATHER_TECH: Record<ResKind, TechId> = {
-  wood: 'steelaxes', food: 'wheelbarrow', gold: 'minerspicks', stone: 'minerspicks',
-}
-export const GATHER_TECH_MULT = 1.2
-export const FOX_SPEED_MULT = 1.15
-export const FOX_LOS_BONUS = 40
+export const NO_CHAMPS: Record<ChampId, boolean> = { infantry: false, ranged: false, cavalry: false }
 
 export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKind; name: string }> = {
   tree: { r: 16, amount: 60, gives: 'wood', name: 'Tree' },
@@ -208,7 +206,7 @@ export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
 // where each carried resource may be dropped off
 export const DROPOFFS: Record<ResKind, Kind[]> = {
   wood: ['towncenter', 'lumbercamp'],
-  food: ['towncenter', 'mill'],
+  food: ['towncenter', 'mill', 'abbeymill'],
   gold: ['towncenter', 'miningcamp'],
   stone: ['towncenter', 'miningcamp'],
 }
@@ -220,8 +218,6 @@ export const SOURCE_OF: Record<ResKind, Kind> = {
 
 export const FOG_CELL = 32
 export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
-export const AGE2_COST = cost({ food: 275 })
-export const AGE2_TIME = 35
 export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age', 'Castle Age']
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
@@ -254,8 +250,9 @@ export function isUnit(e: Ent): boolean {
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
-    e.kind === 'miningcamp' || e.kind === 'mill' || e.kind === 'blacksmith' ||
-    e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate'
+    e.kind === 'miningcamp' || e.kind === 'mill' ||
+    e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate' ||
+    e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'
