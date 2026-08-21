@@ -20,14 +20,15 @@ export function screenToWorld(g: Game, canvas: HTMLCanvasElement, sx: number, sy
 
 export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
   const rect = canvas.getBoundingClientRect()
+  if (!rect.width || !rect.height) return
+  // never zoom out past "the world fills the screen" — there is no outside
+  const minZoom = Math.max(rect.width / WORLD_W, rect.height / WORLD_H)
+  g.camera.zoom = Math.max(minZoom, Math.min(1.6, g.camera.zoom))
   const halfW = rect.width / 2 / g.camera.zoom
   const halfH = rect.height / 2 / g.camera.zoom
-  const pad = 120
-  g.camera.x = Math.max(halfW - pad, Math.min(WORLD_W - halfW + pad, g.camera.x))
-  g.camera.y = Math.max(halfH - pad, Math.min(WORLD_H - halfH + pad, g.camera.y))
-  // if the viewport is bigger than the map, just center
-  if (halfW * 2 > WORLD_W + pad * 2) g.camera.x = WORLD_W / 2
-  if (halfH * 2 > WORLD_H + pad * 2) g.camera.y = WORLD_H / 2
+  // and the viewport edge stops exactly at the world edge
+  g.camera.x = Math.max(halfW, Math.min(WORLD_W - halfW, g.camera.x))
+  g.camera.y = Math.max(halfH, Math.min(WORLD_H - halfH, g.camera.y))
 }
 
 function selectedEnts(g: Game): Ent[] {

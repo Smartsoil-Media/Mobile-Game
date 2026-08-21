@@ -22,6 +22,7 @@ function resize(): void {
   clampCamera(g, canvas)
 }
 window.addEventListener('resize', resize)
+window.addEventListener('orientationchange', resize)
 
 attachInput(g, canvas)
 initUI(g)
@@ -32,6 +33,10 @@ let acc = 0
 let last = performance.now()
 
 function frame(now: number): void {
+  // iOS reports rotated dimensions late — self-heal any stale canvas size
+  const dpr = window.devicePixelRatio || 1
+  if (canvas.width !== Math.round(canvas.clientWidth * dpr) ||
+    canvas.height !== Math.round(canvas.clientHeight * dpr)) resize()
   const wall = Math.min(0.25, (now - last) / 1000)
   last = now
   if (g.started) {

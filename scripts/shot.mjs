@@ -1552,5 +1552,43 @@ console.log('landscape tap-to-move:', landscapeMoved)
 if (!landscapeMoved.moved) throw new Error('tap-to-move did not work in landscape')
 await page2.screenshot({ path: 'shots/6-landscape.png' })
 
+// simulated rotation: the canvas backing size must self-heal within a frame
+await page2.setViewportSize({ width: 390, height: 844 })
+await page2.waitForTimeout(400)
+const rotated = await page2.evaluate(() => {
+  const c = document.getElementById('game')
+  const dpr = window.devicePixelRatio || 1
+  return {
+    healed: c.width === Math.round(c.clientWidth * dpr) &&
+      c.height === Math.round(c.clientHeight * dpr),
+  }
+})
+console.log('rotation self-heal:', rotated)
+if (!rotated.healed) throw new Error('canvas kept a stale size after rotation')
+
+// no-void: even an absurd zoom-out + off-map pan snaps back inside the world
+await page2.evaluate(() => {
+  const g = window.__game.state
+  g.camera.zoom = 0.05
+  g.camera.x = -5000
+  g.camera.y = 99999
+})
+await page2.mouse.move(195, 420)
+await page2.mouse.wheel(0, 1) // any zoom gesture runs the clamp
+await page2.waitForTimeout(200)
+const noVoid = await page2.evaluate(() => {
+  const g = window.__game.state
+  const r = document.getElementById('game').getBoundingClientRect()
+  const halfW = r.width / 2 / g.camera.zoom
+  const halfH = r.height / 2 / g.camera.zoom
+  return {
+    zoom: Math.round(g.camera.zoom * 1000) / 1000,
+    inside: g.camera.x - halfW >= -1 && g.camera.x + halfW <= 1921 &&
+      g.camera.y - halfH >= -1 && g.camera.y + halfH <= 1281,
+  }
+})
+console.log('no-void clamp:', noVoid)
+if (!noVoid.inside) throw new Error('camera can still see beyond the world edge')
+
 await browser.close()
 console.log('PLAYTEST PASSED')
