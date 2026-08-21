@@ -112,9 +112,9 @@ const milDock = await page.evaluate(() => ({
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
 }))
 console.log('military menu:', milDock)
-if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-watchtower')
+if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-stable,build-watchtower')
   throw new Error('military menu wrong: ' + milDock.buttons.join(','))
-if (milDock.canvases !== 1) throw new Error('barracks and archery range should use symbolic icons')
+if (milDock.canvases !== 2) throw new Error('stable and watchtower should use sprite icons')
 await page.tap('[data-cmd="back"]')
 await page.waitForTimeout(200)
 await page.evaluate(() => {
@@ -325,7 +325,8 @@ const darkLocks = await page3.evaluate(() => ({
 console.log('dark age locks:', darkLocks)
 if (darkLocks.age !== 1) throw new Error('should start in the Dark Age')
 if (darkLocks.agePill) throw new Error('the age pill should be gone from the HUD')
-if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange'))
+if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange') ||
+  !darkLocks.locked.includes('build-stable'))
   throw new Error('feudal buildings not locked in the Dark Age')
 if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
 await openCat(page3, 'study')
@@ -452,6 +453,52 @@ if (mailed.oldMax !== 70 || mailed.freshMax !== 70)
 await page3.evaluate(() => { // muster out the practice spearmen before the garrison test
   const g = window.__game.state
   for (const e of g.ents.filter(e => e.team === 0 && e.kind === 'spearman')) e.hp = 0
+})
+await waitSim(page3, 1)
+
+// 4.66) the stable: trains scouts now, teases knights until the Castle Age
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 400; g.res[0].gold = 200
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const stableId = window.__game.spawn('stable', 0, tc.x - 200, tc.y - 500)
+  window.__game.select(stableId)
+})
+await page3.waitForTimeout(250)
+const stableDock = await page3.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
+  locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
+}))
+console.log('stable dock:', stableDock)
+if (stableDock.buttons.join(',') !== 'train-scout,train-knight')
+  throw new Error('stable dock wrong: ' + stableDock.buttons.join(','))
+if (!stableDock.locked.includes('train-knight')) throw new Error('knight should be locked until the Castle Age')
+await page3.tap('[data-cmd="train-knight"]')
+await page3.waitForTimeout(250)
+const knightRefused = await page3.evaluate(() => {
+  const g = window.__game.state
+  const stable = g.ents.find(e => e.team === 0 && e.kind === 'stable')
+  return { queued: stable.queue.length, toasts: g.toasts.map(t => t.text) }
+})
+console.log('knight refused:', knightRefused)
+if (knightRefused.queued !== 0) throw new Error('locked knight should not queue')
+if (!knightRefused.toasts.some(t => t.includes('Castle Age'))) throw new Error('knight lock toast should name the Castle Age')
+const scoutsBefore = await page3.evaluate(() =>
+  window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'scout').length)
+await page3.tap('[data-cmd="train-scout"]')
+await page3.waitForTimeout(200)
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 12)
+const scoutsAfter = await page3.evaluate(() => {
+  window.__game.setSpeed(1)
+  return window.__game.state.ents.filter(e => e.team === 0 && e.kind === 'scout').length
+})
+console.log('stable trained scout:', scoutsBefore, '->', scoutsAfter)
+if (scoutsAfter !== scoutsBefore + 1) throw new Error('stable did not train a scout')
+await page3.evaluate(() => { // retire the extra scout so fog tests keep a single-scout world
+  const g = window.__game.state
+  const scouts = g.ents.filter(e => e.team === 0 && e.kind === 'scout')
+  for (const s of scouts.slice(1)) s.hp = 0
 })
 await waitSim(page3, 1)
 

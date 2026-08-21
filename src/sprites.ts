@@ -454,6 +454,60 @@ export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
 }
 
+export function drawStable(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 21, 38, 12)
+  // broad timber barn
+  ctx.fillStyle = TIMBER
+  rr(ctx, x - 29, y - 10, 58, 32, 7); ctx.fill()
+  ctx.strokeStyle = TIMBER_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 29, y - 10, 58, 32, 7); ctx.stroke()
+  ctx.strokeStyle = 'rgba(139, 106, 74, 0.38)'; ctx.lineWidth = 1.2
+  ctx.beginPath()
+  for (const sx of [-20, -12, 12, 20]) { ctx.moveTo(x + sx, y - 7); ctx.lineTo(x + sx, y + 19) }
+  ctx.stroke()
+  // deep thatch roof
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 36, y - 6)
+  ctx.lineTo(x - 4, y - 30)
+  ctx.quadraticCurveTo(x, y - 32.5, x + 4, y - 30)
+  ctx.lineTo(x + 36, y - 6)
+  ctx.quadraticCurveTo(x, y - 12, x - 36, y - 6)
+  ctx.closePath(); ctx.fill()
+  // wide arched stall door, dark within
+  ctx.fillStyle = '#5F5343'
+  ctx.beginPath()
+  ctx.moveTo(x - 12, y + 21)
+  ctx.lineTo(x - 12, y + 4)
+  ctx.quadraticCurveTo(x, y - 7, x + 12, y + 4)
+  ctx.lineTo(x + 12, y + 21)
+  ctx.closePath(); ctx.fill()
+  // a friendly horse head peeking out, nodding gently
+  const nod = Math.sin(t * 1.6 + e.seed) * 1.2
+  ctx.save()
+  ctx.translate(x + 1, y + 8 + nod)
+  ctx.fillStyle = '#B98A5C'
+  ctx.beginPath(); ctx.ellipse(0, 0, 5.5, 4.6, -0.25, 0, Math.PI * 2); ctx.fill() // head
+  ctx.beginPath(); ctx.ellipse(5, 2.6, 3.6, 2.6, -0.35, 0, Math.PI * 2); ctx.fill() // muzzle
+  ctx.fillStyle = '#8A6440'
+  ctx.beginPath(); ctx.moveTo(-3.5, -3.6); ctx.lineTo(-1.4, -7.4); ctx.lineTo(0.6, -3.9); ctx.closePath(); ctx.fill() // ear
+  ctx.beginPath(); ctx.ellipse(-4.5, -0.5, 2, 3.4, 0.35, 0, Math.PI * 2); ctx.fill() // mane
+  ctx.fillStyle = '#4A3413'
+  ctx.beginPath(); ctx.arc(1.4, -1.2, 1, 0, Math.PI * 2); ctx.fill() // eye
+  ctx.restore()
+  // hay bale by the door
+  ctx.fillStyle = '#E4CB8F'
+  rr(ctx, x + 17, y + 11, 12, 9, 3); ctx.fill()
+  ctx.strokeStyle = '#C4A867'; ctx.lineWidth = 1.3
+  ctx.beginPath(); ctx.moveTo(x + 19.5, y + 11.5); ctx.lineTo(x + 19.5, y + 19.5); ctx.moveTo(x + 26, y + 11.5); ctx.lineTo(x + 26, y + 19.5); ctx.stroke()
+  // horseshoe sign
+  ctx.strokeStyle = '#C7CCD4'; ctx.lineWidth = 2.2
+  ctx.beginPath(); ctx.arc(x - 20, y - 1, 4, Math.PI * 0.85, Math.PI * 2.15); ctx.stroke()
+  flag(ctx, x + 30, y - 12, e.team, t + e.seed)
+}
+
 export function drawBlacksmith(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   shadow(ctx, x, y + 20, 34, 11)

@@ -1,11 +1,11 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import {
   Game, Ent, Buildable, Cost, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
-  AGE2_COST, AGE2_TIME, isUnit,
+  AGE2_COST, AGE2_TIME, AGE_NAMES, isUnit,
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf } from './world'
 import { selectArmy, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -65,6 +65,7 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     farm: { scale: 0.85, cx: 2, cy: -1 },
     watchtower: { scale: 0.58, cx: 0, cy: -23 },
     archeryrange: { scale: 0.62, cx: -2, cy: -3 },
+    stable: { scale: 0.6, cx: 0, cy: -5 },
     house: { scale: 1.0, cx: 0, cy: -5.5 },
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
@@ -75,6 +76,7 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
     spearman: { scale: 1.4, cx: 0, cy: -8 },
     archer: { scale: 1.45, cx: 0, cy: -7 },
+    scout: { scale: 1.15, cx: 0, cy: -10 },
   }
   const k = conf[kind] ?? { scale: 1, cx: 0, cy: 0 }
   ctx.scale(2, 2)
@@ -86,6 +88,7 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'farm': drawFarm(ctx, fake, 0.2); break
     case 'watchtower': drawWatchtower(ctx, fake, 0.2); break
     case 'archeryrange': drawArcheryRange(ctx, fake, 0.2); break
+    case 'stable': drawStable(ctx, fake, 0.2); break
     case 'house': drawHouse(ctx, fake, 0.2, age); break
     case 'barracks': drawBarracks(ctx, fake, 0.2, age); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
@@ -96,6 +99,7 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
     case 'spearman': drawSpearman(ctx, fake, 0); break
     case 'archer': drawArcher(ctx, fake, 0); break
+    case 'scout': drawScout(ctx, fake, 0); break
   }
   return c
 }
@@ -135,9 +139,9 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer'): void {
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'): void {
   const s = UNITS[kind]
-  if ((s.age ?? 1) > g.age[0]) { toast(g, 'Reach the Feudal Age first!'); return }
+  if ((s.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[s.age ?? 1]} first!`); return }
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
   if (!canAfford(g, 0, s.cost)) {
@@ -405,6 +409,15 @@ export function syncUI(g: Game): void {
       { cmd: 'train-archer', label: 'Train archer', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
       () => tryTrain(g, first, 'archer')))
     if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && first.kind === 'stable' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
+      () => tryTrain(g, first, 'scout')))
+    dock.appendChild(iconButton(
+      { cmd: 'train-knight', label: 'Train knight (Castle Age)', icon: ICON.sword,
+        cost: UNITS.knight.cost, locked: g.age[0] < (UNITS.knight.age ?? 1) },
+      () => tryTrain(g, first, 'knight')))
+    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
     if (buildCat === null) {
       // three clear doors: what kind of building?
@@ -430,7 +443,7 @@ export function syncUI(g: Game): void {
       dock.appendChild(back)
       const lists: Record<'economy' | 'military' | 'study', Buildable[]> = {
         economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter'],
-        military: ['barracks', 'archeryrange', 'watchtower'],
+        military: ['barracks', 'archeryrange', 'stable', 'watchtower'],
         study: ['blacksmith'],
       }
       // symbolic icons where a miniature would be muddy
@@ -444,7 +457,7 @@ export function syncUI(g: Game): void {
         dock.appendChild(iconButton(
           { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind, g.age[0]), cost: b.cost, locked },
           () => {
-            if (g.age[0] < (b.age ?? 1)) { toast(g, 'Reach the Feudal Age first!'); return }
+            if (g.age[0] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
             g.placing = kind
             g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
             g.uiDirty = true

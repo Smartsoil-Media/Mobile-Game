@@ -28,6 +28,10 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Army** button selects all your soldiers and jumps the camera to them
 - **Archery Range** (175 wood) trains archers — ranged units that shoot
   arrows from a distance (30 food + 35 gold each)
+- **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your
+  eyes on the meadow can be replaced; the **Knight** button waits behind a
+  padlock until the Castle Age (spearmen already carry a +12 bonus against
+  cavalry, knights included)
 - **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
   range and shelter up to 5 units — tap a tower with units selected to
   garrison them, select it to open the doors

@@ -26,7 +26,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill' | 'blacksmith', tc: Ent): Ent | null {
+function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill' | 'blacksmith' | 'stable', tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 1, b.cost)) return null
   for (let tries = 0; tries < 40; tries++) {
@@ -102,6 +102,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
     } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
       !g.ents.some(e => e.team === 1 && e.kind === 'blacksmith')) {
       tryPlace(g, 'blacksmith', tc) // and then a forge for its soldiers
+    } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
+      !g.ents.some(e => e.team === 1 && e.kind === 'stable')) {
+      tryPlace(g, 'stable', tc) // a stable, so a fallen scout can be replaced
     }
   }
 
@@ -138,6 +141,14 @@ export function updateEnemyAI(g: Game, dt: number): void {
   }
   // with a grown village and a standing guard, food goes to the age-up instead of more spears
   const savingForAge = g.age[1] === 1 && !g.ageRes[1] && vills.length >= 6 && soldiers.length >= 4
+  // a village without eyes rides again: replace a fallen scout from the stable
+  const stable = g.ents.find(e => e.team === 1 && e.kind === 'stable' && e.complete)
+  if (stable && (stable.queue?.length ?? 0) === 0 &&
+    !g.ents.some(e => e.team === 1 && e.kind === 'scout') &&
+    p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.scout.cost)) {
+    pay(g, 1, UNITS.scout.cost)
+    stable.queue!.push({ kind: 'scout', t: UNITS.scout.time, total: UNITS.scout.time })
+  }
   if (rax && !savingForAge && (rax.queue?.length ?? 0) < 2 && p.used + queuedUnits(g) < p.cap) {
     // Dark Age fields spearmen; Feudal mixes in swordsmen when gold allows
     const kind = (g.age[1] >= 2 && g.res[1].gold >= UNITS.swordsman.cost.gold &&

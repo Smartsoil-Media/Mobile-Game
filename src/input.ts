@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf } from './world'
 
 export interface PointerState {
@@ -81,7 +81,7 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
-  if ((b.age ?? 1) > g.age[0]) { toast(g, 'Reach the Feudal Age first!'); return false }
+  if ((b.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
   if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
   if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
   const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)

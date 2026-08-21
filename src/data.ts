@@ -4,11 +4,11 @@ export type Team = 0 | 1
 export const NEUTRAL = -1
 
 export type Kind =
-  | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout'
-  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower'
+  | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -121,6 +121,7 @@ export const UNITS: Record<string, {
   spearman: { hp: 55, dmg: 6, range: 20, cd: 1.0, speed: 37, aggro: 130, cost: cost({ food: 35, wood: 20 }), time: 8, r: 11, los: 180, name: 'Spearman' },
   archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, age: 2, name: 'Archer' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
+  knight: { hp: 110, dmg: 11, range: 16, cd: 0.9, speed: 50, aggro: 140, cost: cost({ food: 60, gold: 75 }), time: 12, r: 13, los: 220, age: 3, name: 'Knight' },
 }
 
 export const BUILDINGS: Record<string, {
@@ -132,6 +133,7 @@ export const BUILDINGS: Record<string, {
   farm: { hp: 120, r: 24, foot: 30, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
   barracks: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
   archeryrange: { hp: 300, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
+  stable: { hp: 350, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
   watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
@@ -196,7 +198,7 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
 // counter bonuses: extra damage dealt by attacker kind against target kind.
 // Scouts stand in for cavalry until the stable arrives; knights will slot in here.
 export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
-  spearman: { scout: 12 },
+  spearman: { scout: 12, knight: 12 },
   archer: { spearman: 4 },
 }
 
@@ -217,7 +219,7 @@ export const FOG_CELL = 32
 export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
 export const AGE2_COST = cost({ food: 275 })
 export const AGE2_TIME = 35
-export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age']
+export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age', 'Castle Age']
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
 export const POP_MAX = 25
@@ -243,12 +245,13 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 
 export function isUnit(e: Ent): boolean {
   return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
-    e.kind === 'archer' || e.kind === 'scout'
+    e.kind === 'archer' || e.kind === 'scout' || e.kind === 'knight'
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
-    e.kind === 'archeryrange' || e.kind === 'lumbercamp' || e.kind === 'miningcamp' ||
-    e.kind === 'mill' || e.kind === 'blacksmith' || e.kind === 'farm' || e.kind === 'watchtower'
+    e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
+    e.kind === 'miningcamp' || e.kind === 'mill' || e.kind === 'blacksmith' ||
+    e.kind === 'farm' || e.kind === 'watchtower'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'
