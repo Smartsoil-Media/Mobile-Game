@@ -360,10 +360,10 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
   for (const e of g.ents) {
     if (isUnit(e)) continue
     if (isBuilding(e)) {
-      // square vs square, snug 6px seam — but palisade pieces butt right up
-      // against each other so a dragged line reads as one solid fence
+      // square vs square, snug 6px seam — but palisade pieces overlap freely
+      // so a dragged line reads as one solid fence, diagonals included
       const of = BUILDINGS[e.kind].foot
-      const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -2 : 6
+      const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -6 : 6
       if (Math.abs(x - e.x) < f + of + gap && Math.abs(y - e.y) < f + of + gap) return false
     } else {
       // square vs round resource: nearest point on the square to the circle
@@ -375,19 +375,17 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
   return true
 }
 
-// the run of snap-grid posts a dragged wall line would place, flagged buildable or not
+// the run of posts a dragged wall line would place, flagged buildable or not.
+// Posts sit evenly along the true line (no per-post grid snap), so diagonal
+// fences run straight instead of stair-stepping.
 export function wallLinePoints(g: Game): { x: number; y: number; ok: boolean }[] {
   if (!g.placePos || !g.placeEnd) return []
   const a = g.placePos, b = g.placeEnd
   const steps = Math.max(1, Math.round(dist(a.x, a.y, b.x, b.y) / PLACE_SNAP))
   const pts: { x: number; y: number; ok: boolean }[] = []
-  const seen = new Set<string>()
   for (let i = 0; i <= steps; i++) {
-    const x = Math.round((a.x + (b.x - a.x) * (i / steps)) / PLACE_SNAP) * PLACE_SNAP
-    const y = Math.round((a.y + (b.y - a.y) * (i / steps)) / PLACE_SNAP) * PLACE_SNAP
-    const key = `${x},${y}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    const x = a.x + (b.x - a.x) * (i / steps)
+    const y = a.y + (b.y - a.y) * (i / steps)
     pts.push({ x, y, ok: canPlaceAt(g, 'wall', x, y) })
   }
   return pts
