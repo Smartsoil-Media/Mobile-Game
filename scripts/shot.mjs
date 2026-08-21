@@ -270,10 +270,12 @@ const aiCheck = await page3.evaluate(() => {
     vills: g.ents.filter(e => e.team === 1 && e.kind === 'villager').length,
     barracks: g.ents.filter(e => e.team === 1 && e.kind === 'barracks').length,
     houses: g.ents.filter(e => e.team === 1 && e.kind === 'house').length,
-    soldiers: g.ents.filter(e => e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman')).length,
+    soldiers: g.ents.filter(e => e.team === 1 &&
+      (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer')).length,
     attacking: g.ai.attacking,
     over: g.over,
     age: g.age[1],
+    ageing: !!g.ageRes[1],
     patron: g.patron[1],
     techs: { ...g.techs[1] },
   }
@@ -281,7 +283,9 @@ const aiCheck = await page3.evaluate(() => {
 console.log('enemy AI after 300 sim-s:', aiCheck)
 if (aiCheck.vills <= 3) throw new Error('enemy AI trained no villagers')
 if (aiCheck.barracks < 1) throw new Error('enemy AI built no barracks')
-if (aiCheck.soldiers < 1 && !aiCheck.attacking) throw new Error('enemy AI raised no army')
+// a smart village either fields an army or is banking hard for the Feudal Age
+if (aiCheck.soldiers < 1 && !aiCheck.attacking && aiCheck.age < 2 && !aiCheck.ageing)
+  throw new Error('enemy AI neither raised an army nor advanced its age')
 if (aiCheck.age >= 2) {
   if (!aiCheck.patron) throw new Error('enemy AI reached Feudal without choosing a patron')
   // its patron's tech must have come with the age
@@ -294,7 +298,8 @@ await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   g.ai.enabled = false
-  for (const e of g.ents.filter(e => e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman'))) e.hp = 0
+  for (const e of g.ents.filter(e => e.team === 1 &&
+    (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer'))) e.hp = 0
   for (const v of g.ents.filter(e => e.team === 1 && e.kind === 'villager')) {
     v.state = 'idle'; v.targetId = undefined
   }
@@ -582,6 +587,61 @@ const gateResult = await page3.evaluate(({ villId, pegId }) => {
 }, gatePass)
 console.log('gate pass-through:', gateResult)
 if (!gateResult.arrived) throw new Error('villager could not pass through a friendly gate')
+
+// 4.68) the rival counters: facing a spear wall, it leans into archers
+const counterSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tcE = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
+  const raxId = g.ents.some(e => e.team === 1 && e.kind === 'barracks' && e.complete)
+    ? null : window.__game.spawn('barracks', 1, tcE.x - 130, tcE.y + 130)
+  const rangeId = window.__game.spawn('archeryrange', 1, tcE.x + 130, tcE.y + 130)
+  const houseIds = [ // room to recruit — the test measures choices, not housing
+    window.__game.spawn('house', 1, tcE.x - 200, tcE.y - 60),
+    window.__game.spawn('house', 1, tcE.x + 200, tcE.y - 60),
+  ]
+  g.age = [2, 2]
+  g.res[1] = { wood: 500, food: 800, gold: 500, stone: 0 }
+  const spearIds = []
+  for (let i = 0; i < 6; i++) spearIds.push(window.__game.spawn('spearman', 0, 300 + i * 24, 1150))
+  g.ai.enabled = true
+  g.ai.attackSize = 99 // think, don't march
+  g.ai.thinkT = 0
+  window.__game.setSpeed(10)
+  return { spearIds, rangeId, raxId, houseIds }
+})
+await waitSim(page3, 6) // a handful of think ticks
+const counterResult = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  g.ai.enabled = false
+  let archers = 0, melee = 0
+  for (const e of g.ents) {
+    if (e.team !== 1 || !e.queue) continue
+    for (const q of e.queue) {
+      if (q.kind === 'archer') archers++
+      else if (q.kind === 'spearman' || q.kind === 'swordsman') melee++
+    }
+  }
+  return { archers, melee }
+})
+console.log('counter play vs spear wall:', counterResult)
+if (counterResult.archers < 2) throw new Error('AI facing a spear wall barely queued archers')
+await page3.evaluate(({ spearIds, rangeId, raxId, houseIds }) => { // tear the practice field down
+  const g = window.__game.state
+  for (const id of spearIds) { const e = g.byId.get(id); if (e) e.hp = 0 }
+  for (const e of g.ents.filter(e => e.team === 1 && e.queue)) {
+    e.queue.length = 0
+    if (e.research) e.research = undefined
+    if (!e.complete) e.hp = 0 // any project it broke ground on during the ticks
+  }
+  const range = g.byId.get(rangeId); if (range) range.hp = 0
+  if (raxId) { const r = g.byId.get(raxId); if (r) r.hp = 0 }
+  for (const id of houseIds) { const h = g.byId.get(id); if (h) h.hp = 0 }
+  for (const v of g.ents.filter(e => e.team === 1 && e.kind === 'villager')) {
+    v.state = 'idle'; v.targetId = undefined
+  }
+}, counterSetup)
+await waitSim(page3, 1)
 
 // 4.7) the mill takes food drop-offs, sparing the long walk home
 const millCheck = await page3.evaluate(() => {
@@ -1267,7 +1327,7 @@ const fogStart = await page3.evaluate(() => {
 console.log('fog start:', fogStart)
 if (!fogStart.hasScout) throw new Error('player scout missing')
 if (fogStart.explored) throw new Error('enemy base should start unexplored')
-await waitSim(page3, 30)
+await waitSim(page3, 50) // the aged-up enemy village is denser now; the ride takes longer
 const fogSeen = await page3.evaluate(({ idx }) => {
   const g = window.__game.state
   return { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }

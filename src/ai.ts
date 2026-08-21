@@ -1,8 +1,8 @@
-// The enemy village: a simple AI that plays by the same rules as the player.
-// It gathers with villagers, trains from real resources, builds houses,
-// a barracks and farms, and attacks in growing pushes.
+// The enemy village: an AI that plays by the same rules as the player.
+// It gathers, builds, banks food for the age-up, reads the player's army
+// composition and trains counters, and attacks in growing pushes.
 import {
-  Game, Ent, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
+  Game, Ent, Cost, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
   SOURCE_OF, POP_MAX, AGE2_COST, AGE2_TIME,
   dist, isUnit, isBuilding,
 } from './data'
@@ -26,7 +26,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill' | 'blacksmith' | 'stable', tc: Ent): Ent | null {
+function tryPlace(g: Game, kind: 'house' | 'barracks' | 'farm' | 'mill' | 'blacksmith' | 'stable' | 'archeryrange', tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 1, b.cost)) return null
   for (let tries = 0; tries < 40; tries++) {
@@ -51,8 +51,19 @@ export function updateEnemyAI(g: Game, dt: number): void {
   if (!tc) return
   const vills = g.ents.filter(e => e.team === 1 && e.kind === 'villager' && !e.hidden)
   const soldiers = g.ents.filter(e =>
-    e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman'))
+    e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer'))
   const p = pop(g, 1)
+  const rax = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
+  const range = g.ents.find(e => e.team === 1 && e.kind === 'archeryrange' && e.complete)
+  const intruder = nearest(g, tc.x, tc.y,
+    o => o.team === 0 && (isUnit(o) || isBuilding(o)) && !o.hidden, 340)
+
+  // once the village stands, food is banked for the age-up — training spends
+  // only what's left over. Raids suspend the thrift: survival first.
+  const reserving = g.age[1] === 1 && !g.ageRes[1] && !!rax && vills.length >= 6 && !intruder
+  const foodReserve = reserving ? AGE2_COST.food : 0 // the trigger below fires the moment it's banked
+  const canSpend = (cost: Cost) =>
+    canAfford(g, 1, cost) && g.res[1].food - foodReserve >= cost.food
 
   // -- economy: keep villagers on quota, spare hands on wood --
   const counts: Record<ResKind, number> = { wood: 0, food: 0, gold: 0, stone: 0 }
@@ -77,6 +88,18 @@ export function updateEnemyAI(g: Game, dt: number): void {
       if (src) { v.state = 'gather'; v.targetId = src.id; v.gatherT = 0 }
     }
   }
+  // one gentle retask per think: pile onto food while banking the age-up,
+  // drift back to the normal spread afterwards
+  const wantFood = reserving ? 5 : 3
+  const retask = (v: Ent | undefined, r: ResKind) => {
+    const src = v && nearestSource(g, tc, r)
+    if (v && src) { v.state = 'gather'; v.targetId = src.id; v.gatherT = 0 }
+  }
+  if (counts.food < wantFood) {
+    retask(vills.find(v => { const r = gatherResOf(g, v); return r === 'gold' || r === 'wood' }), 'food')
+  } else if (!reserving && counts.food > 3) {
+    retask(vills.find(v => gatherResOf(g, v) === 'food'), counts.wood < 3 ? 'wood' : 'gold')
+  }
 
   // -- construction: one project at a time --
   const sites = g.ents.filter(e => e.team === 1 && isBuilding(e) && !e.complete)
@@ -99,6 +122,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'farm', tc)
     } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {
       tryPlace(g, 'mill', tc) // a feudal village wants its mill
+    } else if (g.age[1] >= 2 && g.res[1].wood > 220 &&
+      !g.ents.some(e => e.team === 1 && e.kind === 'archeryrange')) {
+      tryPlace(g, 'archeryrange', tc) // archers, for when spears crowd the meadow
     } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
       !g.ents.some(e => e.team === 1 && e.kind === 'blacksmith')) {
       tryPlace(g, 'blacksmith', tc) // and then a forge for its soldiers
@@ -108,10 +134,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
     }
   }
 
-  // -- the march of progress: research the Feudal Age when established --
-  const rax = g.ents.find(e => e.team === 1 && e.kind === 'barracks' && e.complete)
+  // -- the march of progress: research the Feudal Age the moment it's banked --
   if (g.age[1] === 1 && !g.ageRes[1] && rax && vills.length >= 6 &&
-    g.res[1].food >= AGE2_COST.food + UNITS.villager.cost.food) {
+    g.res[1].food >= AGE2_COST.food) {
     pay(g, 1, AGE2_COST)
     const patrons = Object.keys(PATRONS) as PatronId[]
     g.patron[1] = patrons[Math.floor(Math.random() * patrons.length)] // the spirits call whom they will
@@ -133,36 +158,56 @@ export function updateEnemyAI(g: Game, dt: number): void {
   }
 
   // -- training --
-  const room = p.used + queuedUnits(g) < p.cap
-  if ((tc.queue?.length ?? 0) === 0 && vills.length < VILLAGER_GOAL && room &&
-    canAfford(g, 1, UNITS.villager.cost)) {
+  if ((tc.queue?.length ?? 0) === 0 && vills.length < VILLAGER_GOAL &&
+    p.used + queuedUnits(g) < p.cap && canSpend(UNITS.villager.cost)) {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
   }
-  // with a grown village and a standing guard, food goes to the age-up instead of more spears
-  const savingForAge = g.age[1] === 1 && !g.ageRes[1] && vills.length >= 6 && soldiers.length >= 4
   // a village without eyes rides again: replace a fallen scout from the stable
   const stable = g.ents.find(e => e.team === 1 && e.kind === 'stable' && e.complete)
   if (stable && (stable.queue?.length ?? 0) === 0 &&
     !g.ents.some(e => e.team === 1 && e.kind === 'scout') &&
-    p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.scout.cost)) {
+    p.used + queuedUnits(g) < p.cap && canSpend(UNITS.scout.cost)) {
     pay(g, 1, UNITS.scout.cost)
     stable.queue!.push({ kind: 'scout', t: UNITS.scout.time, total: UNITS.scout.time })
   }
-  if (rax && !savingForAge && (rax.queue?.length ?? 0) < 2 && p.used + queuedUnits(g) < p.cap) {
-    // Dark Age fields spearmen; Feudal mixes in swordsmen when gold allows
-    const kind = (g.age[1] >= 2 && g.res[1].gold >= UNITS.swordsman.cost.gold &&
-      Math.random() < 0.6) ? 'swordsman' : 'spearman'
-    if (canAfford(g, 1, UNITS[kind].cost)) {
-      pay(g, 1, UNITS[kind].cost)
-      rax.queue!.push({ kind, t: UNITS[kind].time, total: UNITS[kind].time })
+
+  // read the player's army and lean into the counters
+  const foe = { spear: 0, sword: 0, archer: 0, cav: 0 }
+  for (const e of g.ents) {
+    if (e.team !== 0) continue
+    if (e.kind === 'spearman') foe.spear++
+    else if (e.kind === 'swordsman') foe.sword++
+    else if (e.kind === 'archer') foe.archer++
+    else if (e.kind === 'scout' || e.kind === 'knight') foe.cav++
+  }
+  const pickTrainKind = (): 'spearman' | 'swordsman' | 'archer' | null => {
+    const opts: { kind: 'spearman' | 'swordsman' | 'archer'; w: number }[] = []
+    if (rax && (rax.queue?.length ?? 0) < 2 && canSpend(UNITS.spearman.cost)) {
+      opts.push({ kind: 'spearman', w: 1 + 2 * foe.cav })
     }
+    if (rax && (rax.queue?.length ?? 0) < 2 && g.age[1] >= 2 && canSpend(UNITS.swordsman.cost)) {
+      opts.push({ kind: 'swordsman', w: 0.6 + 1.2 * (foe.archer + foe.sword) })
+    }
+    if (range && (range.queue?.length ?? 0) < 2 && g.age[1] >= 2 && canSpend(UNITS.archer.cost)) {
+      opts.push({ kind: 'archer', w: 0.6 + 1.5 * foe.spear })
+    }
+    if (!opts.length) return null
+    let roll = Math.random() * opts.reduce((s, o) => s + o.w, 0)
+    for (const o of opts) { roll -= o.w; if (roll <= 0) return o.kind }
+    return opts[opts.length - 1].kind
+  }
+  for (let i = 0; i < 2; i++) { // up to two recruits per think, across both halls
+    if (p.used + queuedUnits(g) >= p.cap) break
+    const kind = pickTrainKind()
+    if (!kind) break
+    const host = kind === 'archer' ? range! : rax!
+    pay(g, 1, UNITS[kind].cost)
+    host.queue!.push({ kind, t: UNITS[kind].time, total: UNITS[kind].time })
   }
 
   // -- war: defend the home meadow, push when the army is mustered --
   const idleSoldiers = soldiers.filter(s => s.state === 'idle')
-  const intruder = nearest(g, tc.x, tc.y,
-    o => o.team === 0 && (isUnit(o) || isBuilding(o)) && !o.hidden, 340)
   if (intruder) {
     for (const s of idleSoldiers) { s.state = 'attack'; s.targetId = intruder.id; s.resume = null }
     return
