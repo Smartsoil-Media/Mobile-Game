@@ -1,9 +1,10 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, isUnit, isBuilding } from './data'
-import { isVisibleToPlayer, canPlaceAt } from './world'
+import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding } from './data'
+import { isVisibleToPlayer, canPlaceAt, wallLinePoints } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
+  drawWall, drawGate,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout,
 } from './sprites'
 
@@ -139,6 +140,12 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'mill': e.complete ? drawMill(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'blacksmith': e.complete ? drawBlacksmith(ctx, e, time) : drawSite(ctx, e); break
       case 'stable': e.complete ? drawStable(ctx, e, time) : drawSite(ctx, e); break
+      case 'wall': e.complete ? drawWall(ctx, e) : drawSite(ctx, e); break
+      case 'gate': e.complete
+        ? drawGate(ctx, e, time, g.ents.some(u =>
+            isUnit(u) && !u.hidden && u.team === e.team && dist(u.x, u.y, e.x, e.y) < 42))
+        : drawSite(ctx, e)
+        break
       case 'villager': drawVillager(ctx, e, time); break
       case 'swordsman': drawSwordsman(ctx, e, time); break
       case 'spearman': drawSpearman(ctx, e, time); break
@@ -191,7 +198,27 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   drawFog(ctx, g)
 
   // placement ghost rides above the fog so it's always legible
-  if (g.placing && g.placePos) {
+  if (g.placing === 'wall' && g.placePos && g.placeEnd) {
+    // a dragged fence line: one little square per post, ends are grab handles
+    const pts = wallLinePoints(g)
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i]
+      ctx.fillStyle = p.ok ? 'rgba(143, 191, 106, 0.3)' : 'rgba(201, 82, 94, 0.34)'
+      rrFill(ctx, p.x - 8, p.y - 5, 16, 12, 3)
+      if (p.ok) {
+        ctx.globalAlpha = 0.55
+        drawWall(ctx, { x: p.x, y: p.y, seed: i } as any)
+        ctx.globalAlpha = 1
+      }
+    }
+    ctx.strokeStyle = 'rgba(251, 243, 228, 0.95)'
+    ctx.lineWidth = 2.4
+    ctx.setLineDash([5, 4])
+    for (const h of [g.placePos, g.placeEnd]) {
+      ctx.beginPath(); ctx.arc(h.x, h.y, 16, 0, Math.PI * 2); ctx.stroke()
+    }
+    ctx.setLineDash([])
+  } else if (g.placing && g.placePos) {
     const b = BUILDINGS[g.placing]
     const { x, y } = g.placePos
     const ok = canPlaceAt(g, g.placing, x, y)
@@ -230,6 +257,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'mill': drawMill(ctx, ghost, time, g.age[0]); break
       case 'blacksmith': drawBlacksmith(ctx, ghost, time); break
       case 'stable': drawStable(ctx, ghost, time); break
+      case 'gate': drawGate(ctx, ghost, time, false); break
     }
     ctx.globalAlpha = 1
   }

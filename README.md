@@ -32,6 +32,11 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
   eyes on the meadow can be replaced; the **Knight** button waits behind a
   padlock until the Castle Age (spearmen already carry a +12 bonus against
   cavalry, knights included)
+- **Palisade walls** (3 wood a post, Dark Age) place as a dragged line —
+  grab either end of the fence and stretch it; the ✓ shows a live post
+  count and price, and your villager builds along the row without being
+  re-told. **Gates** (20 wood) swing open for your own units and stay
+  barred to the enemy, who must chop through
 - **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
   range and shelter up to 5 units — tap a tower with units selected to
   garrison them, select it to open the doors

@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
 import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
-import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf } from './world'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -82,6 +82,7 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
   if ((b.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
+  if (kind === 'wall') return tryPlaceWall(g)
   if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
   if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
   const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
@@ -91,6 +92,34 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
   commandBuild(g, villagers, site)
   g.placing = null
   g.placePos = null
+  g.placeEnd = null
+  g.uiDirty = true
+  return true
+}
+
+// place the whole dragged line of palisade posts at once
+function tryPlaceWall(g: Game): boolean {
+  const b = BUILDINGS.wall
+  const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
+  if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
+  const pts = wallLinePoints(g).filter(p => p.ok)
+  if (!pts.length) { toast(g, "Can't build there — the ground is blocked."); return false }
+  let placed = 0
+  let first: Ent | null = null
+  for (const p of pts) {
+    if (!canAfford(g, 0, b.cost)) break
+    if (!canPlaceAt(g, 'wall', p.x, p.y)) continue // earlier posts may crowd a later spot
+    pay(g, 0, b.cost)
+    const site = spawn(g, 'wall', 0, p.x, p.y, false)
+    if (!first) first = site
+    placed++
+  }
+  if (!placed) { toast(g, 'Not enough wood for the fence.'); return false }
+  if (placed < pts.length) toast(g, 'The wood ran out partway along the fence.')
+  commandBuild(g, villagers, first!)
+  g.placing = null
+  g.placePos = null
+  g.placeEnd = null
   g.uiDirty = true
   return true
 }
@@ -107,8 +136,17 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   const { x, y } = screenToWorld(g, canvas, sx, sy)
 
   if (g.placing) {
-    // while placing, taps just move the ghost (snapped); the tick/cross decide
-    g.placePos = snapPlace(x, y)
+    // while placing, taps just move the ghost (snapped); the tick/cross decide.
+    // Wall lines: the tap moves whichever end of the fence is closer.
+    const p = snapPlace(x, y)
+    if (g.placing === 'wall' && g.placePos && g.placeEnd) {
+      const da = dist(x, y, g.placePos.x, g.placePos.y)
+      const db = dist(x, y, g.placeEnd.x, g.placeEnd.y)
+      if (da < db) g.placePos = p
+      else g.placeEnd = p
+    } else {
+      g.placePos = p
+    }
     return
   }
 
@@ -273,6 +311,7 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
   g.placing = null // selection is changing hands; drop any pending placement
   g.placePos = null
+  g.placeEnd = null
   g.selection = army.map(e => e.id)
   // bring the camera to the troops so the button visibly does something
   g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length
@@ -284,8 +323,8 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
 // ---- Pointer plumbing ----
 
 export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
-  const ps: PointerState & { dragGhost?: boolean } =
-    { pointers: new Map(), downX: 0, downY: 0, downT: 0, panning: false, pinchDist: 0, dragGhost: false }
+  const ps: PointerState & { dragGhost?: boolean; dragEnd?: boolean } =
+    { pointers: new Map(), downX: 0, downY: 0, downT: 0, panning: false, pinchDist: 0, dragGhost: false, dragEnd: false }
 
   canvas.addEventListener('pointerdown', ev => {
     canvas.setPointerCapture(ev.pointerId)
@@ -295,10 +334,21 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
       ps.panning = false
       // grabbing the placement ghost? then the finger moves it, not the camera
       ps.dragGhost = false
+      ps.dragEnd = false
       if (g.placing && g.placePos) {
         const w = screenToWorld(g, canvas, ev.clientX, ev.clientY)
-        const b = BUILDINGS[g.placing]
-        if (dist(w.x, w.y, g.placePos.x, g.placePos.y) < b.r * 1.5 + 14) ps.dragGhost = true
+        if (g.placing === 'wall' && g.placeEnd) {
+          // grab whichever fence end is under the finger
+          const da = dist(w.x, w.y, g.placePos.x, g.placePos.y)
+          const db = dist(w.x, w.y, g.placeEnd.x, g.placeEnd.y)
+          if (Math.min(da, db) < 46) {
+            ps.dragGhost = true
+            ps.dragEnd = db <= da
+          }
+        } else {
+          const b = BUILDINGS[g.placing]
+          if (dist(w.x, w.y, g.placePos.x, g.placePos.y) < b.r * 1.5 + 14) ps.dragGhost = true
+        }
       }
     } else if (ps.pointers.size === 2) {
       const [a, b] = [...ps.pointers.values()]
@@ -331,7 +381,8 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
     if (ps.panning) {
       if (ps.dragGhost && g.placing && g.placePos) {
         const w = screenToWorld(g, canvas, ev.clientX, ev.clientY)
-        g.placePos = snapPlace(w.x, w.y)
+        if (g.placing === 'wall' && ps.dragEnd) g.placeEnd = snapPlace(w.x, w.y)
+        else g.placePos = snapPlace(w.x, w.y)
       } else {
         g.camera.x -= (p.x - prevX) / g.camera.zoom
         g.camera.y -= (p.y - prevY) / g.camera.zoom

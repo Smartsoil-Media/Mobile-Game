@@ -36,6 +36,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   let block: Ent | null = null
   for (const o of g.ents) {
     if (o === e || !isBuilding(o)) continue
+    if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
     const clearance = e.r + o.r * 0.85
     if (dist(tx, ty, o.x, o.y) < e.r + o.r + 24) continue // that's where we're headed — walk right up
     if (dist(px, py, o.x, o.y) < clearance) { block = o; break }
@@ -237,7 +238,10 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         site.complete = true
         site.hp = b.hp
         puff(g, site.x, site.y - site.r * 0.5, '#FBF3E4', 10)
-        e.state = 'idle'; e.targetId = undefined
+        // keep the hammer swinging: pick up the next site in the row (wall lines!)
+        const next = nearest(g, e.x, e.y, o => o.team === e.team && isBuilding(o) && !o.complete, 170)
+        if (next) { e.targetId = next.id }
+        else { e.state = 'idle'; e.targetId = undefined }
       }
       break
     }
@@ -409,7 +413,7 @@ function killEnt(g: Game, e: Ent): void {
   g.byId.delete(e.id)
   const si = g.selection.indexOf(e.id)
   if (si >= 0) { g.selection.splice(si, 1); g.uiDirty = true }
-  if (!g.selection.length && g.placing) { g.placing = null; g.placePos = null }
+  if (!g.selection.length && g.placing) { g.placing = null; g.placePos = null; g.placeEnd = null }
 }
 
 function separation(g: Game): void {
@@ -437,6 +441,7 @@ function separation(g: Game): void {
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'tree') continue // walkable under canopies, keeps paths simple
+      if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
       const dx = a.x - o.x, dy = a.y - o.y
       const d = Math.hypot(dx, dy)
       const min = a.r + o.r * 0.85

@@ -3,9 +3,9 @@ import {
   Game, Ent, Buildable, Cost, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
   AGE2_COST, AGE2_TIME, AGE_NAMES, isUnit,
 } from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf } from './world'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints } from './world'
 import { selectArmy, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -66,6 +66,8 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     watchtower: { scale: 0.58, cx: 0, cy: -23 },
     archeryrange: { scale: 0.62, cx: -2, cy: -3 },
     stable: { scale: 0.6, cx: 0, cy: -5 },
+    wall: { scale: 1.5, cx: 0, cy: -3 },
+    gate: { scale: 1.05, cx: 0, cy: -2 },
     house: { scale: 1.0, cx: 0, cy: -5.5 },
     barracks: { scale: 0.72, cx: 0, cy: -7.5 },
     lumbercamp: { scale: 0.72, cx: 3, cy: -2.5 },
@@ -89,6 +91,8 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'watchtower': drawWatchtower(ctx, fake, 0.2); break
     case 'archeryrange': drawArcheryRange(ctx, fake, 0.2); break
     case 'stable': drawStable(ctx, fake, 0.2); break
+    case 'wall': drawWall(ctx, fake); break
+    case 'gate': drawGate(ctx, fake, 0.2, false); break
     case 'house': drawHouse(ctx, fake, 0.2, age); break
     case 'barracks': drawBarracks(ctx, fake, 0.2, age); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
@@ -277,6 +281,21 @@ export function syncUI(g: Game): void {
   el('s-pop').classList.toggle('alert', idleVills > 0)
   updateAffordability(g)
 
+  // wall placement: the ✓ shows a live post count and total price as you drag
+  if (g.placing === 'wall' && g.placePos && g.placeEnd) {
+    const btn = document.querySelector<HTMLButtonElement>('#dock-buttons [data-cmd="confirm"]')
+    if (btn) {
+      const n = wallLinePoints(g).filter(p => p.ok).length
+      const total = Math.max(1, n) * BUILDINGS.wall.cost.wood
+      btn.dataset.wood = String(total)
+      const badge = btn.querySelector('.badge')
+      if (badge && badge.textContent !== `×${n}`) badge.textContent = `×${n}`
+      const costEl = btn.querySelector('i')
+      const want = `${total}${ICON.wood}`
+      if (costEl && costEl.dataset.was !== want) { costEl.innerHTML = want; costEl.dataset.was = want }
+    }
+  }
+
   // keep visible progress rings moving between full dock rebuilds
   const sel0 = g.byId.get(g.selection[0] ?? -1)
   document.querySelectorAll<HTMLElement>('#dock-buttons .queue').forEach(q => {
@@ -323,11 +342,12 @@ export function syncUI(g: Game): void {
     cross.dataset.cmd = 'cancel-place'
     cross.setAttribute('aria-label', 'Cancel placement')
     cross.textContent = '✕'
-    cross.addEventListener('click', () => { g.placing = null; g.placePos = null; g.uiDirty = true })
+    cross.addEventListener('click', () => { g.placing = null; g.placePos = null; g.placeEnd = null; g.uiDirty = true })
     dock.appendChild(cross)
     const b = BUILDINGS[g.placing]
     const tick = iconButton(
-      { cmd: 'confirm', label: `Place ${b.name}`, icon: `<span class="tick">✓</span>`, cost: b.cost },
+      { cmd: 'confirm', label: `Place ${b.name}`, icon: `<span class="tick">✓</span>`, cost: b.cost,
+        badge: g.placing === 'wall' ? '×1' : undefined },
       () => {
         if (g.placePos) tryPlaceBuilding(g, g.placing!, g.placePos.x, g.placePos.y)
       })
@@ -443,7 +463,7 @@ export function syncUI(g: Game): void {
       dock.appendChild(back)
       const lists: Record<'economy' | 'military' | 'study', Buildable[]> = {
         economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter'],
-        military: ['barracks', 'archeryrange', 'stable', 'watchtower'],
+        military: ['barracks', 'archeryrange', 'stable', 'watchtower', 'wall', 'gate'],
         study: ['blacksmith'],
       }
       // symbolic icons where a miniature would be muddy
@@ -460,6 +480,9 @@ export function syncUI(g: Game): void {
             if (g.age[0] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
             g.placing = kind
             g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
+            g.placeEnd = kind === 'wall'
+              ? snapPlace(g.camera.x + 96, g.camera.y) // a fence starts as a short run; drag the ends
+              : null
             g.uiDirty = true
           }))
       }

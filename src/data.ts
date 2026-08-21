@@ -5,10 +5,10 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
-  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower'
+  | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'blacksmith' | 'farm' | 'watchtower' | 'wall' | 'gate'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
 
-export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+export type Buildable = 'house' | 'farm' | 'mill' | 'blacksmith' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -90,6 +90,7 @@ export interface Game {
   selection: number[]
   placing: Buildable | null
   placePos: { x: number; y: number } | null
+  placeEnd: { x: number; y: number } | null // walls stretch between placePos and here
   over: 'win' | 'lose' | null
   overT: number
   particles: Particle[]
@@ -139,6 +140,8 @@ export const BUILDINGS: Record<string, {
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
   blacksmith: { hp: 300, r: 34, foot: 38, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Blacksmith' },
+  wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
+  gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
 }
 
 // ---- economy techs & patron spirits ----
@@ -251,7 +254,7 @@ export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
     e.kind === 'miningcamp' || e.kind === 'mill' || e.kind === 'blacksmith' ||
-    e.kind === 'farm' || e.kind === 'watchtower'
+    e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'

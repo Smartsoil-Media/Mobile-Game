@@ -112,9 +112,9 @@ const milDock = await page.evaluate(() => ({
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
 }))
 console.log('military menu:', milDock)
-if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-stable,build-watchtower')
+if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-stable,build-watchtower,build-wall,build-gate')
   throw new Error('military menu wrong: ' + milDock.buttons.join(','))
-if (milDock.canvases !== 2) throw new Error('stable and watchtower should use sprite icons')
+if (milDock.canvases !== 4) throw new Error('stable/watchtower/wall/gate should use sprite icons')
 await page.tap('[data-cmd="back"]')
 await page.waitForTimeout(200)
 await page.evaluate(() => {
@@ -501,6 +501,79 @@ await page3.evaluate(() => { // retire the extra scout so fog tests keep a singl
   for (const s of scouts.slice(1)) s.hp = 0
 })
 await waitSim(page3, 1)
+
+// 4.67) palisades: drag a fence line, posts chain-build, gates let friends through
+const wallSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 100
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
+  v.x = 1400; v.y = 840; v.state = 'idle'; v.targetId = undefined
+  window.__game.select(v.id)
+  return { wood: g.res[0].wood, villId: v.id }
+})
+await page3.waitForTimeout(250)
+await openCat(page3, 'military')
+await page3.tap('[data-cmd="build-wall"]')
+await page3.waitForTimeout(200)
+const wallPlacing = await page3.evaluate(() => {
+  const g = window.__game.state
+  const ok = g.placing === 'wall' && !!g.placePos && !!g.placeEnd
+  g.placePos = { x: 1392, y: 800 }
+  g.placeEnd = { x: 1504, y: 800 }
+  return { ok }
+})
+console.log('wall placing:', wallPlacing)
+if (!wallPlacing.ok) throw new Error('wall placement did not open with a line')
+await page3.waitForTimeout(300) // the ✓ badge updates live as the line drags
+const wallBadge = await page3.evaluate(() =>
+  document.querySelector('[data-cmd="confirm"] .badge')?.textContent ?? null)
+console.log('wall badge:', wallBadge)
+if (wallBadge !== '×8') throw new Error('wall badge should count 8 posts, got ' + wallBadge)
+await page3.tap('[data-cmd="confirm"]')
+await page3.waitForTimeout(250)
+const wallPlaced = await page3.evaluate(() => {
+  const g = window.__game.state
+  return {
+    sites: g.ents.filter(e => e.team === 0 && e.kind === 'wall').length,
+    wood: Math.round(g.res[0].wood),
+    placing: g.placing,
+  }
+})
+console.log('wall placed:', wallPlaced)
+if (wallPlaced.sites !== 8) throw new Error('expected 8 wall posts, got ' + wallPlaced.sites)
+if (wallSetup.wood - wallPlaced.wood !== 24) throw new Error('walls should cost 3 wood per post')
+if (wallPlaced.placing !== null) throw new Error('placement should end after confirm')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 45)
+const wallBuilt = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  return g.ents.filter(e => e.team === 0 && e.kind === 'wall' && e.complete).length
+})
+console.log('walls chain-built:', wallBuilt, 'of 8')
+if (wallBuilt < 6) throw new Error('villager did not chain-build the fence')
+
+const gatePass = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.spawn('gate', 0, 1392, 640)
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
+  v.x = 1392; v.y = 596; v.state = 'move'; v.tx = 1392; v.ty = 684; v.targetId = undefined
+  window.__game.setSpeed(10)
+  return { villId: v.id }
+})
+await waitSim(page3, 10)
+const gateResult = await page3.evaluate(({ villId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.byId.get(villId)
+  const arrived = Math.hypot(v.x - 1392, v.y - 684) < 22
+  // walk the builder home so later tests find the crew where they expect it
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined
+  return { arrived, at: { x: Math.round(v.x), y: Math.round(v.y) } }
+}, gatePass)
+console.log('gate pass-through:', gateResult)
+if (!gateResult.arrived) throw new Error('villager could not pass through a friendly gate')
 
 // 4.7) the mill takes food drop-offs, sparing the long walk home
 const millCheck = await page3.evaluate(() => {

@@ -454,6 +454,62 @@ export function drawMiningCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(x - 13.5, y + 0.5, 4, -2.4, -0.6); ctx.stroke()
 }
 
+export function drawWall(ctx: CanvasRenderingContext2D, e: Ent): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 7, 9, 3.5)
+  // two lashed palisade posts with pointed tops
+  const lean1 = (e.seed % 3) - 1
+  for (const [ox, h, col] of [[-4, 17 + (e.seed % 4), WOOD], [4, 19 + (e.seed % 3), '#96754F']] as [number, number, string][]) {
+    ctx.fillStyle = col
+    rr(ctx, x + ox - 3.2 + lean1 * 0.4, y + 8 - h, 6.4, h, 2.5); ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(x + ox - 3.2, y + 9 - h)
+    ctx.lineTo(x + ox + lean1 * 0.6, y + 4 - h)
+    ctx.lineTo(x + ox + 3.2, y + 9 - h)
+    ctx.closePath(); ctx.fill()
+  }
+  // rope lashing across the pair
+  ctx.strokeStyle = '#6F5238'
+  ctx.lineWidth = 1.6
+  ctx.beginPath(); ctx.moveTo(x - 7.4, y - 3); ctx.lineTo(x + 7.4, y - 4.5); ctx.stroke()
+}
+
+export function drawGate(ctx: CanvasRenderingContext2D, e: Ent, t: number, open = false): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 10, 17, 5)
+  // heavy end posts
+  for (const ox of [-13, 13]) {
+    ctx.fillStyle = WOOD
+    rr(ctx, x + ox - 3.5, y - 15, 7, 26, 2.5); ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(x + ox - 3.5, y - 14)
+    ctx.lineTo(x + ox, y - 19.5)
+    ctx.lineTo(x + ox + 3.5, y - 14)
+    ctx.closePath(); ctx.fill()
+  }
+  // lintel beam
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x - 16, y - 14.5, 32, 5, 2); ctx.fill()
+  if (open) {
+    // doors swung back against the posts — friends pass freely
+    ctx.fillStyle = '#A9855C'
+    rr(ctx, x - 12.6, y - 8, 4, 18, 1.5); ctx.fill()
+    rr(ctx, x + 8.6, y - 8, 4, 18, 1.5); ctx.fill()
+  } else {
+    // closed planked doors with cross-braces
+    ctx.fillStyle = '#A9855C'
+    rr(ctx, x - 9.6, y - 9, 9.2, 19, 2); ctx.fill()
+    rr(ctx, x + 0.4, y - 9, 9.2, 19, 2); ctx.fill()
+    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(x - 8.6, y - 7.5); ctx.lineTo(x - 1.4, y + 8.5)
+    ctx.moveTo(x - 1.4, y - 7.5); ctx.lineTo(x - 8.6, y + 8.5)
+    ctx.moveTo(x + 1.4, y - 7.5); ctx.lineTo(x + 8.6, y + 8.5)
+    ctx.moveTo(x + 8.6, y - 7.5); ctx.lineTo(x + 1.4, y + 8.5)
+    ctx.stroke()
+  }
+}
+
 export function drawStable(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]

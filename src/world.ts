@@ -3,7 +3,7 @@ import {
   Game, Ent, Kind, Cost, ResKind, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   NO_TECHS, GATHER_TECH, GATHER_TECH_MULT, FOX_SPEED_MULT, FOX_LOS_BONUS,
   FORGED_DMG, FLETCH_DMG, IRONMAIL_HP, MELEE_KINDS, INFANTRY_KINDS,
-  NEUTRAL, POP_MAX, FOG_CELL, WORLD_W, WORLD_H,
+  NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
 
@@ -59,7 +59,7 @@ export function createGame(): Game {
       { wood: 100, food: 50, gold: 0, stone: 0 }, // the enemy plays fair now
     ],
     camera: { x: 0, y: 0, zoom: 0.62 },
-    selection: [], placing: null, placePos: null, over: null, overT: 0,
+    selection: [], placing: null, placePos: null, placeEnd: null, over: null, overT: 0,
     particles: [],
     projectiles: [],
     arrowsFired: 0,
@@ -356,12 +356,15 @@ export function openDoors(g: Game, b: Ent): void {
 export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
   const f = BUILDINGS[kind].foot
   if (x - f < 40 || x + f > WORLD_W - 40 || y - f < 40 || y + f > WORLD_H - 40) return false
+  const isPal = kind === 'wall' || kind === 'gate'
   for (const e of g.ents) {
     if (isUnit(e)) continue
     if (isBuilding(e)) {
-      // square vs square, snug 6px seam
+      // square vs square, snug 6px seam — but palisade pieces butt right up
+      // against each other so a dragged line reads as one solid fence
       const of = BUILDINGS[e.kind].foot
-      if (Math.abs(x - e.x) < f + of + 6 && Math.abs(y - e.y) < f + of + 6) return false
+      const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -2 : 6
+      if (Math.abs(x - e.x) < f + of + gap && Math.abs(y - e.y) < f + of + gap) return false
     } else {
       // square vs round resource: nearest point on the square to the circle
       const px = Math.max(x - f, Math.min(x + f, e.x))
@@ -370,6 +373,24 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
     }
   }
   return true
+}
+
+// the run of snap-grid posts a dragged wall line would place, flagged buildable or not
+export function wallLinePoints(g: Game): { x: number; y: number; ok: boolean }[] {
+  if (!g.placePos || !g.placeEnd) return []
+  const a = g.placePos, b = g.placeEnd
+  const steps = Math.max(1, Math.round(dist(a.x, a.y, b.x, b.y) / PLACE_SNAP))
+  const pts: { x: number; y: number; ok: boolean }[] = []
+  const seen = new Set<string>()
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round((a.x + (b.x - a.x) * (i / steps)) / PLACE_SNAP) * PLACE_SNAP
+    const y = Math.round((a.y + (b.y - a.y) * (i / steps)) / PLACE_SNAP) * PLACE_SNAP
+    const key = `${x},${y}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    pts.push({ x, y, ok: canPlaceAt(g, 'wall', x, y) })
+  }
+  return pts
 }
 
 export function toast(g: Game, text: string): void {
