@@ -121,7 +121,51 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
   const full = (e.amount ?? 60) / 60
   const s = 0.75 + 0.25 * full
   shadow(ctx, e.x, e.y + 4, 15 * s, 6 * s)
-  // trunk
+  const variant = e.seed % 3 // the woods are a mix: oaks, pines, and pale birches
+  if (variant === 1) {
+    // pine: a dark trunk under stacked green skirts
+    ctx.fillStyle = WOOD_DARK
+    rr(ctx, e.x - 3, e.y - 12, 6, 16, 2.5)
+    ctx.fill()
+    const tiers: [number, number][] = [[-8, 15], [-18, 12], [-27, 8.5]]
+    for (let i = 0; i < tiers.length; i++) {
+      const [oy, w] = tiers[i]
+      ctx.fillStyle = i % 2 ? '#5E8A4E' : '#6D9552'
+      ctx.beginPath()
+      ctx.moveTo(e.x + sway * (0.3 + i * 0.25), e.y + (oy - 13) * s)
+      ctx.lineTo(e.x - w * s, e.y + oy * s)
+      ctx.lineTo(e.x + w * s, e.y + oy * s)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.fillStyle = '#85B168'
+    ctx.beginPath(); ctx.arc(e.x + sway, e.y - 36 * s, 3.4 * s, 0, Math.PI * 2); ctx.fill()
+    return
+  }
+  if (variant === 2) {
+    // birch: pale dashed trunk, a lighter, smaller crown
+    ctx.fillStyle = '#E6DCC8'
+    rr(ctx, e.x - 3.4, e.y - 16, 6.8, 20, 3)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(90, 78, 60, 0.55)'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(e.x - 2, e.y - 4); ctx.lineTo(e.x + 0.5, e.y - 4)
+    ctx.moveTo(e.x + 0.5, e.y - 10); ctx.lineTo(e.x + 3, e.y - 10)
+    ctx.moveTo(e.x - 3, e.y - 14); ctx.lineTo(e.x - 0.5, e.y - 14)
+    ctx.stroke()
+    const cy = e.y - 26 * s
+    ctx.fillStyle = '#8CB56A'
+    for (const [ox, oy, r] of [[-7, 2, 8], [7, 2, 8], [0, -4, 9.5]]) {
+      ctx.beginPath(); ctx.arc(e.x + ox * s + sway * 0.5, cy + oy * s, r * s, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.fillStyle = '#AACD8C'
+    ctx.beginPath(); ctx.arc(e.x - 3 * s + sway, cy - 6 * s, 5.5 * s, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#C4DCA8'
+    ctx.beginPath(); ctx.arc(e.x + 4 * s + sway, cy - 3 * s, 3.4 * s, 0, Math.PI * 2); ctx.fill()
+    return
+  }
+  // oak (the classic)
   ctx.fillStyle = WOOD
   rr(ctx, e.x - 4, e.y - 14, 8, 18, 3.5)
   ctx.fill()
@@ -137,6 +181,76 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
   }
   ctx.fillStyle = '#9CC47E'
   ctx.beginPath(); ctx.arc(e.x - 4 * s + sway, cy - 8 * s, 5 * s, 0, Math.PI * 2); ctx.fill()
+}
+
+// a shy little deer — and, once brought down, a quiet bundle in the grass
+export function drawDeer(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const f = (e.face ?? 1) >= 0 ? 1 : -1
+  if (e.hp <= 0) {
+    // down: curled up asleep-forever, harvested gently
+    const left = Math.max(0.4, (e.amount ?? 90) / 90)
+    shadow(ctx, e.x, e.y + 3, 12 * left + 2, 4)
+    ctx.fillStyle = '#C99B62'
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 3, 11 * left + 1, 6.5 * left + 0.5, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#B8874E'
+    ctx.beginPath(); ctx.ellipse(e.x + 6 * f * left, e.y - 4, 4.4, 3.6, 0.2 * f, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = '#8A6538'
+    ctx.lineWidth = 1.1
+    ctx.beginPath() // a closed, restful eye
+    ctx.arc(e.x + 7 * f * left, e.y - 4.5, 1.6, f > 0 ? 0.2 : Math.PI - 1.2, f > 0 ? 1.2 : Math.PI - 0.2)
+    ctx.stroke()
+    ctx.fillStyle = '#F3E7CE'
+    ctx.beginPath(); ctx.ellipse(e.x - 8 * f * left, e.y - 2, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill()
+    return
+  }
+  const step = e.stepped ? Math.sin(t * 9 + (e.phase ?? 0)) : 0
+  const bob = e.stepped ? Math.abs(Math.sin(t * 9 + (e.phase ?? 0))) * 1.2 : Math.sin(t * 1.6 + (e.phase ?? 0)) * 0.5
+  shadow(ctx, e.x, e.y + 4, 11, 4)
+  ctx.save()
+  ctx.translate(0, -bob)
+  // slender legs, trotting when on the move
+  ctx.strokeStyle = '#A57B45'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(e.x - 6 * f, e.y - 6); ctx.lineTo(e.x - 6 * f + step * 2, e.y + 4)
+  ctx.moveTo(e.x - 2 * f, e.y - 6); ctx.lineTo(e.x - 2 * f - step * 2, e.y + 4)
+  ctx.moveTo(e.x + 3 * f, e.y - 6); ctx.lineTo(e.x + 3 * f + step * 1.6, e.y + 4)
+  ctx.moveTo(e.x + 6 * f, e.y - 6); ctx.lineTo(e.x + 6 * f - step * 1.6, e.y + 4)
+  ctx.stroke()
+  // body
+  ctx.fillStyle = '#C99B62'
+  ctx.beginPath(); ctx.ellipse(e.x, e.y - 9, 9.5, 6, 0, 0, Math.PI * 2); ctx.fill()
+  // white rump patch + flick of tail
+  ctx.fillStyle = '#F3E7CE'
+  ctx.beginPath(); ctx.ellipse(e.x - 8 * f, e.y - 9, 3, 3.6, 0, 0, Math.PI * 2); ctx.fill()
+  // neck and head
+  ctx.fillStyle = '#C99B62'
+  ctx.beginPath(); ctx.ellipse(e.x + 8 * f, e.y - 15, 3.4, 4.6, 0.5 * f, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(e.x + 10 * f, e.y - 19, 3.8, 3.2, 0.2 * f, 0, Math.PI * 2); ctx.fill()
+  // muzzle, ear, eye
+  ctx.fillStyle = '#B8874E'
+  ctx.beginPath(); ctx.ellipse(e.x + 13.4 * f, e.y - 18, 1.8, 1.4, 0.2 * f, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#C99B62'
+  ctx.beginPath(); ctx.ellipse(e.x + 7.6 * f, e.y - 22.5, 1.6, 2.6, -0.5 * f, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#F3E7CE'
+  ctx.beginPath(); ctx.ellipse(e.x + 7.6 * f, e.y - 22.2, 0.8, 1.4, -0.5 * f, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#4A3413'
+  ctx.beginPath(); ctx.arc(e.x + 10.6 * f, e.y - 19.5, 1.1, 0, Math.PI * 2); ctx.fill()
+  // little antlers on the bucks
+  if (e.seed % 2 === 0) {
+    ctx.strokeStyle = '#8A6538'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(e.x + 9.5 * f, e.y - 22); ctx.lineTo(e.x + 8.5 * f, e.y - 26); ctx.lineTo(e.x + 6.5 * f, e.y - 27.5)
+    ctx.moveTo(e.x + 8.5 * f, e.y - 26); ctx.lineTo(e.x + 10 * f, e.y - 28)
+    ctx.stroke()
+  }
+  // dappled back
+  ctx.fillStyle = 'rgba(243, 231, 206, 0.75)'
+  for (const [ox, oy] of [[-3, -12], [1, -10.5], [-6, -10]]) {
+    ctx.beginPath(); ctx.arc(e.x + ox * f, e.y + oy, 1, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
 }
 
 export function drawMine(ctx: CanvasRenderingContext2D, e: Ent): void {

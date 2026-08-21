@@ -6,7 +6,7 @@ import {
   SOURCE_OF, POP_MAX, NO_COST, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   dist, isUnit, isBuilding,
 } from './data'
-import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf } from './world'
+import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken } from './world'
 
 const THINK_EVERY = 0.8
 const VILLAGER_GOAL = 9
@@ -17,7 +17,8 @@ function nearestSource(g: Game, tc: Ent, r: ResKind): Ent | null {
   const kind = SOURCE_OF[r]
   const raw = nearest(g, tc.x, tc.y, o => o.kind === kind && (o.amount ?? 0) > 0, 800)
   if (raw || r !== 'food') return raw
-  return nearest(g, tc.x, tc.y, o => o.kind === 'farm' && o.team === 1 && !!o.complete, 800)
+  return nearest(g, tc.x, tc.y, o => o.kind === 'farm' && o.team === 1 && !!o.complete &&
+    !farmTaken(g, o), 800)
 }
 
 function queuedUnits(g: Game): number {
@@ -140,8 +141,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'house', tc)
     } else if (!barracks && vills.length >= 4) {
       tryPlace(g, 'barracks', tc)
-    } else if (foodDry && farms < 3) {
-      tryPlace(g, 'farm', tc)
+    } else if (foodDry && farms < 5) {
+      tryPlace(g, 'farm', tc) // one farmer per field now, so the village wants more of them
     } else if (goal && reserving && canAfford(g, 1, BUILDINGS[goal].cost)) {
       tryPlace(g, goal, tc) // the landmark rises; its walls carry the new age
     } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {

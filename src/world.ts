@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, ChampId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  CHAMPS, NO_CHAMPS,
+  CHAMPS, NO_CHAMPS, DEER_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -45,6 +45,14 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   } else {
     const s = RESOURCES[kind]
     e.r = s.r; e.amount = s.amount; e.hp = e.maxHp = 1
+    if (kind === 'deer') {
+      // deer start alive and shy; brought down, they linger as a quiet bundle
+      e.hp = e.maxHp = DEER_HP
+      e.homeX = x; e.homeY = y
+      e.scanT = Math.random() * 3
+      e.face = Math.random() < 0.5 ? -1 : 1
+      e.phase = Math.random() * Math.PI * 2
+    }
   }
   g.ents.push(e)
   g.byId.set(e.id, e)
@@ -149,6 +157,22 @@ export function createGame(): Game {
     }
   }
 
+  // Deer herds: shy little families grazing the open pockets of the wilds
+  const herds = [
+    { x: 800, y: 300, n: 3 }, { x: 620, y: 180, n: 3 }, { x: 1420, y: 1100, n: 3 },
+  ]
+  for (const herd of herds) {
+    for (let i = 0; i < herd.n; i++) {
+      for (let tries = 0; tries < 20; tries++) {
+        const a = rnd() * Math.PI * 2
+        const d = rnd() * 55
+        const x = herd.x + Math.cos(a) * d
+        const y = herd.y + Math.sin(a) * d * 0.8
+        if (clear(x, y, 12)) { spawn(g, 'deer', NEUTRAL, x, y); break }
+      }
+    }
+  }
+
   // Starting units
   spawn(g, 'villager', 0, pTC.x + 90, pTC.y + 40)
   spawn(g, 'villager', 0, pTC.x + 70, pTC.y - 60)
@@ -198,6 +222,14 @@ export function gatherResOf(g: Game, v: Ent): ResKind | null {
   if (t.kind === 'farm') return 'food'
   if (isResource(t)) return RESOURCES[t.kind].gives
   return null
+}
+
+// is anyone (besides `except`) already working this farm? One pair of hands
+// per field keeps farms honest.
+export function farmTaken(g: Game, farm: Ent, except?: Ent | Ent[]): boolean {
+  const skip = Array.isArray(except) ? except : except ? [except] : []
+  return g.ents.some(w => w.kind === 'villager' && w.team === farm.team && !skip.includes(w) &&
+    (w.state === 'gather' || w.state === 'return') && w.targetId === farm.id)
 }
 
 // walking speed for a unit (a hook for future civ or upgrade effects)
@@ -290,6 +322,7 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
   for (const e of g.ents) {
     if (e.hidden) continue
     if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
+    if (e.kind === 'deer' && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // deer slip out of sight
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }

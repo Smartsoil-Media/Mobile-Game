@@ -1538,6 +1538,77 @@ const farmFood = await page3.evaluate(() => window.__game.state.res[0].food)
 console.log('farm food:', farmReady.food, '->', farmFood)
 if (farmFood - farmReady.food < 6) throw new Error('farm produced no food')
 
+// 13.5) one pair of hands per field: a second farmer on the same farm bounces off
+const crewSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const farm = g.ents.find(e => e.kind === 'farm' && e.team === 0 && e.complete)
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  // vills[2] is already working the field; force vills[0] onto the same farm
+  vills[0].state = 'gather'; vills[0].targetId = farm.id; vills[0].gatherT = 0
+  vills[0].x = farm.x - 30; vills[0].y = farm.y
+  window.__game.setSpeed(10)
+  return { farmId: farm.id, farmerIds: [vills[0].id, vills[2].id] }
+})
+await waitSim(page3, 4)
+const crewResult = await page3.evaluate(({ farmId, farmerIds }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const onFarm = farmerIds.map(id => g.byId.get(id))
+    .filter(v => v && (v.state === 'gather' || v.state === 'return') && v.targetId === farmId).length
+  const bounced = g.byId.get(farmerIds[0])
+  const toasts = g.toasts.map(t => t.text)
+  // walk the test farmer home — the expansion test needs its builder near the Town Hall
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  if (bounced) { bounced.x = tc.x + 70; bounced.y = tc.y + 60; bounced.state = 'idle'; bounced.targetId = undefined }
+  return { onFarm, bouncedState: bounced?.state, toasts }
+}, crewSetup)
+console.log('farm crew cap:', crewResult)
+if (crewResult.onFarm > 1) throw new Error('two villagers worked the same farm')
+
+// 13.6) the hunt: a villager runs a deer down and hauls venison to the mill
+const deerSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const deer = g.ents.filter(e => e.kind === 'deer' && e.hp > 0)
+    .sort((a, b) => Math.hypot(a.x - 1420, a.y - 1100) - Math.hypot(b.x - 1420, b.y - 1100))[0]
+  if (!deer) throw new Error('setup: no live deer on the map')
+  // a drop-off within hauling distance, so the test measures hunting, not hiking
+  const millId = window.__game.spawn('mill', 0, deer.x - 90, deer.y - 60)
+  // everyone else rests, so the food ledger shows only trickle + venison
+  for (const o of g.ents.filter(e => e.team === 0 && e.kind === 'villager')) {
+    o.state = 'idle'; o.targetId = undefined
+  }
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[1]
+  v.x = deer.x - 40; v.y = deer.y + 10
+  v.state = 'gather'; v.targetId = deer.id; v.gatherT = 0; v.carry = 0
+  window.__game.setSpeed(15)
+  return { deerId: deer.id, millId, villId: v.id, food: g.res[0].food }
+})
+await waitSim(page3, 60)
+const deerResult = await page3.evaluate(({ deerId, millId, villId, food }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const deer = g.byId.get(deerId)
+  const v = g.byId.get(villId)
+  // tidy the hunting camp away and walk the hunter home
+  const mill = g.byId.get(millId); if (mill) mill.hp = 0
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  if (v) { v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined; v.carry = 0 }
+  return {
+    deerDown: !deer || deer.hp <= 0,
+    taken: deer ? 90 - (deer.amount ?? 90) : 90,
+    foodGained: Math.round(g.res[0].food - food),
+    abbeyAlive: g.ents.some(e => e.team === 0 && e.kind === 'abbeymill' && e.complete),
+  }
+}, deerSetup)
+console.log('deer hunt:', deerResult)
+if (!deerResult.deerDown) throw new Error('the deer was never brought down')
+if (deerResult.taken < 12) throw new Error('the fallen deer was barely harvested: ' + deerResult.taken)
+// almost everything taken from the carcass must reach the stores (one load
+// may still be in hand; the Abbey Mill trickle only ever adds on top)
+if (deerResult.foodGained < deerResult.taken - 8)
+  throw new Error(`venison never reached the stores: took ${deerResult.taken}, banked ${deerResult.foodGained}`)
+await waitSim(page3, 1)
+
 // 14) expansion: a second Town Hall paid with stone
 const tcSetup = await page3.evaluate(() => {
   const g = window.__game.state

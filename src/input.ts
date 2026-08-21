@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
 import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
-import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints } from './world'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -197,11 +197,25 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
-  // villagers tap one of your farms: work the field
+  // villagers tap one of your farms: one works this field, the rest spread
+  // to free farms nearby — every field wants exactly one pair of hands
   if (hit && hit.team === 0 && hit.kind === 'farm' && hit.complete) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
-      commandGather(g, villagers, hit)
+      const fields = [hit, ...g.ents
+        .filter(o => o !== hit && o.kind === 'farm' && o.team === 0 && !!o.complete)
+        .sort((a, b) => dist(a.x, a.y, hit.x, hit.y) - dist(b.x, b.y, hit.x, hit.y))]
+      let fi = 0
+      for (let vi = 0; vi < villagers.length; vi++) {
+        while (fi < fields.length && farmTaken(g, fields[fi], villagers)) fi++
+        if (fi >= fields.length) {
+          toast(g, 'Every field has its farmer — plant another farm.')
+          commandMove(g, villagers.slice(vi), hit.x + 46, hit.y + 40)
+          break
+        }
+        commandGather(g, [villagers[vi]], fields[fi])
+        fi++
+      }
       return
     }
   }
@@ -262,7 +276,8 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 function nearestSourceFor(g: Game, v: Ent, res: ResKind): Ent | null {
   const raw = nearest(g, v.x, v.y, o => o.kind === SOURCE_OF[res] && (o.amount ?? 0) > 0)
   if (res === 'food') {
-    const farm = nearest(g, v.x, v.y, o => o.kind === 'farm' && o.team === 0 && !!o.complete)
+    // only farms with no farmer — one pair of hands per field
+    const farm = nearest(g, v.x, v.y, o => o.kind === 'farm' && o.team === 0 && !!o.complete && !farmTaken(g, o, v))
     if (farm && (!raw || dist(v.x, v.y, farm.x, farm.y) < dist(v.x, v.y, raw.x, raw.y))) return farm
   }
   return raw

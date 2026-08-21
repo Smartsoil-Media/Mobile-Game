@@ -14,6 +14,9 @@ villagers and resources, a real economy, and attacks that grow bolder.
 
 Everything — world, units, buildings, art — is drawn in code on an HTML5 canvas.
 No image assets, no frameworks. The whole game bundles into a single HTML file.
+The meadow itself is alive: mixed woods (oaks, pines, pale birches), pebble
+clusters, toadstool rings and clover, butterflies looping in the sunlight,
+worn earth trodden around every standing building, and deer grazing the wilds.
 
 ## Controls
 
@@ -21,8 +24,14 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Tap** a tree/mine to gather, the ground to move, an enemy to attack
 - **Lumber/Mining Camps** (75 wood) act as drop-off points near the woods or
   a mine/quarry, so villagers don't trek back to the Town Hall
-- **Farms** (60 wood) give a steady food trickle; **berry bushes** forage out,
-  **mines and quarries** shrink to rubble, **trees** leave stumps
+- **Farms** (60 wood) give a steady food trickle — but each field wants
+  exactly **one farmer**; extra hands are waved off to a free farm (or told
+  to plant another). **Berry bushes** forage out, **mines and quarries**
+  shrink to rubble, **trees** leave stumps
+- **Deer** graze in shy little herds. Send a villager at one to **hunt**:
+  the deer bolts in short hops, three pokes bring it down, and the venison
+  (90 food) hauls to any food drop-off. Herds amble, keep their distance,
+  and only show in live sight
 - **Economy shape**: food trains villagers (50) and soldiers (40 + 25 gold);
   wood pays for buildings; **stone + wood builds new Town Halls** (200w/150s)
   for +5 pop and forward drop-offs

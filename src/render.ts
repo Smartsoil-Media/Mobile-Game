@@ -1,8 +1,8 @@
 // Camera + world rendering.
 import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding } from './data'
-import { isVisibleToPlayer, canPlaceAt, wallLinePoints } from './world'
+import { isVisibleToPlayer, canPlaceAt, wallLinePoints, fogIndex } from './world'
 import {
-  drawTree, drawMine, drawBush, drawQuarry, drawTC, drawHouse, drawBarracks,
+  drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawWall, drawGate,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
@@ -72,6 +72,108 @@ function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
   return ctx.createPattern(c, 'repeat')!
 }
 
+// Little touches of life scattered over the meadow: pebble clusters, toadstool
+// rings, clover patches. Purely decorative, fixed per map, drawn under everything.
+interface Decor { x: number; y: number; kind: 'pebbles' | 'mushrooms' | 'clover'; seed: number }
+let decor: Decor[] | null = null
+function makeDecor(): Decor[] {
+  const rnd = (() => { let s = 4242; return () => { s = (s * 16807) % 2147483647; return s / 2147483647 } })()
+  const out: Decor[] = []
+  const kinds: Decor['kind'][] = ['pebbles', 'mushrooms', 'clover']
+  for (let i = 0; i < 46; i++) {
+    out.push({
+      x: 70 + rnd() * (WORLD_W - 140),
+      y: 70 + rnd() * (WORLD_H - 140),
+      kind: kinds[Math.floor(rnd() * 3)],
+      seed: Math.floor(rnd() * 1000),
+    })
+  }
+  return out
+}
+
+function drawDecor(ctx: CanvasRenderingContext2D): void {
+  if (!decor) decor = makeDecor()
+  for (const d of decor) {
+    if (d.kind === 'pebbles') {
+      ctx.fillStyle = 'rgba(160, 152, 130, 0.8)'
+      for (let i = 0; i < 3; i++) {
+        const a = (d.seed + i * 2.2)
+        ctx.beginPath()
+        ctx.ellipse(d.x + Math.cos(a) * 7, d.y + Math.sin(a) * 4, 3.4 - i * 0.6, 2.4 - i * 0.4, a, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillStyle = 'rgba(206, 198, 176, 0.85)'
+      ctx.beginPath(); ctx.ellipse(d.x + 2, d.y - 1.5, 2, 1.4, 0.4, 0, Math.PI * 2); ctx.fill()
+    } else if (d.kind === 'mushrooms') {
+      for (let i = 0; i < 3; i++) {
+        const mx = d.x + Math.cos(d.seed + i * 2.1) * 6
+        const my = d.y + Math.sin(d.seed + i * 2.1) * 4
+        ctx.fillStyle = '#EFE6D2'
+        ctx.fillRect(mx - 1, my - 3, 2, 3.4)
+        ctx.fillStyle = i % 2 ? '#C9525E' : '#D98E4A'
+        ctx.beginPath(); ctx.ellipse(mx, my - 3.4, 3, 1.9, 0, Math.PI, 0); ctx.fill()
+        ctx.fillStyle = 'rgba(251, 243, 228, 0.9)'
+        ctx.beginPath(); ctx.arc(mx - 1, my - 4.2, 0.55, 0, Math.PI * 2); ctx.fill()
+      }
+    } else {
+      ctx.fillStyle = 'rgba(122, 160, 88, 0.6)'
+      for (let i = 0; i < 5; i++) {
+        const a = d.seed + i * 1.3
+        ctx.beginPath()
+        ctx.ellipse(d.x + Math.cos(a) * 8, d.y + Math.sin(a) * 5, 2.6, 1.7, a, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillStyle = '#F7F1DE'
+      ctx.beginPath(); ctx.arc(d.x + 3, d.y - 2, 1.3, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+}
+
+// worn earth under the village: buildings press a ring of trodden dirt into
+// the grass, so a settlement reads as lived-in rather than dropped-on
+function drawWornEarth(ctx: CanvasRenderingContext2D, g: Game): void {
+  for (const e of g.ents) {
+    if (!isBuilding(e) || !e.complete) continue
+    if (e.kind === 'wall' || e.kind === 'gate' || e.kind === 'farm') continue
+    const f = BUILDINGS[e.kind].foot
+    ctx.fillStyle = 'rgba(197, 174, 126, 0.42)'
+    ctx.beginPath()
+    ctx.ellipse(e.x, e.y + e.r * 0.32, f * 1.35, f * 0.8, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(172, 148, 100, 0.4)'
+    for (let i = 0; i < 4; i++) {
+      const a = e.seed * 0.7 + i * 1.7
+      ctx.beginPath()
+      ctx.ellipse(e.x + Math.cos(a) * f * 1.05, e.y + e.r * 0.32 + Math.sin(a) * f * 0.55, 4, 2.4, a, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}
+
+// a few butterflies looping lazily over the meadow — pure ambience
+function drawButterflies(ctx: CanvasRenderingContext2D, g: Game, time: number): void {
+  const anchors = [
+    { x: 560, y: 830, c: '#F7F1DE' }, { x: 980, y: 560, c: '#F0C9CF' },
+    { x: 1440, y: 420, c: '#F7F1DE' }, { x: 760, y: 1080, c: '#E9B44C' },
+    { x: 1240, y: 880, c: '#F0C9CF' },
+  ]
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i]
+    const t = time * 0.5 + i * 2.1
+    const x = a.x + Math.sin(t) * 60 + Math.sin(t * 2.3) * 22
+    const y = a.y + Math.cos(t * 0.8) * 42 + Math.sin(t * 3.1) * 10
+    if (g.fog.visible[fogIndex(g, x, y)] !== 1) continue // they live in the sunlight
+    const flap = Math.abs(Math.sin(time * 10 + i))
+    ctx.fillStyle = a.c
+    ctx.beginPath()
+    ctx.ellipse(x - 1.6, y, 2.6 * (0.35 + 0.65 * flap), 1.8, -0.4, 0, Math.PI * 2)
+    ctx.ellipse(x + 1.6, y, 2.6 * (0.35 + 0.65 * flap), 1.8, 0.4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(90, 70, 50, 0.8)'
+    ctx.fillRect(x - 0.5, y - 1.6, 1, 3.2)
+  }
+}
+
 // The meadow fades into fog-dark at the world's rim, so the edge of the map
 // reads as unexplored gloom rolling in — never a hard border.
 function drawEdgeFade(ctx: CanvasRenderingContext2D): void {
@@ -128,6 +230,9 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.closePath()
   ctx.fill()
 
+  drawDecor(ctx)
+  drawWornEarth(ctx, g)
+
   // selection rings under everything else
   for (const id of g.selection) {
     const e = g.byId.get(id)
@@ -144,13 +249,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.stroke()
   }
 
-  // entities, painter's order (garrisoned units inside, enemy units in fog unseen)
+  // entities, painter's order (garrisoned units inside, enemy units in fog
+  // unseen; deer, like anything that moves, only exist in live sight)
   const sorted = g.ents
-    .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)))
+    .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
+      !(e.kind === 'deer' && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1))
     .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
+      case 'deer': drawDeer(ctx, e, time); break
       case 'goldmine': drawMine(ctx, e); break
       case 'berrybush': drawBush(ctx, e, time); break
       case 'stonequarry': drawQuarry(ctx, e); break
@@ -181,8 +289,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'scout': drawScout(ctx, e, time); break
       case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry); break
     }
-    // health bar when hurt
-    if ((isUnit(e) || isBuilding(e)) && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
+    // health bar when hurt (a hunted deer shows its last strength too)
+    if ((isUnit(e) || isBuilding(e) || e.kind === 'deer') && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
       const w = isBuilding(e) ? 40 : 18
       const y = e.y - e.r - (isBuilding(e) ? e.r * 0.8 : 22)
       ctx.fillStyle = 'rgba(60, 46, 30, 0.45)'
@@ -223,6 +331,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.fill()
   }
   ctx.globalAlpha = 1
+
+  drawButterflies(ctx, g, time)
 
   drawFog(ctx, g)
   drawEdgeFade(ctx)

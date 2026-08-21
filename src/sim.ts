@@ -3,11 +3,12 @@ import {
   Game, Ent, Particle, LandmarkKind, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
   CHAMPS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
   KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
+  DEER_STRIKE, DEER_AMBLE, DEER_FLEE,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken } from './world'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -138,8 +139,10 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'gather': {
       const res = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
       const isFarm = res?.kind === 'farm'
+      const isDeer = res?.kind === 'deer'
       const dead = !res ||
-        (isFarm ? (!res.complete || res.team !== e.team || res.hp <= 0) : (res.amount ?? 0) <= 0)
+        (isFarm ? (!res.complete || res.team !== e.team || res.hp <= 0) :
+          isDeer ? res.hp <= 0 && (res.amount ?? 0) <= 0 : (res.amount ?? 0) <= 0)
       if (dead) {
         // find another source of the same kind nearby, else head home with what we carry
         if (isFarm || res?.kind === undefined && e.carryRes === 'food') {
@@ -152,6 +155,41 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         if (next) { e.targetId = next.id }
         else if ((e.carry ?? 0) > 0) e.state = 'return'
         else e.state = 'idle'
+        break
+      }
+      // one pair of hands per field: the earlier hand keeps it, the newcomer
+      // moves to a free farm or stands down (both bouncing would empty the field)
+      const outranked = isFarm && g.ents.some(o => o !== e && o.kind === 'villager' &&
+        o.team === e.team && (o.state === 'gather' || o.state === 'return') &&
+        o.targetId === res!.id && o.id < e.id)
+      if (outranked) {
+        const free = nearest(g, e.x, e.y, o => o.kind === 'farm' && o.team === e.team &&
+          !!o.complete && !farmTaken(g, o, e), 320)
+        if (free) { e.targetId = free.id; break }
+        if (e.team === 0) toast(g, 'The field only needs one pair of hands.')
+        e.state = 'idle'; e.targetId = undefined
+        break
+      }
+      // a living deer must be run down first: close in, strike, and it bolts
+      if (isDeer && res!.hp > 0) {
+        if (!inRange(e, res!, 8)) { moveToward(g, e, res!.x, res!.y, spd, dt); break }
+        if (Math.abs(res!.x - e.x) > 1) e.face = res!.x > e.x ? 1 : -1
+        e.gatherT = (e.gatherT ?? 0) + dt
+        if (e.gatherT >= GATHER_TICK) {
+          e.gatherT = 0
+          res!.hp -= DEER_STRIKE
+          puff(g, res!.x, res!.y - 8, '#FFF3D6', 2, 'hit')
+          if (res!.hp > 0) {
+            // startled: a short bolt away from the hunter, then it tires
+            const dx = res!.x - e.x, dy = res!.y - e.y
+            const d = Math.hypot(dx, dy) || 1
+            res!.tx = res!.x + (dx / d) * 55
+            res!.ty = res!.y + (dy / d) * 55
+            res!.fleeT = 0.7
+          } else {
+            puff(g, res!.x, res!.y - 6, '#E8D5B5', 5)
+          }
+        }
         break
       }
       if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
@@ -180,7 +218,11 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         }
         if (!isFarm && res.amount! <= 0) {
           // depleted resources stay in the world as scenery
-          if (res.kind === 'tree') {
+          if (res.kind === 'deer') {
+            // a picked-clean bundle fades from the meadow entirely
+            puff(g, res.x, res.y - 4, '#E8D5B5', 6, 'leaf')
+            killEnt(g, res)
+          } else if (res.kind === 'tree') {
             puff(g, res.x, res.y - 10, '#7BA05B', 8, 'leaf')
             res.r = 8
           } else if (res.kind === 'berrybush') {
@@ -265,6 +307,48 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'attack': attackTarget(g, e, dt); break
     default: break // idle: villagers wait for orders (the enemy AI assigns its own)
   }
+}
+
+// deer amble near home, shy away from strangers, and bolt when struck
+function updateDeer(g: Game, e: Ent, dt: number): void {
+  if (e.hp <= 0) return // down: just a quiet bundle in the grass now
+  e.fleeT = Math.max(0, (e.fleeT ?? 0) - dt)
+  if (e.fleeT > 0 && e.tx !== undefined) {
+    moveToward(g, e, e.tx, e.ty!, DEER_FLEE, dt)
+  } else {
+    e.scanT = (e.scanT ?? 0) - dt
+    if (e.scanT <= 0) {
+      e.scanT = 3 + Math.random() * 4
+      const stranger = nearest(g, e.x, e.y, o => isUnit(o) && !o.hidden, 55)
+      if (stranger) {
+        // a wary hop away — short, because deer tire and hunters don't
+        const dx = e.x - stranger.x, dy = e.y - stranger.y
+        const d = Math.hypot(dx, dy) || 1
+        e.tx = e.x + (dx / d) * 48
+        e.ty = e.y + (dy / d) * 48
+        e.fleeT = 0.6
+      } else {
+        e.tx = (e.homeX ?? e.x) + (Math.random() - 0.5) * 110
+        e.ty = (e.homeY ?? e.y) + (Math.random() - 0.5) * 90
+      }
+    }
+    if (e.tx !== undefined && moveToward(g, e, e.tx, e.ty!, DEER_AMBLE, dt)) {
+      e.tx = undefined; e.ty = undefined
+    }
+  }
+  // herd manners: drift apart so the family never stands in a stack
+  for (const o of g.ents) {
+    if (o === e || o.kind !== 'deer' || o.hp <= 0) continue
+    const dx = e.x - o.x, dy = e.y - o.y
+    const d = Math.hypot(dx, dy)
+    const min = 26
+    if (d > 0.001 && d < min) {
+      e.x += (dx / d) * (min - d) * 0.5
+      e.y += (dy / d) * (min - d) * 0.5
+    }
+  }
+  e.x = Math.max(30, Math.min(WORLD_W - 30, e.x))
+  e.y = Math.max(30, Math.min(WORLD_H - 30, e.y))
 }
 
 // walk to a garrisonable building and shelter inside (villagers and soldiers alike)
@@ -481,6 +565,7 @@ function separation(g: Game): void {
     // push out of buildings, big resources, and living trees (stumps are open ground)
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
+      if (o.kind === 'deer') continue // soft little things — they step around us
       if (o.kind === 'tree' && (o.amount ?? 0) <= 0) continue // chopped through — a path!
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
@@ -509,6 +594,8 @@ export function update(g: Game, dt: number): void {
       e.cd = Math.max(0, (e.cd ?? 0) - dt)
       if (e.kind === 'villager') updateVillager(g, e, dt)
       else updateSoldier(g, e, dt)
+    } else if (e.kind === 'deer') {
+      updateDeer(g, e, dt)
     } else if (isBuilding(e)) {
       updateBuilding(g, e, dt)
     }

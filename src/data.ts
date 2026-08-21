@@ -7,7 +7,7 @@ export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
-  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry'
+  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
@@ -43,6 +43,9 @@ export interface Ent {
   avoidSide?: number // 1 | -1: which way we're sliding around an obstacle
   chaseT?: number // keep closing a touch after re-entering attack range
   stuckT?: number // time spent walking without getting anywhere
+  homeX?: number // where a deer's heart is — it ambles near here
+  homeY?: number
+  fleeT?: number // a startled deer bolts for this long
   lastX?: number
   lastY?: number
   phase?: number
@@ -194,7 +197,16 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
   goldmine: { r: 34, amount: 500, gives: 'gold', name: 'Gold Mine' },
   berrybush: { r: 14, amount: 120, gives: 'food', name: 'Berry Bush' },
   stonequarry: { r: 30, amount: 350, gives: 'stone', name: 'Stone Quarry' },
+  deer: { r: 11, amount: 90, gives: 'food', name: 'Deer' },
 }
+
+// deer: shy little herds — hunt one down and its meat hauls home as food
+export const DEER_HP = 24
+export const DEER_STRIKE = 8 // a villager's hunting poke
+export const DEER_AMBLE = 22
+export const DEER_FLEE = 95
+// farms are steady but small: one pair of hands per field
+export const FARM_CREW = 1
 
 // counter bonuses: extra damage dealt by attacker kind against target kind.
 // Scouts stand in for cavalry until the stable arrives; knights will slot in here.
@@ -255,5 +267,6 @@ export function isBuilding(e: Ent): boolean {
     e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep'
 }
 export function isResource(e: Ent): boolean {
-  return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' || e.kind === 'stonequarry'
+  return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' ||
+    e.kind === 'stonequarry' || e.kind === 'deer'
 }
