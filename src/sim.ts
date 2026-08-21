@@ -1,14 +1,14 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
-  Game, Ent, Particle, LandmarkKind, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
-  CHAMPS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
+  Game, Ent, Particle, LandmarkKind, TechId, ChampId, ResKind, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
+  CHAMPS, TECHS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
   KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
   DEER_STRIKE, DEER_AMBLE, DEER_FLEE,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
-import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken } from './world'
+import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -194,11 +194,11 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       }
       if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
-      e.gatherT = (e.gatherT ?? 0) + dt
+      const gives: ResKind = isFarm ? 'food' : RESOURCES[res.kind].gives
+      e.gatherT = (e.gatherT ?? 0) + dt * gatherRate(g, e.team, gives) // techs quicken the hands
       const tick = isFarm ? GATHER_TICK * 1.5 : GATHER_TICK // farms are steady but slow
       if (e.gatherT >= tick) {
         e.gatherT = 0
-        const gives = isFarm ? 'food' : RESOURCES[res.kind].gives
         if (e.carryRes !== gives) { e.carry = 0; e.carryRes = gives }
         if (!isFarm) {
           const take = Math.min(1, res.amount!)
@@ -347,8 +347,8 @@ function updateDeer(g: Game, e: Ent, dt: number): void {
       e.y += (dy / d) * (min - d) * 0.5
     }
   }
-  e.x = Math.max(30, Math.min(WORLD_W - 30, e.x))
-  e.y = Math.max(30, Math.min(WORLD_H - 30, e.y))
+  e.x = Math.max(30, Math.min(g.world.w - 30, e.x))
+  e.y = Math.max(30, Math.min(g.world.h - 30, e.y))
 }
 
 // walk to a garrisonable building and shelter inside (villagers and soldiers alike)
@@ -407,8 +407,8 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
           // the enemy scout roams the meadow
           e.scanT = 2 + Math.random() * 3
           e.state = 'move'
-          e.tx = 100 + Math.random() * (WORLD_W - 200)
-          e.ty = 100 + Math.random() * (WORLD_H - 200)
+          e.tx = 100 + Math.random() * (g.world.w - 200)
+          e.ty = 100 + Math.random() * (g.world.h - 200)
         } else {
           e.scanT = 0.5
         }
@@ -460,23 +460,30 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
       }
     }
   }
-  // a champion upgrade underway in this hall
+  // an upgrade underway in this building — a champion oath or an economy tech
   if (e.research) {
     e.research.t -= dt
     if (e.research.t <= 0) {
       const id = e.research.id
-      const spec = CHAMPS[id]
-      g.champs[e.team][id] = true
       e.research = undefined
-      // veterans already standing are knighted on the spot
-      for (const u of g.ents) {
-        if (u.team === e.team && spec.kinds.includes(u.kind)) {
-          u.maxHp += spec.hp
-          u.hp += spec.hp
-          puff(g, u.x, u.y - u.r, '#E9B44C', 4, 'spark')
+      if (id in CHAMPS) {
+        const spec = CHAMPS[id as ChampId]
+        g.champs[e.team][id as ChampId] = true
+        // veterans already standing are knighted on the spot
+        for (const u of g.ents) {
+          if (u.team === e.team && spec.kinds.includes(u.kind)) {
+            u.maxHp += spec.hp
+            u.hp += spec.hp
+            puff(g, u.x, u.y - u.r, '#E9B44C', 4, 'spark')
+          }
         }
+        if (e.team === 0) toast(g, `${spec.name}! ${spec.blurb}.`)
+      } else {
+        const spec = TECHS[id as TechId]
+        g.techs[e.team][id as TechId] = true
+        puff(g, e.x, e.y - e.r * 0.6, '#E9B44C', 6, 'spark')
+        if (e.team === 0) toast(g, `${spec.name}! ${spec.blurb}.`)
       }
-      if (e.team === 0) toast(g, `${spec.name}! ${spec.blurb}.`)
       g.uiDirty = true
     }
   }
@@ -577,8 +584,8 @@ function separation(g: Game): void {
         a.y += (dy / d) * (min - d)
       }
     }
-    a.x = Math.max(16, Math.min(WORLD_W - 16, a.x))
-    a.y = Math.max(16, Math.min(WORLD_H - 16, a.y))
+    a.x = Math.max(16, Math.min(g.world.w - 16, a.x))
+    a.y = Math.max(16, Math.min(g.world.h - 16, a.y))
   }
 }
 

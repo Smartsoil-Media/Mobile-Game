@@ -7,7 +7,12 @@ import { attachInput, clampCamera, selectArmy } from './input'
 import { initUI, syncUI } from './ui'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement
-const g: Game = createGame()
+// ?map=classic pins the handcrafted meadow (the test suite lives there);
+// ?map=<number> replays a specific roll; otherwise every game is a fresh map
+const mapParam = new URLSearchParams(location.search).get('map')
+const g: Game = mapParam === 'classic'
+  ? createGame()
+  : createGame({ seed: mapParam ? (Number(mapParam) >>> 0) || 1 : (Date.now() >>> 0) })
 
 // installed-app duties: cache for offline play (real hosting only — never
 // file:// test runs or the claude.ai artifact preview)

@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
-  Game, Ent, Kind, Cost, ResKind, ChampId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  CHAMPS, NO_CHAMPS, DEER_HP,
+  Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
+  CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -59,7 +59,14 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   return e
 }
 
-export function createGame(): Game {
+// Build a game world. With no options this is the handcrafted classic meadow;
+// pass a seed and the map is rolled fresh — four times the land, homes in
+// opposite corners, and every village guaranteed its nearby berries, woods,
+// gold and stone ("closish", never identical).
+export function createGame(opts?: { seed?: number }): Game {
+  const random = opts?.seed !== undefined
+  const W = random ? WORLD_W * 2 : WORLD_W
+  const H = random ? WORLD_H * 2 : WORLD_H
   const g: Game = {
     ents: [], byId: new Map(), nextId: 1, t: 0, speed: 1,
     res: [
@@ -72,104 +79,150 @@ export function createGame(): Game {
     projectiles: [],
     arrowsFired: 0,
     fog: (() => {
-      const w = Math.ceil(WORLD_W / FOG_CELL)
-      const h = Math.ceil(WORLD_H / FOG_CELL)
+      const w = Math.ceil(W / FOG_CELL)
+      const h = Math.ceil(H / FOG_CELL)
       return { w, h, explored: new Uint8Array(w * h), visible: new Uint8Array(w * h) }
     })(),
     visionT: 0,
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     age: [1, 1],
     champs: [{ ...NO_CHAMPS }, { ...NO_CHAMPS }],
+    techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
+    world: { w: W, h: H },
     toasts: [], started: false, uiDirty: true,
   }
 
-  const rnd = mulberry(20260819)
+  const rnd = mulberry(random ? ((opts!.seed! | 0) || 1) : 20260819)
   const placed: { x: number; y: number; r: number }[] = []
   const clear = (x: number, y: number, r: number) =>
-    x > 60 && x < WORLD_W - 60 && y > 60 && y < WORLD_H - 60 &&
+    x > 60 && x < W - 60 && y > 60 && y < H - 60 &&
     placed.every(p => dist(x, y, p.x, p.y) > r + p.r + 14)
   const mark = (x: number, y: number, r: number) => placed.push({ x, y, r })
 
-  // Bases
-  const pTC = { x: 380, y: 950 }
-  const eTC = { x: 1560, y: 320 }
-  mark(pTC.x, pTC.y, 90); mark(eTC.x, eTC.y, 90)
-  spawn(g, 'towncenter', 0, pTC.x, pTC.y)
-  spawn(g, 'towncenter', 1, eTC.x, eTC.y)
-
-  // Gold mines: one near each base, one contested in the middle
-  for (const m of [{ x: 640, y: 1100 }, { x: 1300, y: 170 }, { x: 950, y: 620 }]) {
-    spawn(g, 'goldmine', NEUTRAL, m.x, m.y); mark(m.x, m.y, 44)
-  }
-
-  // Stone quarries: one near each base plus a contested one
-  for (const q of [{ x: 160, y: 1130 }, { x: 1780, y: 400 }, { x: 1060, y: 860 }]) {
-    spawn(g, 'stonequarry', NEUTRAL, q.x, q.y); mark(q.x, q.y, 40)
-  }
-
-  // Berry patches: forageable food near each base and in the wilds
-  const patches = [
-    { x: 540, y: 870, n: 5 }, { x: 1420, y: 430, n: 5 },
-    { x: 900, y: 1060, n: 4 }, { x: 620, y: 420, n: 4 },
-  ]
-  for (const patch of patches) {
-    for (let i = 0; i < patch.n; i++) {
+  // scatter n of a kind around a center; each settles on the first clear spot
+  const patchAt = (cx: number, cy: number, kind: Kind, n: number, spread: number, r: number) => {
+    for (let i = 0; i < n; i++) {
       for (let tries = 0; tries < 20; tries++) {
         const a = rnd() * Math.PI * 2
-        const d = rnd() * 70
-        const x = patch.x + Math.cos(a) * d
-        const y = patch.y + Math.sin(a) * d * 0.8
-        if (clear(x, y, 16)) { spawn(g, 'berrybush', NEUTRAL, x, y); mark(x, y, 16); break }
+        const d = rnd() * spread
+        const x = cx + Math.cos(a) * d
+        const y = cy + Math.sin(a) * d * 0.8
+        if (clear(x, y, r)) {
+          spawn(g, kind, NEUTRAL, x, y)
+          if (kind !== 'deer') mark(x, y, r)
+          break
+        }
       }
     }
   }
 
-  // Forests: dense bands that act as natural barriers — units can't slip
-  // between packed trunks, so the gaps between woods become the lanes of
-  // the map (and prime ground for a palisade). Chopping carves paths.
-  const groves = [
-    // the player's home woods, west
-    { x: 190, y: 720, n: 18, spread: 150 },
-    { x: 300, y: 330, n: 12, spread: 120 },
-    { x: 560, y: 700, n: 10, spread: 110 },
-    // the enemy's home woods, east
-    { x: 1730, y: 560, n: 18, spread: 150 },
-    { x: 1560, y: 760, n: 14, spread: 130 },
-    { x: 1380, y: 460, n: 10, spread: 110 },
-    // north-central band — the gap east of it is the north lane
-    { x: 760, y: 240, n: 16, spread: 150 },
-    { x: 1010, y: 170, n: 12, spread: 120 },
-    // south-central band — the gap west of it is the south lane
-    { x: 1160, y: 980, n: 16, spread: 150 },
-    { x: 940, y: 1130, n: 12, spread: 120 },
-    // a scattered clump in the southwest wilds
-    { x: 660, y: 1050, n: 6, spread: 90 },
-  ]
-  for (const grove of groves) {
-    for (let i = 0; i < grove.n; i++) {
-      for (let tries = 0; tries < 20; tries++) {
-        const a = rnd() * Math.PI * 2
-        const d = rnd() * grove.spread
-        const x = grove.x + Math.cos(a) * d
-        const y = grove.y + Math.sin(a) * d * 0.8
-        if (clear(x, y, 10)) { spawn(g, 'tree', NEUTRAL, x, y); mark(x, y, 10); break }
-      }
-    }
-  }
+  let pTC = { x: 380, y: 950 }
+  let eTC = { x: 1560, y: 320 }
 
-  // Deer herds: shy little families grazing the open pockets of the wilds
-  const herds = [
-    { x: 800, y: 300, n: 3 }, { x: 620, y: 180, n: 3 }, { x: 1420, y: 1100, n: 3 },
-  ]
-  for (const herd of herds) {
-    for (let i = 0; i < herd.n; i++) {
-      for (let tries = 0; tries < 20; tries++) {
+  if (!random) {
+    // ---- the classic meadow, exactly as always (the test suite lives here) ----
+    mark(pTC.x, pTC.y, 90); mark(eTC.x, eTC.y, 90)
+    spawn(g, 'towncenter', 0, pTC.x, pTC.y)
+    spawn(g, 'towncenter', 1, eTC.x, eTC.y)
+
+    // Gold mines: one near each base, one contested in the middle
+    for (const m of [{ x: 640, y: 1100 }, { x: 1300, y: 170 }, { x: 950, y: 620 }]) {
+      spawn(g, 'goldmine', NEUTRAL, m.x, m.y); mark(m.x, m.y, 44)
+    }
+    // Stone quarries: one near each base plus a contested one
+    for (const q of [{ x: 160, y: 1130 }, { x: 1780, y: 400 }, { x: 1060, y: 860 }]) {
+      spawn(g, 'stonequarry', NEUTRAL, q.x, q.y); mark(q.x, q.y, 40)
+    }
+    // Berry patches: forageable food near each base and in the wilds
+    for (const patch of [
+      { x: 540, y: 870, n: 5 }, { x: 1420, y: 430, n: 5 },
+      { x: 900, y: 1060, n: 4 }, { x: 620, y: 420, n: 4 },
+    ]) patchAt(patch.x, patch.y, 'berrybush', patch.n, 70, 16)
+    // Forests: dense bands that act as natural barriers — units can't slip
+    // between packed trunks, so the gaps between woods become the lanes of
+    // the map (and prime ground for a palisade). Chopping carves paths.
+    for (const grove of [
+      { x: 190, y: 720, n: 18, spread: 150 },
+      { x: 300, y: 330, n: 12, spread: 120 },
+      { x: 560, y: 700, n: 10, spread: 110 },
+      { x: 1730, y: 560, n: 18, spread: 150 },
+      { x: 1560, y: 760, n: 14, spread: 130 },
+      { x: 1380, y: 460, n: 10, spread: 110 },
+      { x: 760, y: 240, n: 16, spread: 150 },
+      { x: 1010, y: 170, n: 12, spread: 120 },
+      { x: 1160, y: 980, n: 16, spread: 150 },
+      { x: 940, y: 1130, n: 12, spread: 120 },
+      { x: 660, y: 1050, n: 6, spread: 90 },
+    ]) patchAt(grove.x, grove.y, 'tree', grove.n, grove.spread, 10)
+    // Deer herds: shy little families grazing the open pockets of the wilds
+    for (const herd of [
+      { x: 800, y: 300, n: 3 }, { x: 620, y: 180, n: 3 }, { x: 1420, y: 1100, n: 3 },
+    ]) patchAt(herd.x, herd.y, 'deer', herd.n, 55, 12)
+  } else {
+    // ---- a fresh meadow: homes in opposite corners, kit guaranteed closish ----
+    const jig = () => (rnd() - 0.5) * 0.06
+    const m = 0.16 // how deep into the corner each village sits
+    const diag = rnd() < 0.5 // which diagonal this match is fought across
+    pTC = { x: (m + jig()) * W, y: ((diag ? 1 - m : m) + jig()) * H }
+    eTC = { x: (1 - m + jig()) * W, y: ((diag ? m : 1 - m) + jig()) * H }
+    mark(pTC.x, pTC.y, 90); mark(eTC.x, eTC.y, 90)
+    spawn(g, 'towncenter', 0, pTC.x, pTC.y)
+    spawn(g, 'towncenter', 1, eTC.x, eTC.y)
+
+    // a clear spot on a ring around a point — for each home's guaranteed kit
+    const ring = (cx: number, cy: number, minD: number, maxD: number, r: number) => {
+      for (let tries = 0; tries < 80; tries++) {
         const a = rnd() * Math.PI * 2
-        const d = rnd() * 55
-        const x = herd.x + Math.cos(a) * d
-        const y = herd.y + Math.sin(a) * d * 0.8
-        if (clear(x, y, 12)) { spawn(g, 'deer', NEUTRAL, x, y); break }
+        const d = minD + rnd() * (maxD - minD)
+        const x = cx + Math.cos(a) * d
+        const y = cy + Math.sin(a) * d * 0.9
+        if (clear(x, y, r)) return { x, y }
       }
+      return null
+    }
+    for (const tc of [pTC, eTC]) {
+      // berries, gold and stone claim their ground first — the woods are
+      // generous and can settle around them
+      const berries = ring(tc.x, tc.y, 150, 220, 20)
+      if (berries) patchAt(berries.x, berries.y, 'berrybush', 6, 90, 16)
+      const gold = ring(tc.x, tc.y, 240, 340, 44)
+      if (gold) { spawn(g, 'goldmine', NEUTRAL, gold.x, gold.y); mark(gold.x, gold.y, 44) }
+      const stone = ring(tc.x, tc.y, 260, 400, 40)
+      if (stone) { spawn(g, 'stonequarry', NEUTRAL, stone.x, stone.y); mark(stone.x, stone.y, 40) }
+      const wood1 = ring(tc.x, tc.y, 210, 330, 30)
+      if (wood1) patchAt(wood1.x, wood1.y, 'tree', 12, 120, 10)
+      const wood2 = ring(tc.x, tc.y, 240, 380, 30)
+      if (wood2) patchAt(wood2.x, wood2.y, 'tree', 9, 100, 10)
+    }
+
+    // and the wilds: contested riches and rambling woods across the wider land
+    const anySpot = (margin: number, r: number) => {
+      for (let tries = 0; tries < 80; tries++) {
+        const x = margin + rnd() * (W - margin * 2)
+        const y = margin + rnd() * (H - margin * 2)
+        if (clear(x, y, r)) return { x, y }
+      }
+      return null
+    }
+    for (let i = 0; i < 7; i++) {
+      const s = anySpot(260, 44)
+      if (s) { spawn(g, 'goldmine', NEUTRAL, s.x, s.y); mark(s.x, s.y, 44) }
+    }
+    for (let i = 0; i < 7; i++) {
+      const s = anySpot(260, 40)
+      if (s) { spawn(g, 'stonequarry', NEUTRAL, s.x, s.y); mark(s.x, s.y, 40) }
+    }
+    for (let i = 0; i < 9; i++) {
+      const s = anySpot(220, 20)
+      if (s) patchAt(s.x, s.y, 'berrybush', 4, 70, 16)
+    }
+    for (let i = 0; i < 34; i++) {
+      const s = anySpot(180, 30)
+      if (s) patchAt(s.x, s.y, 'tree', 9 + Math.floor(rnd() * 10), 100 + rnd() * 70, 10)
+    }
+    for (let i = 0; i < 7; i++) {
+      const s = anySpot(300, 14)
+      if (s) patchAt(s.x, s.y, 'deer', 3, 55, 12)
     }
   }
 
@@ -188,6 +241,16 @@ export function createGame(): Game {
   g.camera.y = pTC.y - 120
   updateVision(g) // the home meadow is visible before the first tick
   return g
+}
+
+// how fast this team's villagers work a resource, with techs folded in
+export function gatherRate(g: Game, team: number, res: ResKind): number {
+  const t = g.techs[team]
+  if (!t) return 1
+  if (res === 'wood' && t.steelaxes) return 1.2
+  if (res === 'food' && t.wheelbarrow) return 1.2
+  if ((res === 'gold' || res === 'stone') && t.minerspicks) return 1.2
+  return 1
 }
 
 // ---- Fog of war ----
@@ -389,7 +452,7 @@ export function openDoors(g: Game, b: Ent): void {
 // square footprints so villages can be packed in tidy rows.
 export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
   const f = BUILDINGS[kind].foot
-  if (x - f < 40 || x + f > WORLD_W - 40 || y - f < 40 || y + f > WORLD_H - 40) return false
+  if (x - f < 40 || x + f > g.world.w - 40 || y - f < 40 || y + f > g.world.h - 40) return false
   const isPal = kind === 'wall' || kind === 'gate'
   for (const e of g.ents) {
     if (isUnit(e)) continue

@@ -53,7 +53,7 @@ export interface Ent {
   complete?: boolean
   progress?: number
   queue?: { kind: Kind; t: number; total: number }[]
-  research?: { id: ChampId; t: number; total: number } // a champion upgrade underway here
+  research?: { id: ChampId | TechId; t: number; total: number } // an upgrade underway here
   garrison?: number
   insideId?: number // which building this hidden unit is sheltering in
   volleyT?: number
@@ -106,6 +106,8 @@ export interface Game {
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
   age: number[] // per team: 1 = Dark, 2 = Feudal, 3 = Castle (advanced by landmarks)
   champs: Record<ChampId, boolean>[] // per team: bought champion upgrades
+  techs: Record<TechId, boolean>[] // per team: researched economy techs
+  world: { w: number; h: number } // this map's size (random maps are bigger than classic)
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean
@@ -200,6 +202,15 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
   deer: { r: 11, amount: 90, gives: 'food', name: 'Deer' },
 }
 
+// ---- economy techs: researched the honest way at their home buildings ----
+export type TechId = 'steelaxes' | 'wheelbarrow' | 'minerspicks'
+export const TECHS: Record<TechId, { name: string; blurb: string; at: Kind; cost: Cost; time: number }> = {
+  steelaxes: { name: 'Steel Axes', blurb: 'Villagers chop wood 20% faster', at: 'lumbercamp', cost: cost({ food: 100, wood: 75 }), time: 30 },
+  wheelbarrow: { name: 'Wheelbarrow', blurb: 'Villagers gather food 20% faster', at: 'mill', cost: cost({ food: 100, wood: 75 }), time: 30 },
+  minerspicks: { name: "Miner's Picks", blurb: 'Villagers mine gold and stone 20% faster', at: 'miningcamp', cost: cost({ food: 100, wood: 75 }), time: 30 },
+}
+export const NO_TECHS: Record<TechId, boolean> = { steelaxes: false, wheelbarrow: false, minerspicks: false }
+
 // deer: shy little herds — hunt one down and its meat hauls home as food
 export const DEER_HP = 24
 export const DEER_STRIKE = 8 // a villager's hunting poke
@@ -233,7 +244,7 @@ export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
 export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age', 'Castle Age']
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7
-export const POP_MAX = 25
+export const POP_MAX = 50
 // garrison defense
 export const TC_RANGE = 190
 export const TC_VOLLEY = 1.4

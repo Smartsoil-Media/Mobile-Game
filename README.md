@@ -18,6 +18,17 @@ The meadow itself is alive: mixed woods (oaks, pines, pale birches), pebble
 clusters, toadstool rings and clover, butterflies looping in the sunlight,
 worn earth trodden around every standing building, and deer grazing the wilds.
 
+## The map
+
+Every new game rolls a **fresh map, four times the classic size**
+(3840×2560): the two villages spawn in opposite corners, and each is
+guaranteed its starting kit *closish* to home — a berry patch, home woods,
+a gold mine and a stone quarry — while the wilds between are dealt anew
+each time (contested mines, rambling forests, deer herds). The population
+cap is **50**. URL flags: `?map=classic` pins the original handcrafted
+meadow (the regression suite lives there); `?map=<number>` replays a
+specific roll.
+
 ## Controls
 
 - **Tap** a villager or building to select it
@@ -65,6 +76,10 @@ worn earth trodden around every standing building, and deer grazing the wilds.
   building's wood price, paid as they work.
 - **Build menu** has two doors: Economy and Military. The **Mill** (60 wood)
   is a food drop-off for berries and farms.
+- **Economy techs** (Feudal Age, 100 food + 75 wood, 30s each) are researched
+  at their home buildings: **Steel Axes** at the Lumber Camp (+20% wood),
+  **Wheelbarrow** at the Mill (+20% food, farms included), **Miner's Picks**
+  at the Mining Camp (+20% gold & stone). The enemy researches them too.
 
 ## Ages & Landmarks — the English
 

@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, WORLD_W, WORLD_H, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, BUILDINGS, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, wallLinePoints, fogIndex } from './world'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawTC, drawHouse, drawBarracks,
@@ -76,14 +76,16 @@ function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
 // rings, clover patches. Purely decorative, fixed per map, drawn under everything.
 interface Decor { x: number; y: number; kind: 'pebbles' | 'mushrooms' | 'clover'; seed: number }
 let decor: Decor[] | null = null
-function makeDecor(): Decor[] {
+let decorKey = ''
+function makeDecor(g: Game): Decor[] {
   const rnd = (() => { let s = 4242; return () => { s = (s * 16807) % 2147483647; return s / 2147483647 } })()
   const out: Decor[] = []
   const kinds: Decor['kind'][] = ['pebbles', 'mushrooms', 'clover']
-  for (let i = 0; i < 46; i++) {
+  const count = Math.round(46 * (g.world.w * g.world.h) / (1920 * 1280)) // same density on any map
+  for (let i = 0; i < count; i++) {
     out.push({
-      x: 70 + rnd() * (WORLD_W - 140),
-      y: 70 + rnd() * (WORLD_H - 140),
+      x: 70 + rnd() * (g.world.w - 140),
+      y: 70 + rnd() * (g.world.h - 140),
       kind: kinds[Math.floor(rnd() * 3)],
       seed: Math.floor(rnd() * 1000),
     })
@@ -91,8 +93,9 @@ function makeDecor(): Decor[] {
   return out
 }
 
-function drawDecor(ctx: CanvasRenderingContext2D): void {
-  if (!decor) decor = makeDecor()
+function drawDecor(ctx: CanvasRenderingContext2D, g: Game): void {
+  const key = `${g.world.w}x${g.world.h}`
+  if (!decor || decorKey !== key) { decor = makeDecor(g); decorKey = key }
   for (const d of decor) {
     if (d.kind === 'pebbles') {
       ctx.fillStyle = 'rgba(160, 152, 130, 0.8)'
@@ -153,15 +156,16 @@ function drawWornEarth(ctx: CanvasRenderingContext2D, g: Game): void {
 // a few butterflies looping lazily over the meadow — pure ambience
 function drawButterflies(ctx: CanvasRenderingContext2D, g: Game, time: number): void {
   const anchors = [
-    { x: 560, y: 830, c: '#F7F1DE' }, { x: 980, y: 560, c: '#F0C9CF' },
-    { x: 1440, y: 420, c: '#F7F1DE' }, { x: 760, y: 1080, c: '#E9B44C' },
-    { x: 1240, y: 880, c: '#F0C9CF' },
+    { fx: 0.29, fy: 0.65, c: '#F7F1DE' }, { fx: 0.51, fy: 0.44, c: '#F0C9CF' },
+    { fx: 0.75, fy: 0.33, c: '#F7F1DE' }, { fx: 0.4, fy: 0.84, c: '#E9B44C' },
+    { fx: 0.65, fy: 0.69, c: '#F0C9CF' }, { fx: 0.18, fy: 0.22, c: '#F7F1DE' },
+    { fx: 0.86, fy: 0.8, c: '#F0C9CF' },
   ]
   for (let i = 0; i < anchors.length; i++) {
     const a = anchors[i]
     const t = time * 0.5 + i * 2.1
-    const x = a.x + Math.sin(t) * 60 + Math.sin(t * 2.3) * 22
-    const y = a.y + Math.cos(t * 0.8) * 42 + Math.sin(t * 3.1) * 10
+    const x = a.fx * g.world.w + Math.sin(t) * 60 + Math.sin(t * 2.3) * 22
+    const y = a.fy * g.world.h + Math.cos(t * 0.8) * 42 + Math.sin(t * 3.1) * 10
     if (g.fog.visible[fogIndex(g, x, y)] !== 1) continue // they live in the sunlight
     const flap = Math.abs(Math.sin(time * 10 + i))
     ctx.fillStyle = a.c
@@ -176,29 +180,30 @@ function drawButterflies(ctx: CanvasRenderingContext2D, g: Game, time: number): 
 
 // The meadow fades into fog-dark at the world's rim, so the edge of the map
 // reads as unexplored gloom rolling in — never a hard border.
-function drawEdgeFade(ctx: CanvasRenderingContext2D): void {
+function drawEdgeFade(ctx: CanvasRenderingContext2D, g: Game): void {
+  const { w: WW, h: WH } = g.world
   const F = 46
   const dark = (a: number) => `rgba(30, 42, 26, ${a})`
   let gr = ctx.createLinearGradient(0, 0, 0, F)
   gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
-  ctx.fillStyle = gr; ctx.fillRect(0, 0, WORLD_W, F)
-  gr = ctx.createLinearGradient(0, WORLD_H, 0, WORLD_H - F)
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, WW, F)
+  gr = ctx.createLinearGradient(0, WH, 0, WH - F)
   gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
-  ctx.fillStyle = gr; ctx.fillRect(0, WORLD_H - F, WORLD_W, F)
+  ctx.fillStyle = gr; ctx.fillRect(0, WH - F, WW, F)
   gr = ctx.createLinearGradient(0, 0, F, 0)
   gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
-  ctx.fillStyle = gr; ctx.fillRect(0, 0, F, WORLD_H)
-  gr = ctx.createLinearGradient(WORLD_W, 0, WORLD_W - F, 0)
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, F, WH)
+  gr = ctx.createLinearGradient(WW, 0, WW - F, 0)
   gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
-  ctx.fillStyle = gr; ctx.fillRect(WORLD_W - F, 0, F, WORLD_H)
+  ctx.fillStyle = gr; ctx.fillRect(WW - F, 0, F, WH)
   // opaque frame overlapping the boundary — buries the meadow's antialiased
   // edge so not even a hairline of the world rect survives
   const M = 600
   ctx.fillStyle = dark(1)
-  ctx.fillRect(-M, -M, WORLD_W + M * 2, M + 2)
-  ctx.fillRect(-M, WORLD_H - 2, WORLD_W + M * 2, M + 2)
-  ctx.fillRect(-M, -M, M + 2, WORLD_H + M * 2)
-  ctx.fillRect(WORLD_W - 2, -M, M + 2, WORLD_H + M * 2)
+  ctx.fillRect(-M, -M, WW + M * 2, M + 2)
+  ctx.fillRect(-M, WH - 2, WW + M * 2, M + 2)
+  ctx.fillRect(-M, -M, M + 2, WH + M * 2)
+  ctx.fillRect(WW - 2, -M, M + 2, WH + M * 2)
 }
 
 export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
@@ -222,15 +227,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.fillStyle = groundPattern
   ctx.beginPath()
   const cr = 46
+  const { w: WW, h: WH } = g.world
   ctx.moveTo(cr, 0)
-  ctx.arcTo(WORLD_W, 0, WORLD_W, WORLD_H, cr)
-  ctx.arcTo(WORLD_W, WORLD_H, 0, WORLD_H, cr)
-  ctx.arcTo(0, WORLD_H, 0, 0, cr)
-  ctx.arcTo(0, 0, WORLD_W, 0, cr)
+  ctx.arcTo(WW, 0, WW, WH, cr)
+  ctx.arcTo(WW, WH, 0, WH, cr)
+  ctx.arcTo(0, WH, 0, 0, cr)
+  ctx.arcTo(0, 0, WW, 0, cr)
   ctx.closePath()
   ctx.fill()
 
-  drawDecor(ctx)
+  drawDecor(ctx, g)
   drawWornEarth(ctx, g)
 
   // selection rings under everything else
@@ -335,7 +341,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   drawButterflies(ctx, g, time)
 
   drawFog(ctx, g)
-  drawEdgeFade(ctx)
+  drawEdgeFade(ctx, g)
 
   // placement ghost rides above the fog so it's always legible
   if (g.placing === 'wall' && g.placePos && g.placeEnd) {

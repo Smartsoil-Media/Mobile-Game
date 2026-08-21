@@ -41,7 +41,7 @@ const page = await browser.newPage({
 page.on('console', m => { if (m.type() === 'error') console.log('PAGE ERROR:', m.text()) })
 page.on('pageerror', e => console.log('PAGE EXCEPTION:', e.message))
 
-await page.goto('file://' + resolve('dist/index.html'))
+await page.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await page.evaluate(() => window.__game.allowPortrait()) // suite drives portrait viewports
 await page.waitForTimeout(600)
 await page.screenshot({ path: 'shots/1-start.png' })
@@ -289,7 +289,7 @@ if (final?.over !== 'win') throw new Error('did not reach victory: ' + JSON.stri
 // 4) fresh page: the enemy AI builds a real economy and army from the same start
 const page3 = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await page3.bringToFront()
-await page3.goto('file://' + resolve('dist/index.html'))
+await page3.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await page3.evaluate(() => window.__game.allowPortrait())
 await page3.tap('#play-btn')
 await page3.evaluate(() => {
@@ -299,7 +299,7 @@ await page3.evaluate(() => {
   pTC.hp = pTC.maxHp = 100000
   window.__game.setSpeed(20)
 })
-await waitSim(page3, 300, 180000)
+await waitSim(page3, 340, 200000)
 const aiCheck = await page3.evaluate(() => {
   const g = window.__game.state
   return {
@@ -316,7 +316,7 @@ const aiCheck = await page3.evaluate(() => {
       ['abbeymill', 'kingsbarracks', 'guildhall', 'whitekeep'].includes(e.kind)),
   }
 })
-console.log('enemy AI after 300 sim-s:', aiCheck)
+console.log('enemy AI after 340 sim-s:', aiCheck)
 if (aiCheck.vills <= 3) throw new Error('enemy AI trained no villagers')
 if (aiCheck.barracks < 1) throw new Error('enemy AI built no barracks')
 // a smart village either fields an army or has a landmark rising toward Feudal
@@ -476,6 +476,41 @@ if (!(await page3.isVisible('[data-cmd="build-mill"]'))) throw new Error('mill m
 await page3.tap('[data-cmd="back"]')
 // both villages feudal for the remaining feature checks
 await page3.evaluate(() => { window.__game.state.age = [2, 2] })
+
+// 4.55) economy techs: Miner's Picks researched the honest way at a mining camp
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].food = 500; g.res[0].wood = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const campId = window.__game.spawn('miningcamp', 0, tc.x + 420, tc.y + 200)
+  window.__game.select(campId)
+})
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('[data-cmd="research-minerspicks"]')))
+  throw new Error('research button missing on the mining camp')
+const researchBefore = await page3.evaluate(() => ({
+  food: window.__game.state.res[0].food, wood: window.__game.state.res[0].wood,
+}))
+await page3.tap('[data-cmd="research-minerspicks"]')
+await page3.waitForTimeout(250)
+const researchStart = await page3.evaluate(() => {
+  const g = window.__game.state
+  const camp = g.ents.find(e => e.team === 0 && e.kind === 'miningcamp' && e.research)
+  return { id: camp ? camp.research.id : null, food: g.res[0].food, wood: g.res[0].wood }
+})
+console.log('tech research start:', researchStart)
+if (researchStart.id !== 'minerspicks') throw new Error('tech research did not start')
+if (Math.round(researchBefore.food - researchStart.food) !== 100 ||
+  Math.round(researchBefore.wood - researchStart.wood) !== 75)
+  throw new Error('research should cost 100 food + 75 wood')
+await page3.evaluate(() => window.__game.setSpeed(15))
+await waitSim(page3, 34)
+const researched = await page3.evaluate(() => {
+  window.__game.setSpeed(1)
+  return { ...window.__game.state.techs[0] }
+})
+console.log('techs after research:', researched)
+if (!researched.minerspicks) throw new Error("Miner's Picks research never finished")
 
 // 4.66) the stable: trains scouts now, teases knights until the Castle Age
 await page3.evaluate(() => {
@@ -1917,7 +1952,7 @@ if (!(await page.isVisible('[data-cmd="train-swordsman"]'))) throw new Error('ba
 
 // landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
-await page2.goto('file://' + resolve('dist/index.html'))
+await page2.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await page2.bringToFront()
 // in landscape the rotate prompt must NOT be up
 if (await page2.isVisible('#rotate-overlay')) throw new Error('rotate prompt showing in landscape')
@@ -2002,6 +2037,58 @@ const noVoid = await page2.evaluate(() => {
 })
 console.log('no-void clamp:', noVoid)
 if (!noVoid.inside) throw new Error('camera can still see beyond the fog rim')
+
+// 19) random maps: every roll is a big fresh world where both homes get their kit
+for (const seed of [7, 13, 2026]) {
+  const pg = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
+  await pg.goto('file://' + resolve('dist/index.html') + '?map=' + seed)
+  await pg.evaluate(() => window.__game.allowPortrait())
+  const inv = await pg.evaluate(() => {
+    const g = window.__game.state
+    const tcs = [0, 1].map(team => g.ents.find(e => e.team === team && e.kind === 'towncenter'))
+    const near = (tc, kind, maxD) => g.ents.filter(e =>
+      e.kind === kind && Math.hypot(e.x - tc.x, e.y - tc.y) <= maxD).length
+    return {
+      w: g.world.w, h: g.world.h,
+      fogW: g.fog.w, fogH: g.fog.h,
+      tcDist: Math.round(Math.hypot(tcs[0].x - tcs[1].x, tcs[0].y - tcs[1].y)),
+      kits: tcs.map(tc => ({
+        berries: near(tc, 'berrybush', 330),
+        trees: near(tc, 'tree', 520),
+        gold: near(tc, 'goldmine', 400),
+        stone: near(tc, 'stonequarry', 460),
+      })),
+      deer: g.ents.filter(e => e.kind === 'deer').length,
+      vills: g.ents.filter(e => e.kind === 'villager').length,
+    }
+  })
+  console.log(`random map (seed ${seed}):`, JSON.stringify(inv))
+  if (inv.w !== 3840 || inv.h !== 2560) throw new Error('random map should be 3840x2560')
+  if (inv.fogW !== Math.ceil(3840 / 32) || inv.fogH !== Math.ceil(2560 / 32)) throw new Error('fog grid not sized to the map')
+  if (inv.tcDist < 1800) throw new Error('town halls spawned too close: ' + inv.tcDist)
+  for (const kit of inv.kits) {
+    if (kit.berries < 4) throw new Error('a home is missing its berry patch: ' + JSON.stringify(kit))
+    if (kit.trees < 10) throw new Error('a home is missing its woods: ' + JSON.stringify(kit))
+    if (kit.gold < 1) throw new Error('a home is missing its gold mine: ' + JSON.stringify(kit))
+    if (kit.stone < 1) throw new Error('a home is missing its stone quarry: ' + JSON.stringify(kit))
+  }
+  if (inv.deer < 9) throw new Error('the wilds are short of deer: ' + inv.deer)
+  if (inv.vills !== 6) throw new Error('starting villagers wrong: ' + inv.vills)
+  await pg.close()
+}
+// two different seeds must not deal the same map
+const layoutOf = async seed => {
+  const pg = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true })
+  await pg.goto('file://' + resolve('dist/index.html') + '?map=' + seed)
+  const sig = await pg.evaluate(() => {
+    const g = window.__game.state
+    return g.ents.filter(e => e.kind === 'goldmine').map(e => `${Math.round(e.x)},${Math.round(e.y)}`).join(';')
+  })
+  await pg.close()
+  return sig
+}
+if (await layoutOf(7) === await layoutOf(13)) throw new Error('different seeds dealt identical maps')
+console.log('random map invariants hold')
 
 await browser.close()
 console.log('PLAYTEST PASSED')

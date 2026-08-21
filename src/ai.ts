@@ -2,14 +2,17 @@
 // It gathers, builds, banks resources for its landmark age-ups, reads the
 // player's army composition and trains counters, and attacks in growing pushes.
 import {
-  Game, Ent, Cost, ResKind, ChampId, LandmarkKind, UNITS, BUILDINGS, CHAMPS, LANDMARKS,
+  Game, Ent, Cost, ResKind, ChampId, TechId, LandmarkKind, UNITS, BUILDINGS, CHAMPS, TECHS, LANDMARKS,
   SOURCE_OF, POP_MAX, NO_COST, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   dist, isUnit, isBuilding,
 } from './data'
 import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken } from './world'
 
 const THINK_EVERY = 0.8
-const VILLAGER_GOAL = 9
+// a lean opening, then a deeper economy once the Feudal landmark stands
+// (the pop cap of 50 leaves room for it)
+const villagerGoalFor = (age: number) => (age >= 2 ? 14 : 10)
+const farmCapFor = (age: number) => (age >= 2 ? 6 : 3)
 // gatherer quotas, in priority order
 const QUOTAS: [ResKind, number][] = [['food', 3], ['wood', 3], ['gold', 2]]
 
@@ -17,8 +20,10 @@ function nearestSource(g: Game, tc: Ent, r: ResKind): Ent | null {
   const kind = SOURCE_OF[r]
   const raw = nearest(g, tc.x, tc.y, o => o.kind === kind && (o.amount ?? 0) > 0, 800)
   if (raw || r !== 'food') return raw
+  // berries gone: a free farm, or failing that a deer to run down
   return nearest(g, tc.x, tc.y, o => o.kind === 'farm' && o.team === 1 && !!o.complete &&
-    !farmTaken(g, o), 800)
+    !farmTaken(g, o), 800) ??
+    nearest(g, tc.x, tc.y, o => o.kind === 'deer' && (o.amount ?? 0) > 0, 800)
 }
 
 function queuedUnits(g: Game): number {
@@ -104,7 +109,13 @@ export function updateEnemyAI(g: Game, dt: number): void {
       break
     }
     if (!assigned) {
-      const src = nearestSource(g, tc, 'wood') ?? nearestSource(g, tc, 'food')
+      // spare hands chase whatever the landmark bank is short of, else wood
+      const short = reserving ?
+        (g.res[1].food < reserve.food ? 'food' as ResKind :
+          g.res[1].wood < reserve.wood ? 'wood' as ResKind :
+          g.res[1].gold < reserve.gold ? 'gold' as ResKind : null) : null
+      const src = (short && nearestSource(g, tc, short)) ??
+        nearestSource(g, tc, 'wood') ?? nearestSource(g, tc, 'food')
       if (src) { v.state = 'gather'; v.targetId = src.id; v.gatherT = 0 }
     }
   }
@@ -118,7 +129,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
     const src = v && nearestSource(g, tc, r)
     if (v && src) { v.state = 'gather'; v.targetId = src.id; v.gatherT = 0 }
   }
-  if (bankShort && counts[bankShort] < 5) {
+  if (bankShort && counts[bankShort] < 7) {
     retask(vills.find(v => { const r = gatherResOf(g, v); return !!r && r !== bankShort }), bankShort)
   } else if (!reserving && counts.food > 3) {
     retask(vills.find(v => gatherResOf(g, v) === 'food'), counts.wood < 3 ? 'wood' : 'gold')
@@ -141,10 +152,12 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'house', tc)
     } else if (!barracks && vills.length >= 4) {
       tryPlace(g, 'barracks', tc)
-    } else if (foodDry && farms < 5) {
-      tryPlace(g, 'farm', tc) // one farmer per field now, so the village wants more of them
     } else if (goal && reserving && canAfford(g, 1, BUILDINGS[goal].cost)) {
       tryPlace(g, goal, tc) // the landmark rises; its walls carry the new age
+    } else if (foodDry && farms < farmCapFor(g.age[1])) {
+      // more fields for the one-farmer rule — farms FEED the landmark bank,
+      // and the cap bounds the timber they can ever drain
+      tryPlace(g, 'farm', tc)
     } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {
       tryPlace(g, 'mill', tc) // a feudal village wants its mill
     } else if (g.age[1] >= 2 && g.res[1].wood > 220 &&
@@ -153,6 +166,20 @@ export function updateEnemyAI(g: Game, dt: number): void {
     } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
       !g.ents.some(e => e.team === 1 && e.kind === 'stable')) {
       tryPlace(g, 'stable', tc) // a stable, so a fallen scout can be replaced
+    }
+  }
+
+  // -- in Feudal and beyond, pick up the economy techs when flush --
+  if (g.age[1] >= 2 && g.res[1].food > 350) {
+    for (const id of Object.keys(TECHS) as TechId[]) {
+      if (g.techs[1][id]) continue
+      const spec = TECHS[id]
+      const host = g.ents.find(e =>
+        e.team === 1 && e.kind === spec.at && e.complete && !e.research)
+      if (!host || !canAfford(g, 1, spec.cost)) continue
+      pay(g, 1, spec.cost)
+      host.research = { id, t: spec.time, total: spec.time }
+      break // one indulgence per think
     }
   }
 
@@ -171,8 +198,10 @@ export function updateEnemyAI(g: Game, dt: number): void {
   }
 
   // -- training --
-  if ((tc.queue?.length ?? 0) === 0 && vills.length < VILLAGER_GOAL &&
-    p.used + queuedUnits(g) < p.cap && canSpend(UNITS.villager.cost)) {
+  // villagers ARE the economy: their training ignores the landmark bank
+  // (the goal caps them, so the detour is small and pays for itself)
+  if ((tc.queue?.length ?? 0) === 0 && vills.length < villagerGoalFor(g.age[1]) &&
+    p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.villager.cost)) {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
   }
@@ -235,7 +264,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
   const fighting = soldiers.some(s => s.state === 'attack' || s.state === 'attackmove')
   if (g.ai.attacking && !fighting) {
     g.ai.attacking = false
-    g.ai.attackSize = Math.min(10, g.ai.attackSize + 2) // bolder every push
+    g.ai.attackSize = Math.min(14, g.ai.attackSize + 2) // bolder every push
   }
   if (!g.ai.attacking && idleSoldiers.length >= g.ai.attackSize) {
     const target = g.ents.find(e => e.team === 0 && e.kind === 'towncenter') ??

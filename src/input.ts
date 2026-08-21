@@ -23,14 +23,14 @@ export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
   if (!rect.width || !rect.height) return
   // never zoom out past "the world (plus its fog rim) fills the screen"
   const minZoom = Math.max(
-    rect.width / (WORLD_W + CAM_PAD * 2),
-    rect.height / (WORLD_H + CAM_PAD * 2))
+    rect.width / (g.world.w + CAM_PAD * 2),
+    rect.height / (g.world.h + CAM_PAD * 2))
   g.camera.zoom = Math.max(minZoom, Math.min(1.6, g.camera.zoom))
   const halfW = rect.width / 2 / g.camera.zoom
   const halfH = rect.height / 2 / g.camera.zoom
   // the camera may drift a little past the edge — out there it's all fog-dark
-  g.camera.x = Math.max(halfW - CAM_PAD, Math.min(WORLD_W - halfW + CAM_PAD, g.camera.x))
-  g.camera.y = Math.max(halfH - CAM_PAD, Math.min(WORLD_H - halfH + CAM_PAD, g.camera.y))
+  g.camera.x = Math.max(halfW - CAM_PAD, Math.min(g.world.w - halfW + CAM_PAD, g.camera.x))
+  g.camera.y = Math.max(halfH - CAM_PAD, Math.min(g.world.h - halfH + CAM_PAD, g.camera.y))
 }
 
 function selectedEnts(g: Game): Ent[] {
