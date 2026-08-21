@@ -8,6 +8,10 @@ const ROOF = '#D9A85F'
 const ROOF_DARK = '#C08F4B'
 const WOOD = '#8B6A4A'
 const WOOD_DARK = '#6F5238'
+const TIMBER = '#DCBC8D'
+const TIMBER_EDGE = '#B99460'
+const STONE_FOOT = '#CFC4AC'
+const STONE_FOOT_DOT = '#BDB197'
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath()
@@ -30,6 +34,38 @@ export function lean(ctx: CanvasRenderingContext2D, e: Ent, factor: number, cap:
   ctx.translate(e.x, e.y)
   ctx.rotate(tilt)
   ctx.translate(-e.x, -e.y)
+}
+
+// Building walls wear their age: rough timber planks in the Dark Age,
+// cream plaster on a stone footing once the village turns Feudal.
+function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, age: number): void {
+  if (age >= 2) {
+    ctx.fillStyle = WALL
+    rr(ctx, x, y, w, h, r); ctx.fill()
+    ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+    rr(ctx, x, y, w, h, r); ctx.stroke()
+    // stone footing course along the base
+    ctx.fillStyle = STONE_FOOT
+    rr(ctx, x + 1, y + h - 7, w - 2, 7, 3.5); ctx.fill()
+    ctx.fillStyle = STONE_FOOT_DOT
+    for (let sx = x + 6; sx < x + w - 5; sx += 9) {
+      ctx.beginPath(); ctx.ellipse(sx, y + h - 3.5, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
+    }
+  } else {
+    ctx.fillStyle = TIMBER
+    rr(ctx, x, y, w, h, r); ctx.fill()
+    ctx.strokeStyle = TIMBER_EDGE; ctx.lineWidth = 2
+    rr(ctx, x, y, w, h, r); ctx.stroke()
+    // vertical plank seams
+    ctx.strokeStyle = 'rgba(139, 106, 74, 0.38)'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    for (let sx = x + 8; sx < x + w - 4; sx += 9) {
+      ctx.moveTo(sx, y + 2.5)
+      ctx.lineTo(sx, y + h - 2.5)
+    }
+    ctx.stroke()
+  }
 }
 
 export function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
@@ -231,16 +267,16 @@ function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number,
   ctx.fill()
 }
 
-export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
   shadow(ctx, x, y + 26, 52, 15)
-  // walls
-  ctx.fillStyle = WALL
-  rr(ctx, x - 38, y - 16, 76, 44, 8); ctx.fill()
-  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2; rr(ctx, x - 38, y - 16, 76, 44, 8); ctx.stroke()
-  // timber cross-beams
-  ctx.strokeStyle = '#E0CBA4'; ctx.lineWidth = 3
-  ctx.beginPath(); ctx.moveTo(x - 20, y - 14); ctx.lineTo(x - 20, y + 26); ctx.moveTo(x + 20, y - 14); ctx.lineTo(x + 20, y + 26); ctx.stroke()
+  // walls wear the age: planks first, plaster on stone once Feudal
+  agedWall(ctx, x - 38, y - 16, 76, 44, 8, age)
+  if (age >= 2) {
+    // timber framing reads well on plaster
+    ctx.strokeStyle = '#E0CBA4'; ctx.lineWidth = 3
+    ctx.beginPath(); ctx.moveTo(x - 20, y - 14); ctx.lineTo(x - 20, y + 19); ctx.moveTo(x + 20, y - 14); ctx.lineTo(x + 20, y + 19); ctx.stroke()
+  }
   // big friendly roof
   ctx.fillStyle = ROOF
   ctx.beginPath()
@@ -291,12 +327,10 @@ export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   flag(ctx, x - 34, y - 22, e.team, t + e.seed)
 }
 
-export function drawHouse(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawHouse(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
   shadow(ctx, x, y + 15, 27, 9)
-  ctx.fillStyle = WALL
-  rr(ctx, x - 19, y - 8, 38, 24, 6); ctx.fill()
-  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.8; rr(ctx, x - 19, y - 8, 38, 24, 6); ctx.stroke()
+  agedWall(ctx, x - 19, y - 8, 38, 24, 6, age)
   ctx.fillStyle = ROOF
   ctx.beginPath()
   ctx.moveTo(x - 25, y - 5)
@@ -312,13 +346,11 @@ export function drawHouse(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   chimneySmoke(ctx, x + 12, y - 24, t, e.seed)
 }
 
-export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   shadow(ctx, x, y + 21, 40, 12)
-  ctx.fillStyle = WALL
-  rr(ctx, x - 30, y - 12, 60, 34, 7); ctx.fill()
-  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2; rr(ctx, x - 30, y - 12, 60, 34, 7); ctx.stroke()
+  agedWall(ctx, x - 30, y - 12, 60, 34, 7, age)
   // roof
   ctx.fillStyle = c.dark
   ctx.beginPath()
@@ -472,22 +504,41 @@ export function drawBlacksmith(ctx: CanvasRenderingContext2D, e: Ent, t: number)
   rr(ctx, x - 16.5, y - 5.5, 5, 3.4, 1.2); ctx.fill()
 }
 
-export function drawMill(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+export function drawMill(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
   shadow(ctx, x, y + 16, 26, 9)
-  // tapered cream tower with timber bands
-  ctx.fillStyle = WALL
+  // tapered tower — planked in the Dark Age, plastered on stone once Feudal
+  ctx.fillStyle = age >= 2 ? WALL : TIMBER
   ctx.beginPath()
   ctx.moveTo(x - 14, y + 15)
   ctx.lineTo(x - 10, y - 16)
   ctx.lineTo(x + 10, y - 16)
   ctx.lineTo(x + 14, y + 15)
   ctx.closePath(); ctx.fill()
-  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  ctx.strokeStyle = age >= 2 ? WALL_EDGE : TIMBER_EDGE; ctx.lineWidth = 2
   ctx.stroke()
-  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.4
-  ctx.beginPath(); ctx.moveTo(x - 12, y + 4); ctx.lineTo(x + 12, y + 4); ctx.stroke()
-  ctx.beginPath(); ctx.moveTo(x - 11, y - 6); ctx.lineTo(x + 11, y - 6); ctx.stroke()
+  if (age >= 2) {
+    ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.4
+    ctx.beginPath(); ctx.moveTo(x - 12, y + 4); ctx.lineTo(x + 12, y + 4); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(x - 11, y - 6); ctx.lineTo(x + 11, y - 6); ctx.stroke()
+    ctx.fillStyle = STONE_FOOT
+    ctx.beginPath()
+    ctx.moveTo(x - 13.2, y + 9); ctx.lineTo(x + 13.2, y + 9)
+    ctx.lineTo(x + 14, y + 15); ctx.lineTo(x - 14, y + 15)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = STONE_FOOT_DOT
+    for (const sx of [-8, 0, 8]) {
+      ctx.beginPath(); ctx.ellipse(x + sx, y + 12, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
+    }
+  } else {
+    ctx.strokeStyle = 'rgba(139, 106, 74, 0.38)'; ctx.lineWidth = 1.2
+    ctx.beginPath()
+    for (const sx of [-7, 0, 7]) {
+      ctx.moveTo(x + sx * 0.85, y - 14)
+      ctx.lineTo(x + sx, y + 13)
+    }
+    ctx.stroke()
+  }
   // thatch cap
   ctx.fillStyle = ROOF
   ctx.beginPath()

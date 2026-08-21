@@ -81,12 +81,6 @@ html, body {
 .pill .sub.alert svg { opacity: 1; }
 .pill-tap { pointer-events: auto; cursor: pointer; }
 .pill-tap:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(70, 92, 48, 0.25); }
-.pill-age {
-  background: #E9B44C;
-  border-color: #C98F2B;
-  color: #4A3413;
-  min-width: 34px;
-}
 .pill svg { display: block; }
 
 /* ---- toasts ---- */

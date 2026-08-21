@@ -47,7 +47,10 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 You start in the **Dark Age** (spearmen only; the archery range, watchtower,
 swordsman and new Town Halls are locked). Advancing to the **Feudal Age**
 costs 275 food and 35s at the Town Hall — and when you do, you choose a
-**patron spirit**. Each patron grants one economy tech instantly and free;
+**patron spirit**. There's no age indicator in the HUD: your **architecture
+shows the age** — timber-plank walls in the Dark Age, cream plaster on stone
+footings once Feudal (and scouting the enemy village reveals whether they've
+aged up). Each patron grants one economy tech instantly and free;
 everyone else can research that same tech the slow way (100 food + 75 wood,
 30s) at its home building:
 

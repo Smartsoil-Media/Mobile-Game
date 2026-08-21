@@ -129,14 +129,14 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'berrybush': drawBush(ctx, e, time); break
       case 'stonequarry': drawQuarry(ctx, e); break
       case 'farm': e.complete ? drawFarm(ctx, e, time) : drawSite(ctx, e); break
-      case 'towncenter': e.complete ? drawTC(ctx, e, time) : drawSite(ctx, e); break
-      case 'house': e.complete ? drawHouse(ctx, e, time) : drawSite(ctx, e); break
-      case 'barracks': e.complete ? drawBarracks(ctx, e, time) : drawSite(ctx, e); break
+      case 'towncenter': e.complete ? drawTC(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
+      case 'house': e.complete ? drawHouse(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
+      case 'barracks': e.complete ? drawBarracks(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'watchtower': e.complete ? drawWatchtower(ctx, e, time) : drawSite(ctx, e); break
       case 'archeryrange': e.complete ? drawArcheryRange(ctx, e, time) : drawSite(ctx, e); break
       case 'lumbercamp': e.complete ? drawLumberCamp(ctx, e) : drawSite(ctx, e); break
       case 'miningcamp': e.complete ? drawMiningCamp(ctx, e) : drawSite(ctx, e); break
-      case 'mill': e.complete ? drawMill(ctx, e, time) : drawSite(ctx, e); break
+      case 'mill': e.complete ? drawMill(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'blacksmith': e.complete ? drawBlacksmith(ctx, e, time) : drawSite(ctx, e); break
       case 'villager': drawVillager(ctx, e, time); break
       case 'swordsman': drawSwordsman(ctx, e, time); break
@@ -218,15 +218,15 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       complete: true, garrison: 0, queue: [],
     }
     switch (g.placing) {
-      case 'towncenter': drawTC(ctx, ghost, time); break
-      case 'house': drawHouse(ctx, ghost, time); break
+      case 'towncenter': drawTC(ctx, ghost, time, g.age[0]); break
+      case 'house': drawHouse(ctx, ghost, time, g.age[0]); break
       case 'farm': drawFarm(ctx, ghost, time); break
-      case 'barracks': drawBarracks(ctx, ghost, time); break
+      case 'barracks': drawBarracks(ctx, ghost, time, g.age[0]); break
       case 'archeryrange': drawArcheryRange(ctx, ghost, time); break
       case 'watchtower': drawWatchtower(ctx, ghost, time); break
       case 'lumbercamp': drawLumberCamp(ctx, ghost); break
       case 'miningcamp': drawMiningCamp(ctx, ghost); break
-      case 'mill': drawMill(ctx, ghost, time); break
+      case 'mill': drawMill(ctx, ghost, time, g.age[0]); break
       case 'blacksmith': drawBlacksmith(ctx, ghost, time); break
     }
     ctx.globalAlpha = 1

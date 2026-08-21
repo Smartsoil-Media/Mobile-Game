@@ -49,7 +49,7 @@ function el<T extends HTMLElement>(id: string): T { return document.getElementBy
 
 // Menu icons are miniatures of the real in-game sprites, drawn fresh onto
 // tiny canvases so the build menu always matches the world's art.
-function spriteIcon(kind: string): HTMLCanvasElement {
+function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = c.height = 96
   c.className = 'sprite-icon'
@@ -82,15 +82,15 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   ctx.scale(k.scale, k.scale)
   ctx.translate(-k.cx, -k.cy)
   switch (kind) {
-    case 'towncenter': drawTC(ctx, fake, 0.2); break
+    case 'towncenter': drawTC(ctx, fake, 0.2, age); break
     case 'farm': drawFarm(ctx, fake, 0.2); break
     case 'watchtower': drawWatchtower(ctx, fake, 0.2); break
     case 'archeryrange': drawArcheryRange(ctx, fake, 0.2); break
-    case 'house': drawHouse(ctx, fake, 0.2); break
-    case 'barracks': drawBarracks(ctx, fake, 0.2); break
+    case 'house': drawHouse(ctx, fake, 0.2, age); break
+    case 'barracks': drawBarracks(ctx, fake, 0.2, age); break
     case 'lumbercamp': drawLumberCamp(ctx, fake); break
     case 'miningcamp': drawMiningCamp(ctx, fake); break
-    case 'mill': drawMill(ctx, fake, 0.8); break
+    case 'mill': drawMill(ctx, fake, 0.8, age); break
     case 'blacksmith': drawBlacksmith(ctx, fake, 0.8); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
@@ -254,7 +254,6 @@ export function syncUI(g: Game): void {
   el('gold-n').textContent = String(Math.floor(g.res[0].gold))
   el('stone-n').textContent = String(Math.floor(g.res[0].stone))
   el('pop-n').textContent = `${p.used}/${p.cap}`
-  el('age-n').textContent = g.age[0] >= 2 ? 'II' : 'I'
   // little crew counts under each number: who's working what, who's loafing
   const crew: Record<ResKind, number> = { wood: 0, food: 0, gold: 0, stone: 0 }
   let idleVills = 0
@@ -443,7 +442,7 @@ export function syncUI(g: Game): void {
         const b = BUILDINGS[kind]
         const locked = g.age[0] < (b.age ?? 1)
         dock.appendChild(iconButton(
-          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind), cost: b.cost, locked },
+          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind, g.age[0]), cost: b.cost, locked },
           () => {
             if (g.age[0] < (b.age ?? 1)) { toast(g, 'Reach the Feudal Age first!'); return }
             g.placing = kind

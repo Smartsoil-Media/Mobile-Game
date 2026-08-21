@@ -526,6 +526,12 @@ export function update(g: Game, dt: number): void {
       g.age[team] = 2
       const p = g.patron[team]
       if (p) g.techs[team][PATRONS[p].tech] = true // the patron's gift, free and instant
+      // the village dresses itself in its new age
+      for (const b of g.ents) {
+        if (b.team === team && isBuilding(b) && b.complete) {
+          puff(g, b.x, b.y - b.r * 0.4, '#FBF3E4', 6)
+        }
+      }
       if (team === 0) {
         toast(g, p
           ? `The Feudal Age dawns — ${PATRONS[p].name} watches over you, and ${PATRONS[p].blurb}!`

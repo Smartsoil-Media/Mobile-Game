@@ -320,10 +320,11 @@ await openCat(page3, 'military')
 const darkLocks = await page3.evaluate(() => ({
   locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
   age: window.__game.state.age[0],
-  pill: document.getElementById('age-n').textContent,
+  agePill: !!document.getElementById('p-age'), // retired: architecture shows the age now
 }))
 console.log('dark age locks:', darkLocks)
-if (darkLocks.age !== 1 || darkLocks.pill !== 'I') throw new Error('should start in the Dark Age')
+if (darkLocks.age !== 1) throw new Error('should start in the Dark Age')
+if (darkLocks.agePill) throw new Error('the age pill should be gone from the HUD')
 if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange'))
   throw new Error('feudal buildings not locked in the Dark Age')
 if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
@@ -364,10 +365,10 @@ const feudal = await page3.evaluate(() => {
   window.__game.setSpeed(1)
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   window.__game.select(v.id)
-  return { age: g.age[0], pill: document.getElementById('age-n').textContent, techs: { ...g.techs[0] } }
+  return { age: g.age[0], techs: { ...g.techs[0] } }
 })
 console.log('after age-up:', feudal)
-if (feudal.age !== 2 || feudal.pill !== 'II') throw new Error('the Feudal Age never dawned')
+if (feudal.age !== 2) throw new Error('the Feudal Age never dawned')
 if (!feudal.techs.steelaxes) throw new Error("the Oak Father's gift (Steel Axes) was not granted")
 if (feudal.techs.wheelbarrow || feudal.techs.minerspicks || feudal.techs.foxpaths)
   throw new Error('only the chosen patron tech should come free')
