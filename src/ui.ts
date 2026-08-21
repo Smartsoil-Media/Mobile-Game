@@ -4,7 +4,7 @@ import {
   AGE2_COST, AGE2_TIME, AGE_NAMES, isUnit,
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints } from './world'
-import { selectArmy, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
+import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout } from './sprites'
 
 const ICON = {
@@ -111,9 +111,14 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
 const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
 
 export function initUI(g: Game): void {
-  el('army-btn').innerHTML = ICON.sword + '<span>Army</span>'
   const canvas = document.getElementById('game') as HTMLCanvasElement
-  el('army-btn').addEventListener('click', () => selectArmy(g, canvas))
+  // the blue grab-everything button anchors the bottom of the army panel;
+  // per-type chips grow above it as the army musters (see syncUI)
+  const all = document.createElement('button')
+  all.id = 'army-all'
+  all.innerHTML = ICON.sword + '<span>Army</span>'
+  all.addEventListener('click', () => selectArmy(g, canvas))
+  el('army-panel').appendChild(all)
   el('t-wood').insertAdjacentHTML('afterbegin', ICON.wood)
   el('t-food').insertAdjacentHTML('afterbegin', ICON.food)
   el('t-gold').insertAdjacentHTML('afterbegin', ICON.gold)
@@ -255,6 +260,33 @@ function updateAffordability(g: Game): void {
   })
 }
 
+// one chip per unit type the player fields, count badges live; rebuilt only
+// when the tally actually changes
+const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight'] as const
+let armySig = ''
+function syncArmyPanel(g: Game): void {
+  const counts = ARMY_TYPES.map(k =>
+    g.ents.reduce((n, e) => n + (e.team === 0 && e.kind === k && !e.hidden ? 1 : 0), 0))
+  const sig = counts.join(',')
+  if (sig === armySig) return
+  armySig = sig
+  const panel = el('army-panel')
+  panel.querySelectorAll('.army-chip').forEach(c => c.remove())
+  const canvas = document.getElementById('game') as HTMLCanvasElement
+  const allBtn = el('army-all')
+  ARMY_TYPES.forEach((kind, i) => {
+    if (!counts[i]) return
+    const chip = document.createElement('button')
+    chip.className = 'army-chip'
+    chip.dataset.cmd = `army-${kind}`
+    chip.setAttribute('aria-label', `Select all ${UNITS[kind].name.toLowerCase()}s`)
+    chip.appendChild(spriteIcon(kind))
+    chip.insertAdjacentHTML('beforeend', `<span class="count">${counts[i]}</span>`)
+    chip.addEventListener('click', () => selectUnitsOfKind(g, kind, canvas))
+    panel.insertBefore(chip, allBtn)
+  })
+}
+
 export function syncUI(g: Game): void {
   const p = pop(g, 0)
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
@@ -279,6 +311,7 @@ export function syncUI(g: Game): void {
   const idleStr = String(idleVills)
   if (el('idle-n').textContent !== idleStr) el('idle-n').textContent = idleStr
   el('s-pop').classList.toggle('alert', idleVills > 0)
+  syncArmyPanel(g)
   updateAffordability(g)
 
   // wall placement: the ✓ shows a live post count and total price as you drag

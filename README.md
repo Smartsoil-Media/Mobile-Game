@@ -31,7 +31,9 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
   from the busiest line). The pop pill counts idle villagers — tap it to
   jump to them
 - **Drag** to pan the camera, **pinch** to zoom
-- **Army** button selects all your soldiers and jumps the camera to them
+- **Army panel** (right edge): one chip per unit type you field, with a
+  live count — tap a chip to grab all spearmen / swordsmen / archers at
+  once; the blue **Army** button below grabs the whole battle line
 - **Archery Range** (175 wood) trains archers — ranged units that shoot
   arrows from a distance (30 food + 35 gold each)
 - **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your

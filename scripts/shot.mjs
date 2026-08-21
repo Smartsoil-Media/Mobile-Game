@@ -202,8 +202,45 @@ const s3 = await state()
 console.log('after training:', s3)
 if (s3.playerSoldiers < 4) throw new Error('soldiers did not train')
 
-// 2.5) army button: selects every soldier and recenters the camera on them
-await page.tap('#army-btn')
+// 2.5) army panel: per-type chips with counts, plus the grab-everything button
+await page.waitForTimeout(300) // let the chip refresh tick
+const panelChips = await page.evaluate(() => ({
+  chips: [...document.querySelectorAll('#army-panel .army-chip')].map(c =>
+    ({ cmd: c.dataset.cmd, count: c.querySelector('.count').textContent })),
+}))
+console.log('army panel:', panelChips)
+const swordChip = panelChips.chips.find(c => c.cmd === 'army-swordsman')
+if (!swordChip) throw new Error('no swordsman chip in the army panel')
+if (Number(swordChip.count) < 4) throw new Error('swordsman chip count wrong: ' + swordChip.count)
+// spawn spearmen: a second chip appears; tapping it selects exactly them
+const spearIds = await page.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  return [window.__game.spawn('spearman', 0, tc.x - 60, tc.y - 120),
+    window.__game.spawn('spearman', 0, tc.x - 90, tc.y - 120)]
+})
+await page.waitForTimeout(300)
+if (!(await page.isVisible('[data-cmd="army-spearman"]'))) throw new Error('spearman chip missing')
+await page.tap('[data-cmd="army-spearman"]')
+await page.waitForTimeout(200)
+const spearSel = await page.evaluate(({ spearIds }) => {
+  const g = window.__game.state
+  return {
+    n: g.selection.length,
+    exact: g.selection.every(id => spearIds.includes(id)),
+  }
+}, { spearIds })
+console.log('spearman chip select:', spearSel)
+if (spearSel.n !== 2 || !spearSel.exact) throw new Error('spearman chip did not select exactly the spearmen')
+await page.evaluate(({ spearIds }) => { // retire them so the march below is swordsmen-only
+  const g = window.__game.state
+  for (const id of spearIds) { const e = g.byId.get(id); if (e) e.hp = 0 }
+  g.selection = []
+}, { spearIds })
+await page.waitForTimeout(400)
+
+// the blue Army button still grabs the whole battle line and recenters
+await page.tap('#army-all')
 await page.waitForTimeout(200)
 const armySel = await page.evaluate(() => {
   const g = window.__game.state
@@ -877,7 +914,11 @@ const crowd = await page3.evaluate(() => {
     return !best || d < best.d ? { e, d } : best
   }, null).e
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager').slice(0, 3)
-  for (const v of vills) { v.state = 'gather'; v.targetId = bush.id; v.gatherT = 0; v.carry = 0 }
+  vills.forEach((v, i) => { // stage them beside the bush — this test is about nestling
+    v.x = bush.x - 50 + i * 20
+    v.y = bush.y + 55
+    v.state = 'gather'; v.targetId = bush.id; v.gatherT = 0; v.carry = 0
+  })
   window.__game.setSpeed(15)
   return { bushId: bush.id, ids: vills.map(v => v.id), food: g.res[0].food }
 })
@@ -1661,7 +1702,7 @@ const landscapeHud = await page2.evaluate(() => {
   }
   return {
     pills: [...document.querySelectorAll('#hud-top .pill')].every(inView),
-    army: inView(document.getElementById('army-btn')),
+    army: inView(document.getElementById('army-panel')),
   }
 })
 console.log('landscape hud:', landscapeHud)

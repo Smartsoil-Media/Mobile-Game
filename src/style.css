@@ -233,15 +233,51 @@ button.cmd.ghost {
 }
 .qring > div { height: 100%; background: var(--honey); border-radius: 999px; }
 
-/* ---- army button ---- */
-#army-btn {
+/* ---- army panel: one chip per unit type, the blue Army button below ---- */
+#army-panel {
   position: absolute;
   right: calc(env(safe-area-inset-right, 0px) + 12px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+.army-chip {
+  position: relative;
   appearance: none;
+  border: 2px solid var(--cream-edge);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 3px 8px rgba(40, 60, 30, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.army-chip .sprite-icon { width: 36px; height: 36px; display: block; }
+.army-chip .count {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--honey);
+  border: 1.5px solid var(--honey-dark);
+  color: #4A3413;
+  border-radius: 999px;
+  font-family: 'Fredoka', 'Nunito', system-ui, sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.army-chip:active { transform: translateY(2px); }
+#army-all {
   border: none;
-  width: 62px;
-  height: 62px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   background: #6D9DC5;
   border-bottom: 4px solid #4E7EA6;
@@ -256,8 +292,10 @@ button.cmd.ghost {
   gap: 1px;
   box-shadow: 0 4px 10px rgba(40, 60, 30, 0.25);
   cursor: pointer;
+  appearance: none;
 }
-#army-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+#army-all svg { width: 20px; height: 20px; }
+#army-all:active { transform: translateY(2px); border-bottom-width: 2px; }
 
 /* ---- overlays ---- */
 .overlay {

@@ -307,6 +307,20 @@ export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
   g.uiDirty = true
 }
 
+// army-panel chip: grab every soldier of one type and bring the camera along
+export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanvasElement): void {
+  const troop = g.ents.filter(e => e.team === 0 && e.kind === kind && !e.hidden)
+  if (!troop.length) return
+  g.placing = null
+  g.placePos = null
+  g.placeEnd = null
+  g.selection = troop.map(e => e.id)
+  g.camera.x = troop.reduce((s, e) => s + e.x, 0) / troop.length
+  g.camera.y = troop.reduce((s, e) => s + e.y, 0) / troop.length
+  if (canvas) clampCamera(g, canvas)
+  g.uiDirty = true
+}
+
 export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
   // every fighting unit you own (scouts stay out of the battle line)
   const army = g.ents.filter(e =>
