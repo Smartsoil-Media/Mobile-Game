@@ -37,6 +37,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   for (const o of g.ents) {
     if (o === e || !isBuilding(o)) continue
     if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
+    if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // just pegs in the grass
     const clearance = e.r + o.r * 0.85
     if (dist(tx, ty, o.x, o.y) < e.r + o.r + 24) continue // that's where we're headed — walk right up
     if (dist(px, py, o.x, o.y) < clearance) { block = o; break }
@@ -442,6 +443,7 @@ function separation(g: Game): void {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'tree') continue // walkable under canopies, keeps paths simple
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
+      if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
       const dx = a.x - o.x, dy = a.y - o.y
       const d = Math.hypot(dx, dy)
       const min = a.r + o.r * 0.85

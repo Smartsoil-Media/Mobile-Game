@@ -556,16 +556,22 @@ if (wallBuilt < 6) throw new Error('villager did not chain-build the fence')
 const gatePass = await page3.evaluate(() => {
   const g = window.__game.state
   window.__game.spawn('gate', 0, 1392, 640)
+  // an UNSTARTED wall foundation right on the path — should be walkable
+  const pegId = window.__game.spawn('wall', 0, 1392, 668)
+  const peg = g.byId.get(pegId)
+  peg.complete = false; peg.progress = 0; peg.hp = 22
   const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
   v.x = 1392; v.y = 596; v.state = 'move'; v.tx = 1392; v.ty = 684; v.targetId = undefined
   window.__game.setSpeed(10)
-  return { villId: v.id }
+  return { villId: v.id, pegId }
 })
 await waitSim(page3, 10)
-const gateResult = await page3.evaluate(({ villId }) => {
+const gateResult = await page3.evaluate(({ villId, pegId }) => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   const v = g.byId.get(villId)
+  const peg = g.byId.get(pegId)
+  if (peg) peg.hp = 0 // tidy the test peg away
   const arrived = Math.hypot(v.x - 1392, v.y - 684) < 22
   // walk the builder home so later tests find the crew where they expect it
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
