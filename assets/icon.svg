@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Bramblewick app icon: the cosy Town Hall on its meadow -->
+  <defs>
+    <radialGradient id="meadow" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#8FBF6A"/>
+      <stop offset="100%" stop-color="#75935A"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#meadow)"/>
+  <!-- soft meadow blotches -->
+  <ellipse cx="120" cy="410" rx="130" ry="60" fill="#83AC61" opacity="0.5"/>
+  <ellipse cx="420" cy="140" rx="120" ry="70" fill="#83AC61" opacity="0.4"/>
+  <!-- flowers -->
+  <g fill="#F7E9EE">
+    <circle cx="92" cy="150" r="9"/><circle cx="418" cy="392" r="9"/>
+    <circle cx="448" cy="120" r="7"/><circle cx="120" cy="392" r="7"/>
+  </g>
+  <g fill="#E9B44C">
+    <circle cx="92" cy="150" r="3.4"/><circle cx="418" cy="392" r="3.4"/>
+    <circle cx="448" cy="120" r="2.6"/><circle cx="120" cy="392" r="2.6"/>
+  </g>
+  <!-- trees -->
+  <g>
+    <rect x="76" y="266" width="18" height="40" rx="8" fill="#8B6A4A"/>
+    <circle cx="85" cy="232" r="44" fill="#6D9552"/>
+    <circle cx="62" cy="252" r="30" fill="#7BA05B"/>
+    <circle cx="110" cy="250" r="28" fill="#7BA05B"/>
+  </g>
+  <g>
+    <rect x="422" y="286" width="16" height="34" rx="7" fill="#8B6A4A"/>
+    <circle cx="430" cy="258" r="36" fill="#6D9552"/>
+    <circle cx="410" cy="274" r="24" fill="#7BA05B"/>
+    <circle cx="450" cy="272" r="23" fill="#7BA05B"/>
+  </g>
+  <!-- Town Hall shadow -->
+  <ellipse cx="256" cy="424" rx="150" ry="34" fill="#42542C" opacity="0.2"/>
+  <!-- walls -->
+  <rect x="146" y="248" width="220" height="164" rx="22" fill="#F6E7C8" stroke="#D9C39B" stroke-width="7"/>
+  <path d="M204 254v152M308 254v152" stroke="#E0CBA4" stroke-width="10" stroke-linecap="round"/>
+  <!-- roof -->
+  <path d="M118 262 Q122 244 140 236 L238 154 Q256 142 274 154 L372 236 Q390 244 394 262 Q330 244 256 246 Q182 244 118 262 Z" fill="#D9A85F"/>
+  <path d="M118 262 Q182 244 256 246 Q330 244 394 262 Q330 258 256 260 Q182 258 118 262 Z" fill="#C08F4B"/>
+  <!-- bell arch -->
+  <circle cx="256" cy="208" r="24" fill="#FBEFD3" stroke="#8B6A4A" stroke-width="6"/>
+  <path d="M244 220 Q243 200 256 198 Q269 200 268 220 Z" fill="#E9B44C"/>
+  <circle cx="256" cy="223" r="5" fill="#B8842E"/>
+  <!-- door -->
+  <rect x="226" y="316" width="60" height="96" rx="28" fill="#8B6A4A"/>
+  <circle cx="272" cy="366" r="6" fill="#E9B44C"/>
+  <!-- flag -->
+  <path d="M150 236 v-64" stroke="#6F5238" stroke-width="8" stroke-linecap="round"/>
+  <path d="M150 172 Q176 166 196 176 Q176 188 150 194 Z" fill="#6D9DC5"/>
+  <!-- chimney + smoke -->
+  <rect x="316" y="160" width="26" height="52" rx="8" fill="#B9977C"/>
+  <circle cx="334" cy="136" r="12" fill="#FAF6EB" opacity="0.85"/>
+  <circle cx="346" cy="112" r="15" fill="#FAF6EB" opacity="0.6"/>
+  <circle cx="360" cy="86" r="18" fill="#FAF6EB" opacity="0.35"/>
+</svg>

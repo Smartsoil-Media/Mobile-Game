@@ -9,6 +9,12 @@ import { initUI, syncUI } from './ui'
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const g: Game = createGame()
 
+// installed-app duties: cache for offline play (real hosting only — never
+// file:// test runs or the claude.ai artifact preview)
+if ('serviceWorker' in navigator && location.hostname.endsWith('github.io')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* offline play is a bonus, not a must */ })
+}
+
 function resize(): void {
   const dpr = window.devicePixelRatio || 1
   canvas.width = Math.round(canvas.clientWidth * dpr)
