@@ -39,7 +39,10 @@ function frame(now: number): void {
     canvas.height !== Math.round(canvas.clientHeight * dpr)) resize()
   const wall = Math.min(0.25, (now - last) / 1000)
   last = now
-  if (g.started) {
+  // the "turn sideways" screen also pauses the meadow — no raids while rotated
+  const rotateHold = canvas.clientHeight > canvas.clientWidth &&
+    !document.body.classList.contains('allow-portrait')
+  if (g.started && !rotateHold) {
     acc += wall * g.speed
     let steps = 0
     while (acc >= STEP && steps < 240) { update(g, STEP); acc -= STEP; steps++ }
@@ -58,4 +61,5 @@ requestAnimationFrame(frame)
   selectArmy() { selectArmy(g, canvas) },
   select(id: number) { g.selection = [id]; g.uiDirty = true },
   spawn(kind: Kind, team: number, x: number, y: number) { return spawn(g, kind, team, x, y).id },
+  allowPortrait() { document.body.classList.add('allow-portrait') }, // headless tests run portrait
 }

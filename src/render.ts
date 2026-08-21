@@ -71,6 +71,25 @@ function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
   return ctx.createPattern(c, 'repeat')!
 }
 
+// The meadow fades into fog-dark at the world's rim, so the edge of the map
+// reads as unexplored gloom rolling in — never a hard border.
+function drawEdgeFade(ctx: CanvasRenderingContext2D): void {
+  const F = 46
+  const dark = (a: number) => `rgba(30, 42, 26, ${a})`
+  let gr = ctx.createLinearGradient(0, 0, 0, F)
+  gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, WORLD_W, F)
+  gr = ctx.createLinearGradient(0, WORLD_H, 0, WORLD_H - F)
+  gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
+  ctx.fillStyle = gr; ctx.fillRect(0, WORLD_H - F, WORLD_W, F)
+  gr = ctx.createLinearGradient(0, 0, F, 0)
+  gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, F, WORLD_H)
+  gr = ctx.createLinearGradient(WORLD_W, 0, WORLD_W - F, 0)
+  gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
+  ctx.fillStyle = gr; ctx.fillRect(WORLD_W - F, 0, F, WORLD_H)
+}
+
 export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   const ctx = canvas.getContext('2d')!
   const dpr = window.devicePixelRatio || 1
@@ -99,9 +118,6 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.arcTo(0, 0, WORLD_W, 0, cr)
   ctx.closePath()
   ctx.fill()
-  ctx.strokeStyle = 'rgba(70, 92, 48, 0.5)'
-  ctx.lineWidth = 6
-  ctx.stroke()
 
   // selection rings under everything else
   for (const id of g.selection) {
@@ -196,6 +212,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.globalAlpha = 1
 
   drawFog(ctx, g)
+  drawEdgeFade(ctx)
 
   // placement ghost rides above the fog so it's always legible
   if (g.placing === 'wall' && g.placePos && g.placeEnd) {

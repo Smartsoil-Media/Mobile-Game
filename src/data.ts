@@ -235,6 +235,7 @@ export const TOWER_VOLLEY = 1.6
 export const TOWER_DMG = 5
 export const WORLD_W = 1920
 export const WORLD_H = 1280
+export const CAM_PAD = 90 // how far the camera may drift past the world edge
 
 export const TEAM_COLOR = [
   { main: '#6D9DC5', dark: '#4E7EA6', pale: '#A8C6E0' },

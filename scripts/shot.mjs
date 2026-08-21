@@ -42,6 +42,7 @@ page.on('console', m => { if (m.type() === 'error') console.log('PAGE ERROR:', m
 page.on('pageerror', e => console.log('PAGE EXCEPTION:', e.message))
 
 await page.goto('file://' + resolve('dist/index.html'))
+await page.evaluate(() => window.__game.allowPortrait()) // suite drives portrait viewports
 await page.waitForTimeout(600)
 await page.screenshot({ path: 'shots/1-start.png' })
 
@@ -252,6 +253,7 @@ if (final?.over !== 'win') throw new Error('did not reach victory: ' + JSON.stri
 const page3 = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await page3.bringToFront()
 await page3.goto('file://' + resolve('dist/index.html'))
+await page3.evaluate(() => window.__game.allowPortrait())
 await page3.tap('#play-btn')
 await page3.evaluate(() => {
   const g = window.__game.state
@@ -1512,6 +1514,8 @@ if (!(await page.isVisible('[data-cmd="train-swordsman"]'))) throw new Error('ba
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html'))
 await page2.bringToFront()
+// in landscape the rotate prompt must NOT be up
+if (await page2.isVisible('#rotate-overlay')) throw new Error('rotate prompt showing in landscape')
 await page2.tap('#play-btn')
 await page2.waitForTimeout(400)
 const landscapeHud = await page2.evaluate(() => {
@@ -1552,9 +1556,12 @@ console.log('landscape tap-to-move:', landscapeMoved)
 if (!landscapeMoved.moved) throw new Error('tap-to-move did not work in landscape')
 await page2.screenshot({ path: 'shots/6-landscape.png' })
 
-// simulated rotation: the canvas backing size must self-heal within a frame
+// simulated rotation: the canvas backing size must self-heal within a frame,
+// and portrait raises the "turn sideways" prompt
 await page2.setViewportSize({ width: 390, height: 844 })
 await page2.waitForTimeout(400)
+if (!(await page2.isVisible('#rotate-overlay'))) throw new Error('rotate prompt missing in portrait')
+await page2.evaluate(() => window.__game.allowPortrait()) // drop the prompt for the remaining checks
 const rotated = await page2.evaluate(() => {
   const c = document.getElementById('game')
   const dpr = window.devicePixelRatio || 1
@@ -1581,14 +1588,15 @@ const noVoid = await page2.evaluate(() => {
   const r = document.getElementById('game').getBoundingClientRect()
   const halfW = r.width / 2 / g.camera.zoom
   const halfH = r.height / 2 / g.camera.zoom
+  const PAD = 90 // CAM_PAD: the fog-dark drift allowance past the edge
   return {
     zoom: Math.round(g.camera.zoom * 1000) / 1000,
-    inside: g.camera.x - halfW >= -1 && g.camera.x + halfW <= 1921 &&
-      g.camera.y - halfH >= -1 && g.camera.y + halfH <= 1281,
+    inside: g.camera.x - halfW >= -PAD - 1 && g.camera.x + halfW <= 1920 + PAD + 1 &&
+      g.camera.y - halfH >= -PAD - 1 && g.camera.y + halfH <= 1280 + PAD + 1,
   }
 })
 console.log('no-void clamp:', noVoid)
-if (!noVoid.inside) throw new Error('camera can still see beyond the world edge')
+if (!noVoid.inside) throw new Error('camera can still see beyond the fog rim')
 
 await browser.close()
 console.log('PLAYTEST PASSED')

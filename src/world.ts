@@ -58,7 +58,7 @@ export function createGame(): Game {
       { wood: 100, food: 50, gold: 0, stone: 0 },
       { wood: 100, food: 50, gold: 0, stone: 0 }, // the enemy plays fair now
     ],
-    camera: { x: 0, y: 0, zoom: 0.62 },
+    camera: { x: 0, y: 0, zoom: 0.85 }, // starts close and cosy; pinch out for the wide view
     selection: [], placing: null, placePos: null, placeEnd: null, over: null, overT: 0,
     particles: [],
     projectiles: [],

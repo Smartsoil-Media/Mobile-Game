@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints } from './world'
 
 export interface PointerState {
@@ -21,14 +21,16 @@ export function screenToWorld(g: Game, canvas: HTMLCanvasElement, sx: number, sy
 export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
   const rect = canvas.getBoundingClientRect()
   if (!rect.width || !rect.height) return
-  // never zoom out past "the world fills the screen" — there is no outside
-  const minZoom = Math.max(rect.width / WORLD_W, rect.height / WORLD_H)
+  // never zoom out past "the world (plus its fog rim) fills the screen"
+  const minZoom = Math.max(
+    rect.width / (WORLD_W + CAM_PAD * 2),
+    rect.height / (WORLD_H + CAM_PAD * 2))
   g.camera.zoom = Math.max(minZoom, Math.min(1.6, g.camera.zoom))
   const halfW = rect.width / 2 / g.camera.zoom
   const halfH = rect.height / 2 / g.camera.zoom
-  // and the viewport edge stops exactly at the world edge
-  g.camera.x = Math.max(halfW, Math.min(WORLD_W - halfW, g.camera.x))
-  g.camera.y = Math.max(halfH, Math.min(WORLD_H - halfH, g.camera.y))
+  // the camera may drift a little past the edge — out there it's all fog-dark
+  g.camera.x = Math.max(halfW - CAM_PAD, Math.min(WORLD_W - halfW + CAM_PAD, g.camera.x))
+  g.camera.y = Math.max(halfH - CAM_PAD, Math.min(WORLD_H - halfH + CAM_PAD, g.camera.y))
 }
 
 function selectedEnts(g: Game): Ent[] {

@@ -321,3 +321,14 @@ button.cmd.ghost {
 .big-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
 
 .hidden { display: none !important; }
+
+/* landscape-first: in portrait, ask for a turn (tests opt out via allow-portrait) */
+#rotate-overlay { display: none; z-index: 40; }
+@media (orientation: portrait) {
+  body:not(.allow-portrait) #rotate-overlay { display: flex; }
+}
+#rotate-phone { animation: tip-over 1.8s ease-in-out infinite alternate; }
+@keyframes tip-over {
+  from { transform: rotate(0deg); }
+  60%, to { transform: rotate(-90deg); }
+}
