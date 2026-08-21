@@ -35,7 +35,10 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   const px = e.x + dirX * probe, py = e.y + dirY * probe
   let block: Ent | null = null
   for (const o of g.ents) {
-    if (o === e || !isBuilding(o)) continue
+    if (o === e) continue
+    // living trees are terrain now; stumps and everything else stay open
+    const treeWall = o.kind === 'tree' && (o.amount ?? 0) > 0
+    if (!treeWall && !isBuilding(o)) continue
     if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
     if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // just pegs in the grass
     const clearance = e.r + o.r * 0.85
@@ -438,10 +441,10 @@ function separation(g: Game): void {
         b.x += nx * push * wb; b.y += ny * push * wb
       }
     }
-    // push out of buildings and big resources
+    // push out of buildings, big resources, and living trees (stumps are open ground)
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
-      if (o.kind === 'tree') continue // walkable under canopies, keeps paths simple
+      if (o.kind === 'tree' && (o.amount ?? 0) <= 0) continue // chopped through — a path!
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
       const dx = a.x - o.x, dy = a.y - o.y

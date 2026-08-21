@@ -118,15 +118,26 @@ export function createGame(): Game {
     }
   }
 
-  // Tree groves: near each base plus scattered woods
+  // Forests: dense bands that act as natural barriers — units can't slip
+  // between packed trunks, so the gaps between woods become the lanes of
+  // the map (and prime ground for a palisade). Chopping carves paths.
   const groves = [
-    { x: 190, y: 760, n: 9, spread: 130 },   // player woods
-    { x: 560, y: 700, n: 5, spread: 100 },
-    { x: 1700, y: 540, n: 9, spread: 130 },  // enemy woods
-    { x: 1250, y: 420, n: 4, spread: 90 },
-    { x: 800, y: 260, n: 6, spread: 120 },   // wilds
-    { x: 1150, y: 950, n: 6, spread: 120 },
-    { x: 420, y: 330, n: 5, spread: 110 },
+    // the player's home woods, west
+    { x: 190, y: 720, n: 18, spread: 150 },
+    { x: 300, y: 330, n: 12, spread: 120 },
+    { x: 560, y: 700, n: 10, spread: 110 },
+    // the enemy's home woods, east
+    { x: 1730, y: 560, n: 18, spread: 150 },
+    { x: 1560, y: 760, n: 14, spread: 130 },
+    { x: 1380, y: 460, n: 10, spread: 110 },
+    // north-central band — the gap east of it is the north lane
+    { x: 760, y: 240, n: 16, spread: 150 },
+    { x: 1010, y: 170, n: 12, spread: 120 },
+    // south-central band — the gap west of it is the south lane
+    { x: 1160, y: 980, n: 16, spread: 150 },
+    { x: 940, y: 1130, n: 12, spread: 120 },
+    // a scattered clump in the southwest wilds
+    { x: 660, y: 1050, n: 6, spread: 90 },
   ]
   for (const grove of groves) {
     for (let i = 0; i < grove.n; i++) {
@@ -135,7 +146,7 @@ export function createGame(): Game {
         const d = rnd() * grove.spread
         const x = grove.x + Math.cos(a) * d
         const y = grove.y + Math.sin(a) * d * 0.8
-        if (clear(x, y, 18)) { spawn(g, 'tree', NEUTRAL, x, y); mark(x, y, 18); break }
+        if (clear(x, y, 10)) { spawn(g, 'tree', NEUTRAL, x, y); mark(x, y, 10); break }
       }
     }
   }

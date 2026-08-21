@@ -88,6 +88,14 @@ function drawEdgeFade(ctx: CanvasRenderingContext2D): void {
   gr = ctx.createLinearGradient(WORLD_W, 0, WORLD_W - F, 0)
   gr.addColorStop(0, dark(1)); gr.addColorStop(1, dark(0))
   ctx.fillStyle = gr; ctx.fillRect(WORLD_W - F, 0, F, WORLD_H)
+  // opaque frame overlapping the boundary — buries the meadow's antialiased
+  // edge so not even a hairline of the world rect survives
+  const M = 600
+  ctx.fillStyle = dark(1)
+  ctx.fillRect(-M, -M, WORLD_W + M * 2, M + 2)
+  ctx.fillRect(-M, WORLD_H - 2, WORLD_W + M * 2, M + 2)
+  ctx.fillRect(-M, -M, M + 2, WORLD_H + M * 2)
+  ctx.fillRect(WORLD_W - 2, -M, M + 2, WORLD_H + M * 2)
 }
 
 export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {

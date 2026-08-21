@@ -514,7 +514,7 @@ const wallSetup = await page3.evaluate(() => {
   const g = window.__game.state
   g.res[0].wood = 100
   const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
-  v.x = 1400; v.y = 840; v.state = 'idle'; v.targetId = undefined
+  v.x = 1320; v.y = 700; v.state = 'idle'; v.targetId = undefined
   window.__game.select(v.id)
   return { wood: g.res[0].wood, villId: v.id }
 })
@@ -525,8 +525,8 @@ await page3.waitForTimeout(200)
 const wallPlacing = await page3.evaluate(() => {
   const g = window.__game.state
   const ok = g.placing === 'wall' && !!g.placePos && !!g.placeEnd
-  g.placePos = { x: 1392, y: 800 }
-  g.placeEnd = { x: 1504, y: 800 }
+  g.placePos = { x: 1264, y: 640 }
+  g.placeEnd = { x: 1376, y: 640 }
   return { ok }
 })
 console.log('wall placing:', wallPlacing)
@@ -562,13 +562,13 @@ if (wallBuilt < 6) throw new Error('villager did not chain-build the fence')
 
 const gatePass = await page3.evaluate(() => {
   const g = window.__game.state
-  window.__game.spawn('gate', 0, 1392, 640)
+  window.__game.spawn('gate', 0, 1320, 560)
   // an UNSTARTED wall foundation right on the path — should be walkable
-  const pegId = window.__game.spawn('wall', 0, 1392, 668)
+  const pegId = window.__game.spawn('wall', 0, 1320, 588)
   const peg = g.byId.get(pegId)
   peg.complete = false; peg.progress = 0; peg.hp = 22
   const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
-  v.x = 1392; v.y = 596; v.state = 'move'; v.tx = 1392; v.ty = 684; v.targetId = undefined
+  v.x = 1320; v.y = 516; v.state = 'move'; v.tx = 1320; v.ty = 604; v.targetId = undefined
   window.__game.setSpeed(10)
   return { villId: v.id, pegId }
 })
@@ -579,7 +579,7 @@ const gateResult = await page3.evaluate(({ villId, pegId }) => {
   const v = g.byId.get(villId)
   const peg = g.byId.get(pegId)
   if (peg) peg.hp = 0 // tidy the test peg away
-  const arrived = Math.hypot(v.x - 1392, v.y - 684) < 22
+  const arrived = Math.hypot(v.x - 1320, v.y - 604) < 22
   // walk the builder home so later tests find the crew where they expect it
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined
@@ -587,6 +587,48 @@ const gateResult = await page3.evaluate(({ villId, pegId }) => {
 }, gatePass)
 console.log('gate pass-through:', gateResult)
 if (!gateResult.arrived) throw new Error('villager could not pass through a friendly gate')
+
+// 4.675) trees are terrain: living trunks block, stumps are open ground
+const treeTerrain = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
+  // a purpose-grown lone tree in the open corridor — no neighbours to meddle
+  const treeId = window.__game.spawn('tree', -1, 700, 560)
+  const tree = g.byId.get(treeId)
+  // stand the villager (almost) on the living trunk: separation must eject them
+  v.x = tree.x + 1; v.y = tree.y; v.state = 'idle'; v.targetId = undefined
+  window.__game.setSpeed(10)
+  return { villId: v.id, treeId }
+})
+await waitSim(page3, 2)
+const treeBlock = await page3.evaluate(({ villId, treeId }) => {
+  const g = window.__game.state
+  const v = g.byId.get(villId)
+  const t = g.byId.get(treeId)
+  const pushedOut = Math.hypot(v.x - t.x, v.y - t.y) >= v.r + t.r * 0.85 - 1
+  // now fell it and walk straight across the stump
+  t.amount = 0; t.r = 8
+  v.x = t.x - 40; v.y = t.y
+  v.state = 'move'; v.tx = t.x + 40; v.ty = t.y
+  return { pushedOut }
+}, treeTerrain)
+await waitSim(page3, 5)
+const stumpWalk = await page3.evaluate(({ villId, treeId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.byId.get(villId)
+  const t = g.byId.get(treeId)
+  // walk the wanderer home and clear the practice tree away
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const crossed = Math.hypot(v.x - (t.x + 40), v.y - t.y) < 10
+  v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined
+  const i = g.ents.indexOf(t)
+  if (i >= 0) { g.ents.splice(i, 1); g.byId.delete(t.id) }
+  return { crossed }
+}, treeTerrain)
+console.log('tree terrain:', { ...treeBlock, ...stumpWalk })
+if (!treeBlock.pushedOut) throw new Error('living tree did not block a unit')
+if (!stumpWalk.crossed) throw new Error('stump blocked the path — chopping should open lanes')
 
 // 4.68) the rival counters: facing a spear wall, it leans into archers
 const counterSetup = await page3.evaluate(() => {
@@ -677,7 +719,8 @@ const bellJob = await page3.evaluate(() => {
   const bush = g.ents.find(e => e.kind === 'berrybush' && (e.amount ?? 0) > 10)
   worker.state = 'gather'; worker.targetId = bush.id; worker.gatherT = 0
   for (let i = 0; i < 2; i++) {
-    const id = window.__game.spawn('swordsman', 1, tc.x + 260 + i * 30, tc.y - 200)
+    // the clear strip east of the Town Hall, between the grove and the clump
+    const id = window.__game.spawn('swordsman', 1, tc.x + 280 + i * 30, tc.y - 45)
     const u = g.byId.get(id)
     u.state = 'attackmove'; u.tx = tc.x; u.ty = tc.y
   }
@@ -802,6 +845,19 @@ const steered = await page3.evaluate(({ villId, goal }) => {
   const g = window.__game.state
   window.__game.setSpeed(1)
   const v = g.byId.get(villId)
+  if (!v) {
+    return {
+      d: -1,
+      diag: {
+        vills: g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+          .map(e => ({ id: e.id, x: Math.round(e.x), y: Math.round(e.y), hp: e.hp, state: e.state })),
+        enemySoldiers: g.ents.filter(e => e.team === 1 &&
+          ['spearman', 'swordsman', 'archer'].includes(e.kind))
+          .map(e => ({ kind: e.kind, x: Math.round(e.x), y: Math.round(e.y), state: e.state })),
+        over: g.over,
+      },
+    }
+  }
   const d = Math.round(Math.hypot(v.x - goal.x, v.y - goal.y))
   // walk the wanderer home so later tests find the crew where they expect it
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
@@ -1082,10 +1138,13 @@ if (crew.n < 2 || !crew.allVills) throw new Error('double-tap did not select the
 const grove = await page3.evaluate(() => {
   const g = window.__game.state
   g.res[0].wood = 300
-  // find a clear spot near a player-side tree, using the game's own clearance rule
+  // find a clear spot near a player-side tree, using the game's own clearance
+  // rule — and of all candidates, take the one closest to the Town Hall so the
+  // builder approaches the grove's open face, not a pocket deep in the woods
+  const tc0 = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   const trees = g.ents.filter(e => e.kind === 'tree' && e.x < 700 && e.y > 600)
-  let t = null, spot = null
-  outer: for (const tree of trees) {
+  let t = null, spot = null, bestD = Infinity
+  for (const tree of trees) {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       const s = { x: tree.x + Math.cos(a) * 75, y: tree.y + Math.sin(a) * 75 }
       if (s.x < 80 || s.y < 80) continue
@@ -1094,13 +1153,21 @@ const grove = await page3.evaluate(() => {
         (e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
          e.kind === 'archer' || e.kind === 'scout') ||
         Math.max(Math.abs(s.x - e.x), Math.abs(s.y - e.y)) > 28 + e.r + 14)
-      if (clear) { t = tree; spot = s; break outer }
+      const d = Math.hypot(s.x - tc0.x, s.y - tc0.y)
+      if (clear && d < bestD) { t = tree; spot = s; bestD = d }
     }
   }
   if (!spot) throw new Error('no clear spot near the grove')
   g.camera.x = spot.x; g.camera.y = spot.y
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
-  window.__game.select(vills[0].id)
+  // stage the builder beside the spot — this test is placement + drop-off,
+  // not a cross-forest hike
+  const v = vills[0]
+  const dl = Math.hypot(tc0.x - spot.x, tc0.y - spot.y) || 1
+  v.x = spot.x + ((tc0.x - spot.x) / dl) * 60
+  v.y = spot.y + ((tc0.y - spot.y) / dl) * 60
+  v.state = 'idle'; v.targetId = undefined
+  window.__game.select(v.id)
   g.uiDirty = true
   return { treeId: t.id, spot }
 })
@@ -1360,21 +1427,30 @@ console.log('fog shadow:', fogShadow)
 if (!fogShadow.explored || fogShadow.visible) throw new Error('enemy base should drop to shadow')
 if (!fogShadow.scoutAlive) throw new Error('scout died on a safe route')
 
-// non-scouts reveal too: walk a villager into untouched black and check the cell
+// non-scouts reveal too: stand a villager in untouched black and check the cell
+// (teleported — this test is about vision, the walking is covered elsewhere)
 const villFog = await page3.evaluate(() => {
   const g = window.__game.state
-  // find an unexplored cell in the bottom-right wilds, clear of anything
-  const spot = { x: 1500, y: 1150 }
-  const idx = Math.floor(spot.y / 32) * g.fog.w + Math.floor(spot.x / 32)
+  const cellOf = s => Math.floor(s.y / 32) * g.fog.w + Math.floor(s.x / 32)
+  const candidates = [
+    { x: 1500, y: 1180 }, { x: 1700, y: 1120 }, { x: 240, y: 120 }, { x: 1800, y: 950 },
+  ]
+  const spot = candidates.find(s => !g.fog.explored[cellOf(s)])
+  if (!spot) return { idx: -1, explored: 1 }
+  const idx = cellOf(spot)
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
-  v.state = 'move'; v.tx = spot.x; v.ty = spot.y
-  return { idx, explored: g.fog.explored[idx] }
+  v.homeX = v.x; v.homeY = v.y
+  v.x = spot.x; v.y = spot.y; v.state = 'idle'; v.targetId = undefined
+  return { idx, explored: g.fog.explored[idx], villId: v.id }
 })
-if (villFog.explored) throw new Error('test spot was already explored — pick another')
-await waitSim(page3, 60) // long walk at villager pace
-const villFogAfter = await page3.evaluate(({ idx }) => {
+if (villFog.explored) throw new Error('all candidate fog spots were already explored')
+await waitSim(page3, 3) // a couple of vision refreshes
+const villFogAfter = await page3.evaluate(({ idx, villId }) => {
   const g = window.__game.state
-  return { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }
+  const v = g.byId.get(villId)
+  const out = { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }
+  if (v) { v.x = v.homeX; v.y = v.homeY } // pop them back where they were
+  return out
 }, villFog)
 console.log('villager fog reveal:', villFogAfter)
 if (!villFogAfter.explored || !villFogAfter.visible)
