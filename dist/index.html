@@ -85,8 +85,8 @@ html, body {
 #hud-top {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
-  left: 12px;
-  right: 12px;
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
   display: flex;
   gap: 8px;
   justify-content: center;
@@ -156,7 +156,7 @@ html, body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  max-width: calc(100% - 20px);
+  max-width: min(calc(100% - 20px), 560px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   background: var(--cream);
   border: 2px solid var(--cream-edge);
@@ -279,7 +279,7 @@ button.cmd.ghost {
 /* ---- army button ---- */
 #army-btn {
   position: absolute;
-  right: 12px;
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
   appearance: none;
   border: none;

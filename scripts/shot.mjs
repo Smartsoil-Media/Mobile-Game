@@ -1508,11 +1508,48 @@ await page.waitForTimeout(300)
 if (!(await page.isVisible('[data-cmd="train-spearman"]'))) throw new Error('barracks missing the spearman button')
 if (!(await page.isVisible('[data-cmd="train-swordsman"]'))) throw new Error('barracks missing the swordsman button')
 
-// landscape sanity shot
+// landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html'))
+await page2.bringToFront()
 await page2.tap('#play-btn')
 await page2.waitForTimeout(400)
+const landscapeHud = await page2.evaluate(() => {
+  const inView = el => {
+    const r = el.getBoundingClientRect()
+    return r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight
+  }
+  return {
+    pills: [...document.querySelectorAll('#hud-top .pill')].every(inView),
+    army: inView(document.getElementById('army-btn')),
+  }
+})
+console.log('landscape hud:', landscapeHud)
+if (!landscapeHud.pills || !landscapeHud.army) throw new Error('landscape HUD spills off screen')
+await page2.evaluate(() => {
+  const g = window.__game.state
+  g.ai.enabled = false
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  window.__game.select(v.id)
+})
+await page2.waitForTimeout(300)
+if (await page2.isHidden('#dock')) throw new Error('dock hidden in landscape with villager selected')
+const landscapeMove = await page2.evaluate(() => {
+  const g = window.__game.state
+  const v = g.byId.get(g.selection[0])
+  return { x0: v.x, y0: v.y }
+})
+await page2.tap('#game', { position: { x: 620, y: 140 } })
+await page2.evaluate(() => window.__game.setSpeed(10))
+await page2.waitForTimeout(800)
+const landscapeMoved = await page2.evaluate(({ x0, y0 }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.byId.get(g.selection[0]) ?? g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  return { moved: Math.hypot(v.x - x0, v.y - y0) > 30 }
+}, landscapeMove)
+console.log('landscape tap-to-move:', landscapeMoved)
+if (!landscapeMoved.moved) throw new Error('tap-to-move did not work in landscape')
 await page2.screenshot({ path: 'shots/6-landscape.png' })
 
 await browser.close()

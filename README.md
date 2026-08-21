@@ -1,7 +1,11 @@
 # Bramblewick
 
 A tiny, cosy real-time strategy game in the spirit of Age of Empires, built for
-phones. Gather wood, food, gold and stone; farm, expand with new town halls,
+phones — portrait or landscape.
+
+**Play it**: https://smartsoil-media.github.io/Mobile-Game/ (deployed from this
+repo by `.github/workflows/pages.yml` on every push; one-time setup is
+Settings → Pages → Source: **GitHub Actions**). Gather wood, food, gold and stone; farm, expand with new town halls,
 train little swordsmen, and destroy the enemy town hall before their army
 topples yours. The enemy village plays by the same rules: same starting
 villagers and resources, a real economy, and attacks that grow bolder.
