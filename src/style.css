@@ -51,25 +51,41 @@ html, body {
 }
 .pill {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   background: var(--cream);
   border: 2px solid var(--cream-edge);
-  border-radius: 999px;
-  padding: 4px 9px 4px 7px;
+  border-radius: 14px;
+  padding: 3px 8px 3px;
   box-shadow: 0 3px 0 rgba(70, 92, 48, 0.25);
   font-family: 'Fredoka', 'Nunito', system-ui, sans-serif;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  justify-content: center;
 }
-.pill svg { width: 15px; height: 15px; }
+.pill .top { display: flex; align-items: center; gap: 4px; line-height: 1.15; }
+.pill .top svg { width: 14px; height: 14px; }
+.pill .sub {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink-soft);
+}
+.pill .sub svg { width: 9.5px; height: 9.5px; opacity: 0.75; }
+.pill .sub.alert { color: #C9525E; }
+.pill .sub.alert svg { opacity: 1; }
+.pill-tap { pointer-events: auto; cursor: pointer; }
+.pill-tap:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(70, 92, 48, 0.25); }
 .pill-age {
   background: #E9B44C;
   border-color: #C98F2B;
   color: #4A3413;
   min-width: 34px;
-  justify-content: center;
 }
 .pill svg { display: block; }
 

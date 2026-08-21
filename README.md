@@ -20,6 +20,10 @@ No image assets, no frameworks. The whole game bundles into a single HTML file.
 - **Economy shape**: food trains villagers (50) and soldiers (40 + 25 gold);
   wood pays for buildings; **stone + wood builds new Town Halls** (200w/150s)
   for +5 pop and forward drop-offs
+- **Resource pills** show how many villagers work each resource; **tap a
+  pill** to put one more villager on it (idle hands first, then borrowed
+  from the busiest line). The pop pill counts idle villagers — tap it to
+  jump to them
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army** button selects all your soldiers and jumps the camera to them
 - **Archery Range** (175 wood) trains archers — ranged units that shoot

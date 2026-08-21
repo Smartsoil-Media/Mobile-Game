@@ -172,6 +172,16 @@ export function gatherMult(g: Game, team: number, res: ResKind): number {
   return g.techs[team]?.[GATHER_TECH[res]] ? GATHER_TECH_MULT : 1
 }
 
+// which resource this villager is currently working (gathering or hauling)
+export function gatherResOf(g: Game, v: Ent): ResKind | null {
+  if (v.state !== 'gather' && v.state !== 'return') return null
+  const t = v.targetId !== undefined ? g.byId.get(v.targetId) : undefined
+  if (!t) return v.carryRes ?? null
+  if (t.kind === 'farm') return 'food'
+  if (isResource(t)) return RESOURCES[t.kind].gives
+  return null
+}
+
 // blacksmith bonus damage for a unit kind
 export function dmgBonusFor(g: Game, team: number, kind: Kind): number {
   const t = g.techs[team]

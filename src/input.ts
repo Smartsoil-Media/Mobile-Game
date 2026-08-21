@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, BUILDINGS, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
-import { entAt, spawn, canAfford, canPlaceAt, pay, toast } from './world'
+import { Game, Ent, Buildable, ResKind, BUILDINGS, SOURCE_OF, PLACE_SNAP, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -200,6 +200,70 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   // nothing useful selected: tap on enemy/resource just clears selection
   if (g.selection.length) { g.selection = []; g.uiDirty = true }
+}
+
+function nearestSourceFor(g: Game, v: Ent, res: ResKind): Ent | null {
+  const raw = nearest(g, v.x, v.y, o => o.kind === SOURCE_OF[res] && (o.amount ?? 0) > 0)
+  if (res === 'food') {
+    const farm = nearest(g, v.x, v.y, o => o.kind === 'farm' && o.team === 0 && !!o.complete)
+    if (farm && (!raw || dist(v.x, v.y, farm.x, farm.y) < dist(v.x, v.y, raw.x, raw.y))) return farm
+  }
+  return raw
+}
+
+// HUD pill tap: put one more villager on this resource — idle hands first,
+// then borrow from whichever other line has the most workers
+export function sendVillagerToResource(g: Game, res: ResKind): void {
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden)
+  if (!vills.length) { toast(g, 'No villagers yet — train some at the Town Hall.'); return }
+  let pick: Ent | null = null
+  const idle = vills.filter(v => v.state === 'idle')
+  if (idle.length) {
+    // the idle villager with the shortest walk to the goods
+    let best = Infinity
+    for (const v of idle) {
+      const src = nearestSourceFor(g, v, res)
+      const d = src ? dist(v.x, v.y, src.x, src.y) : Infinity
+      if (d < best) { best = d; pick = v }
+    }
+    if (!pick) pick = idle[0]
+  } else {
+    const groups: Partial<Record<ResKind, Ent[]>> = {}
+    for (const v of vills) {
+      const r = gatherResOf(g, v)
+      if (r && r !== res) (groups[r] ??= []).push(v)
+    }
+    let busiest: ResKind | null = null
+    for (const r of ['food', 'wood', 'gold', 'stone'] as ResKind[]) {
+      if (groups[r]?.length && (!busiest || groups[r]!.length > groups[busiest]!.length)) busiest = r
+    }
+    if (busiest) pick = groups[busiest]![groups[busiest]!.length - 1]
+  }
+  if (!pick) { toast(g, 'Every villager is busy building or fighting.'); return }
+  const src = nearestSourceFor(g, pick, res)
+  if (!src) {
+    const names: Record<ResKind, string> = { wood: 'trees', food: 'food', gold: 'gold', stone: 'stone' }
+    toast(g, `No ${names[res]} left to gather.`)
+    return
+  }
+  commandGather(g, [pick], src)
+  g.uiDirty = true
+}
+
+// HUD pop-pill tap: jump to an idle villager (cycles through them)
+let idleCycle = 0
+export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
+  const idle = g.ents.filter(e =>
+    e.team === 0 && e.kind === 'villager' && !e.hidden && e.state === 'idle')
+  if (!idle.length) { toast(g, 'Nobody is idle — the village hums along.'); return }
+  const v = idle[idleCycle++ % idle.length]
+  g.placing = null
+  g.placePos = null
+  g.selection = [v.id]
+  g.camera.x = v.x
+  g.camera.y = v.y
+  if (canvas) clampCamera(g, canvas)
+  g.uiDirty = true
 }
 
 export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {

@@ -6,24 +6,12 @@ import {
   SOURCE_OF, POP_MAX, AGE2_COST, AGE2_TIME,
   dist, isUnit, isBuilding,
 } from './data'
-import { spawn, nearest, pop, canAfford, canPlaceAt, pay } from './world'
+import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf } from './world'
 
 const THINK_EVERY = 0.8
 const VILLAGER_GOAL = 9
 // gatherer quotas, in priority order
 const QUOTAS: [ResKind, number][] = [['food', 3], ['wood', 3], ['gold', 2]]
-
-function gatherRes(g: Game, v: Ent): ResKind | null {
-  if (v.state !== 'gather' && v.state !== 'return') return null
-  const t = v.targetId !== undefined ? g.byId.get(v.targetId) : undefined
-  if (!t) return v.carryRes ?? null
-  if (t.kind === 'farm') return 'food'
-  if (t.kind === 'tree') return 'wood'
-  if (t.kind === 'goldmine') return 'gold'
-  if (t.kind === 'berrybush') return 'food'
-  if (t.kind === 'stonequarry') return 'stone'
-  return null
-}
 
 function nearestSource(g: Game, tc: Ent, r: ResKind): Ent | null {
   const kind = SOURCE_OF[r]
@@ -69,7 +57,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
   // -- economy: keep villagers on quota, spare hands on wood --
   const counts: Record<ResKind, number> = { wood: 0, food: 0, gold: 0, stone: 0 }
   for (const v of vills) {
-    const r = gatherRes(g, v)
+    const r = gatherResOf(g, v)
     if (r) counts[r]++
   }
   for (const v of vills) {

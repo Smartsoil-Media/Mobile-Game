@@ -679,6 +679,75 @@ console.log('chase:', chased)
 if (!chased.runnerDead) throw new Error('scout never ran the fleeing villager down')
 if (!chased.scoutAlive) throw new Error('scout died chasing a villager')
 
+// 5.9) HUD crew counts + tap-a-pill villager management
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
+  const tree = g.ents.find(e => e.kind === 'tree' && (e.amount ?? 0) > 5)
+  const bush = g.ents.find(e => e.kind === 'berrybush' && (e.amount ?? 0) > 5)
+  vills[0].state = 'gather'; vills[0].targetId = tree.id; vills[0].gatherT = 0
+  vills[1].state = 'gather'; vills[1].targetId = bush.id; vills[1].gatherT = 0
+  vills[2].state = 'idle'; vills[2].targetId = undefined
+})
+await page3.waitForTimeout(400)
+const hudCrew = await page3.evaluate(() => ({
+  wood: document.getElementById('wood-v').textContent,
+  food: document.getElementById('food-v').textContent,
+  idle: document.getElementById('idle-n').textContent,
+}))
+console.log('hud crew counts:', hudCrew)
+if (hudCrew.wood !== '1' || hudCrew.food !== '1' || hudCrew.idle !== '1')
+  throw new Error(`HUD crew counts wrong: ${JSON.stringify(hudCrew)}`)
+
+// tap the gold pill: the idle villager heads for a mine
+await page3.tap('#p-gold')
+await page3.waitForTimeout(300)
+const goldSend = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[2]
+  const t = g.byId.get(v.targetId)
+  return { state: v.state, kind: t ? t.kind : null, idle: document.getElementById('idle-n').textContent }
+})
+console.log('tap gold pill:', goldSend)
+if (goldSend.state !== 'gather' || goldSend.kind !== 'goldmine')
+  throw new Error('gold pill did not send the idle villager mining')
+if (goldSend.idle !== '0') throw new Error('idle count did not drop after assignment')
+
+// no idle hands left: tapping wood borrows from the busiest other line (food)
+await page3.tap('#p-wood')
+await page3.waitForTimeout(300)
+const borrowed = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[1]
+  const t = g.byId.get(v.targetId)
+  return { kind: t ? t.kind : null }
+})
+console.log('tap wood pill (borrow):', borrowed)
+if (borrowed.kind !== 'tree') throw new Error('wood pill did not borrow from the busiest line')
+
+// pop pill jumps the camera to an idle villager and selects them
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
+  v.state = 'idle'; v.targetId = undefined
+  g.selection = []
+  g.camera.x = 1500; g.camera.y = 300 // stare at the far corner first
+  g.uiDirty = true
+})
+await page3.waitForTimeout(300)
+await page3.tap('#p-pop')
+await page3.waitForTimeout(250)
+const idleJump = await page3.evaluate(() => {
+  const g = window.__game.state
+  const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
+  return {
+    selected: g.selection.length === 1 && g.selection[0] === v.id,
+    nearCam: Math.abs(g.camera.x - v.x) < 200,
+  }
+})
+console.log('tap pop pill (idle jump):', idleJump)
+if (!idleJump.selected || !idleJump.nearCam) throw new Error('pop pill did not jump to the idle villager')
+
 
 // 6) placement mode dies when you tap your own stuff instead of open ground
 await page3.evaluate(() => {

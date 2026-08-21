@@ -1,10 +1,10 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import {
-  Game, Ent, Buildable, Cost, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
+  Game, Ent, Buildable, Cost, ResKind, TechId, PatronId, UNITS, BUILDINGS, TECHS, PATRONS,
   AGE2_COST, AGE2_TIME, isUnit,
 } from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors } from './world'
-import { selectArmy, tryPlaceBuilding, snapPlace } from './input'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf } from './world'
+import { selectArmy, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawBlacksmith, drawFarm, drawWatchtower, drawArcheryRange, drawVillager, drawSwordsman, drawSpearman, drawArcher } from './sprites'
 
 const ICON = {
@@ -100,15 +100,23 @@ function spriteIcon(kind: string): HTMLCanvasElement {
   return c
 }
 
+const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
+
 export function initUI(g: Game): void {
   el('army-btn').innerHTML = ICON.sword + '<span>Army</span>'
   const canvas = document.getElementById('game') as HTMLCanvasElement
   el('army-btn').addEventListener('click', () => selectArmy(g, canvas))
-  el('p-wood').insertAdjacentHTML('afterbegin', ICON.wood)
-  el('p-food').insertAdjacentHTML('afterbegin', ICON.food)
-  el('p-gold').insertAdjacentHTML('afterbegin', ICON.gold)
-  el('p-stone').insertAdjacentHTML('afterbegin', ICON.stone)
-  el('p-pop').insertAdjacentHTML('afterbegin', ICON.pop)
+  el('t-wood').insertAdjacentHTML('afterbegin', ICON.wood)
+  el('t-food').insertAdjacentHTML('afterbegin', ICON.food)
+  el('t-gold').insertAdjacentHTML('afterbegin', ICON.gold)
+  el('t-stone').insertAdjacentHTML('afterbegin', ICON.stone)
+  el('t-pop').insertAdjacentHTML('afterbegin', ICON.pop)
+  for (const r of ['wood', 'food', 'gold', 'stone'] as ResKind[]) {
+    el(`s-${r}`).insertAdjacentHTML('afterbegin', MINI_VILL)
+    // tapping a resource pill puts one more villager on that resource
+    el(`p-${r}`).addEventListener('click', () => sendVillagerToResource(g, r))
+  }
+  el('p-pop').addEventListener('click', () => cycleIdleVillager(g, canvas))
 
   el('play-btn').addEventListener('click', () => {
     g.started = true
@@ -247,6 +255,23 @@ export function syncUI(g: Game): void {
   el('stone-n').textContent = String(Math.floor(g.res[0].stone))
   el('pop-n').textContent = `${p.used}/${p.cap}`
   el('age-n').textContent = g.age[0] >= 2 ? 'II' : 'I'
+  // little crew counts under each number: who's working what, who's loafing
+  const crew: Record<ResKind, number> = { wood: 0, food: 0, gold: 0, stone: 0 }
+  let idleVills = 0
+  for (const e of g.ents) {
+    if (e.team !== 0 || e.kind !== 'villager' || e.hidden) continue
+    if (e.state === 'idle') { idleVills++; continue }
+    const r = gatherResOf(g, e)
+    if (r) crew[r]++
+  }
+  for (const r of ['wood', 'food', 'gold', 'stone'] as ResKind[]) {
+    const n = String(crew[r])
+    const elV = el(`${r}-v`)
+    if (elV.textContent !== n) elV.textContent = n
+  }
+  const idleStr = String(idleVills)
+  if (el('idle-n').textContent !== idleStr) el('idle-n').textContent = idleStr
+  el('s-pop').classList.toggle('alert', idleVills > 0)
   updateAffordability(g)
 
   // keep visible progress rings moving between full dock rebuilds
