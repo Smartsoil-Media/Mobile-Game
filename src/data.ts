@@ -46,6 +46,9 @@ export interface Ent {
   homeX?: number // where a deer's heart is — it ambles near here
   homeY?: number
   fleeT?: number // a startled deer bolts for this long
+  path?: { x: number; y: number }[] | null // grid waypoints when the straight line is blocked
+  pathGoal?: { x: number; y: number } | null // where that path was headed
+  repathT?: number // cooldown so a lost walker doesn't re-plan every tick
   lastX?: number
   lastY?: number
   phase?: number
@@ -108,6 +111,8 @@ export interface Game {
   champs: Record<ChampId, boolean>[] // per team: bought champion upgrades
   techs: Record<TechId, boolean>[] // per team: researched economy techs
   world: { w: number; h: number } // this map's size (random maps are bigger than classic)
+  nav: { w: number; h: number; block: Uint8Array } | null // coarse walkability grid (lazy)
+  navDirty: boolean // terrain changed — rebuild the grid before the next query
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean

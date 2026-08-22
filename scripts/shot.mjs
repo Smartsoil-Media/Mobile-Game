@@ -1003,6 +1003,10 @@ const released = await page3.evaluate(({ workerId, bushId }) => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   const worker = g.byId.get(workerId)
+  // the raid is over: sweep any raider who survived by wandering out of
+  // arrow range, so later tests aren't ambushed by a leftover sword
+  for (const e of g.ents.filter(e => e.team === 1 &&
+    ['spearman', 'swordsman', 'archer', 'knight'].includes(e.kind))) e.hp = 0
   return {
     garrison: tc.garrison ?? 0,
     hidden: g.ents.filter(e => e.hidden).length,
@@ -1768,7 +1772,16 @@ await page3.evaluate(() => {
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
   for (const v of vills) { v.state = 'idle'; v.targetId = undefined } // all hands available
   window.__game.select(vills[0].id)
-  g.camera.x = 500; g.camera.y = 1000
+  // shoo any deer that wandered over the build spot back to their meadow
+  for (const d of g.ents.filter(e => e.kind === 'deer')) {
+    if (Math.hypot(d.x - 500, d.y - 1000) < 200) {
+      d.x = d.homeX; d.y = d.homeY; d.tx = undefined; d.ty = undefined
+    }
+  }
+  // the landmarks pick their own ground near the Town Hall, so this test
+  // finds a genuinely clear spot instead of trusting a hardcoded one
+  const spot = window.__findSpot(22, 500, 1000)
+  g.camera.x = spot.x; g.camera.y = spot.y
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
@@ -1779,9 +1792,13 @@ await page3.tap('#game', { position: canvasBox })
 await page3.waitForTimeout(200)
 await page3.tap('[data-cmd="confirm"]')
 await page3.waitForTimeout(250)
-const towerPlaced = await page3.evaluate(() =>
-  window.__game.state.ents.some(e => e.team === 0 && e.kind === 'watchtower'))
-if (!towerPlaced) throw new Error('watchtower was not placed')
+const towerPlaced = await page3.evaluate(() => ({
+  placed: window.__game.state.ents.some(e => e.team === 0 && e.kind === 'watchtower'),
+  near: window.__game.state.ents
+    .filter(e => Math.abs(e.x - 500) < 140 && Math.abs(e.y - 1000) < 140)
+    .map(e => `${e.kind}@${Math.round(e.x)},${Math.round(e.y)}`),
+}))
+if (!towerPlaced.placed) throw new Error('watchtower was not placed — nearby: ' + towerPlaced.near.join(' '))
 await page3.evaluate(() => window.__game.setSpeed(15))
 await waitSim(page3, 55) // walk (half speed) + 18s build
 const towerReady = await page3.evaluate(() => {
@@ -1862,7 +1879,8 @@ await page3.evaluate(() => {
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
   for (const v of vills) { v.state = 'idle'; v.targetId = undefined }
   window.__game.select(vills[0].id)
-  g.camera.x = 700; g.camera.y = 900
+  const spot = window.__findSpot(44, 700, 900) // archery range footprint
+  g.camera.x = spot.x; g.camera.y = spot.y
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
@@ -1949,6 +1967,41 @@ await page.evaluate(() => {
 await page.waitForTimeout(300)
 if (!(await page.isVisible('[data-cmd="train-spearman"]'))) throw new Error('barracks missing the spearman button')
 if (!(await page.isVisible('[data-cmd="train-swordsman"]'))) throw new Error('barracks missing the swordsman button')
+
+// 18.5) pathfinding: a forest pocket is one obstacle, not a trap of trunks —
+// a walk ordered straight through a U-shaped grove goes AROUND it
+const pocketSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const treeIds = []
+  // a U opening west in the far southeast; the walk crosses right through its mouth
+  for (let y = 1075; y <= 1225; y += 25) treeIds.push(window.__game.spawn('tree', -1, 1760, y))
+  for (let x = 1620; x <= 1740; x += 25) {
+    treeIds.push(window.__game.spawn('tree', -1, x, 1075))
+    treeIds.push(window.__game.spawn('tree', -1, x, 1225))
+  }
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
+  v.x = 1560; v.y = 1150; v.state = 'move'; v.tx = 1830; v.ty = 1150; v.targetId = undefined
+  window.__game.setSpeed(15)
+  return { treeIds, villId: v.id }
+})
+await waitSim(page3, 30)
+const pocketResult = await page3.evaluate(({ treeIds, villId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const v = g.byId.get(villId)
+  const d = Math.round(Math.hypot(v.x - 1830, v.y - 1150))
+  // clear the practice grove away and walk the wanderer home
+  for (const id of treeIds) {
+    const t = g.byId.get(id)
+    if (t) { const i = g.ents.indexOf(t); if (i >= 0) g.ents.splice(i, 1); g.byId.delete(id) }
+  }
+  g.navDirty = true
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  v.x = tc.x + 70; v.y = tc.y + 60; v.state = 'idle'; v.targetId = undefined
+  return { d }
+}, pocketSetup)
+console.log('forest pocket:', pocketResult)
+if (pocketResult.d > 40) throw new Error('villager got trapped in the forest pocket: ' + pocketResult.d)
 
 // landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

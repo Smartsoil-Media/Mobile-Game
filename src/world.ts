@@ -56,6 +56,7 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   }
   g.ents.push(e)
   g.byId.set(e.id, e)
+  if (kind === 'tree' || isBuilding(e)) g.navDirty = true // terrain changed
   return e
 }
 
@@ -89,6 +90,7 @@ export function createGame(opts?: { seed?: number }): Game {
     champs: [{ ...NO_CHAMPS }, { ...NO_CHAMPS }],
     techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
     world: { w: W, h: H },
+    nav: null, navDirty: true,
     toasts: [], started: false, uiDirty: true,
   }
 

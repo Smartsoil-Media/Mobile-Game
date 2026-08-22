@@ -9,6 +9,7 @@ import {
   dist, isUnit, isBuilding, isResource,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
+import { lineClear, findPath } from './nav'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -25,9 +26,39 @@ export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: 
 }
 
 function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
-  const dx = tx - e.x, dy = ty - e.y
-  const d = Math.hypot(dx, dy)
-  if (d < 3) return true
+  const dGoal = Math.hypot(tx - e.x, ty - e.y)
+  if (dGoal < 3) return true
+  const team = e.team === 1 ? 1 : 0
+
+  // a forest is ONE obstacle, not a trap of trunks: when the next stretch of
+  // the straight walk runs into standing terrain, follow the coarse grid path
+  // around the whole patch; on open ground walk direct, exactly as ever
+  let aimX = tx, aimY = ty
+  e.repathT = Math.max(0, (e.repathT ?? 0) - dt)
+  if (lineClear(g, team, e.x, e.y, tx, ty, 70, 480)) {
+    e.path = null
+    e.pathGoal = null
+  } else {
+    const goalMoved = !e.pathGoal || dist(e.pathGoal.x, e.pathGoal.y, tx, ty) > 40
+    if ((!e.path || goalMoved) && e.repathT <= 0) {
+      e.path = findPath(g, team, e.x, e.y, tx, ty)
+      e.pathGoal = { x: tx, y: ty }
+      e.repathT = 1.2
+    }
+    if (e.path && e.path.length) {
+      // pop waypoints as they're reached, or once the next one is in plain view
+      while (e.path.length &&
+        (dist(e.x, e.y, e.path[0].x, e.path[0].y) < 18 ||
+          (e.path.length > 1 && lineClear(g, team, e.x, e.y, e.path[1].x, e.path[1].y, 0)))) {
+        e.path.shift()
+      }
+      if (e.path.length) { aimX = e.path[0].x; aimY = e.path[0].y }
+    }
+  }
+  const direct = aimX === tx && aimY === ty
+
+  const dx = aimX - e.x, dy = aimY - e.y
+  const d = Math.hypot(dx, dy) || 1
   let dirX = dx / d, dirY = dy / d
 
   // steering: if the stretch just ahead runs into a building, slide along its
@@ -77,7 +108,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
     e.heading += dh * Math.min(1, 10 * dt)
   }
   if (Math.abs(dx) > 4) e.face = dx > 0 ? 1 : -1
-  return d - step < 3
+  return direct && d - step < 3
 }
 
 function inRange(a: Ent, b: Ent, range: number): boolean {
@@ -225,6 +256,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
           } else if (res.kind === 'tree') {
             puff(g, res.x, res.y - 10, '#7BA05B', 8, 'leaf')
             res.r = 8
+            g.navDirty = true // a felled tree opens a lane
           } else if (res.kind === 'berrybush') {
             puff(g, res.x, res.y - 8, '#9CB37E', 6, 'leaf')
             res.r = 10
@@ -276,6 +308,9 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         if (Math.random() < dt * 6) puff(g, site.x + (Math.random() - 0.5) * site.r, site.y - site.r * 0.5, '#E8DCC0', 1)
         if (site.hp >= site.maxHp) { e.state = 'idle'; e.targetId = undefined }
         break
+      }
+      if ((site.progress ?? 0) <= 0 && (site.kind === 'wall' || site.kind === 'gate')) {
+        g.navDirty = true // the peg becomes a real post — walkers must go around now
       }
       site.progress = Math.min(1, (site.progress ?? 0) + dt / b.time)
       site.hp = Math.min(b.hp, site.hp + (b.hp * 0.9) * (dt / b.time))
@@ -540,6 +575,7 @@ function killEnt(g: Game, e: Ent): void {
       }
     }
   }
+  if (e.kind === 'tree' || isBuilding(e)) g.navDirty = true // terrain changed
   const i = g.ents.indexOf(e)
   if (i >= 0) g.ents.splice(i, 1)
   g.byId.delete(e.id)
@@ -638,6 +674,8 @@ export function update(g: Game, dt: number): void {
         e.stuckT = (e.stuckT ?? 0) + dt
         if (e.stuckT > 0.8) {
           e.avoidSide = -(e.avoidSide ?? 1)
+          e.path = null // and ask the grid for a fresh route
+          e.repathT = 0
           e.stuckT = 0
         }
       } else {

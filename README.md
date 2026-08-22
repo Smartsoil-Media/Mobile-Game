@@ -33,6 +33,10 @@ specific roll.
 
 - **Tap** a villager or building to select it
 - **Tap** a tree/mine to gather, the ground to move, an enemy to attack
+- Units **pathfind**: a coarse walkability grid + A* routes them around
+  whole forests, villages and walls (a grove is one obstacle, not a trap of
+  trunks); on open ground they walk straight, and chopping a tree or
+  starting a fence post updates the grid on the spot
 - **Lumber/Mining Camps** (75 wood) act as drop-off points near the woods or
   a mine/quarry, so villagers don't trek back to the Town Hall
 - **Farms** (60 wood) give a steady food trickle — but each field wants
