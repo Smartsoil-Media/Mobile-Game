@@ -1,5 +1,5 @@
 // Bramblewick service worker — network-first, cache fallback for offline play.
-const CACHE = 'bramblewick-1xyogr8'
+const CACHE = 'bramblewick-p1e25v'
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()

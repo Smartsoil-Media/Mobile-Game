@@ -204,16 +204,55 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
     }
     return { tx, ty }
   }
-  // fords: shallow sandy crossings, stepping stones showing the way
+  // fords: the stream itself turns shallow — the sandy bed glows up through
+  // clear pale water (no land bridge), and stepping stones march across
   for (const f of g.fords) {
-    ctx.fillStyle = 'rgba(216, 200, 156, 0.9)'
-    ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r * 0.88, f.r * 0.62, 0, 0, Math.PI * 2); ctx.fill()
-    for (let i = 0; i < 6; i++) {
-      const a = i * 1.9 + f.x * 0.013
-      ctx.fillStyle = i % 2 ? '#B8B2A0' : '#CFC9B8'
+    const { tx: ftx, ty: fty } = tangentAt(f.x, f.y)
+    const sw = g.streams[0]?.w ?? 46
+    const seg = (len: number) => {
       ctx.beginPath()
-      ctx.ellipse(f.x + Math.cos(a) * f.r * 0.45, f.y + Math.sin(a) * f.r * 0.28, 7, 4.6, a, 0, Math.PI * 2)
+      ctx.moveTo(f.x - ftx * len, f.y - fty * len)
+      ctx.lineTo(f.x + ftx * len, f.y + fty * len)
+    }
+    ctx.lineCap = 'round'
+    // layered bed strokes feather the shallows into the deep water at each end
+    ctx.strokeStyle = 'rgba(219, 205, 162, 0.35)'
+    ctx.lineWidth = sw - 2
+    seg(f.r * 1.2); ctx.stroke()
+    ctx.strokeStyle = 'rgba(219, 205, 162, 0.55)'
+    seg(f.r * 0.95); ctx.stroke()
+    ctx.strokeStyle = 'rgba(224, 211, 168, 0.65)'
+    ctx.lineWidth = sw - 6
+    seg(f.r * 0.72); ctx.stroke()
+    // and a wash of pale water so the crossing still reads wet
+    ctx.strokeStyle = 'rgba(168, 208, 228, 0.4)'
+    ctx.lineWidth = sw - 4
+    seg(f.r * 1.05); ctx.stroke()
+    // stepping stones in a line across the current
+    const nx = -fty, ny = ftx
+    for (let i = -2; i <= 2; i++) {
+      const jig = Math.sin(f.x * 0.11 + i * 3.7)
+      const sx = f.x + nx * i * sw * 0.18 + ftx * jig * 5
+      const sy = f.y + ny * i * sw * 0.18 + fty * jig * 5
+      ctx.fillStyle = (i + 2) % 2 ? '#B8B2A0' : '#CFC9B8'
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, 5.4, 3.8, jig * 0.5, 0, Math.PI * 2)
       ctx.fill()
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)' // a wet glint on each stone
+      ctx.beginPath()
+      ctx.ellipse(sx - 1.2, sy - 1.2, 2, 1.1, jig * 0.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    // ripple feathers where the current meets the shallows
+    ctx.strokeStyle = 'rgba(240, 248, 252, 0.5)'
+    ctx.lineWidth = 1.3
+    for (const dir of [-1, 1]) {
+      const cx = f.x + ftx * dir * f.r * 0.8
+      const cy = f.y + fty * dir * f.r * 0.8
+      ctx.beginPath()
+      ctx.moveTo(cx - nx * sw * 0.24, cy - ny * sw * 0.24)
+      ctx.quadraticCurveTo(cx + ftx * dir * 5, cy + fty * dir * 5, cx + nx * sw * 0.24, cy + ny * sw * 0.24)
+      ctx.stroke()
     }
     // rich reed beds frame the crossing up- and downstream, where the
     // shallows meet deep water — the walking lane between stays open
