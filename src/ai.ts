@@ -4,14 +4,20 @@
 import {
   Game, Ent, Cost, ResKind, ChampId, TechId, LandmarkKind, UNITS, BUILDINGS, CHAMPS, TECHS, LANDMARKS,
   SOURCE_OF, POP_MAX, NO_COST, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
+  SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME,
   dist, isUnit, isBuilding,
 } from './data'
-import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken } from './world'
+import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken, unitAgeReq } from './world'
 
-const THINK_EVERY = 0.8
+// how sharply the rival village plays, by chosen difficulty
+const thinkFor = (g: Game) => (g.aiLevel === 'hard' ? 0.55 : g.aiLevel === 'easy' ? 1.15 : 0.8)
+const attackCapFor = (g: Game) => (g.aiLevel === 'hard' ? 18 : g.aiLevel === 'easy' ? 8 : 14)
 // a lean opening, then a deeper economy once the Feudal landmark stands
 // (the pop cap of 50 leaves room for it)
-const villagerGoalFor = (age: number) => (age >= 2 ? 14 : 10)
+const villagerGoalFor = (g: Game, age: number) => {
+  const shift = g.aiLevel === 'hard' ? 2 : g.aiLevel === 'easy' ? -2 : 0
+  return (age >= 2 ? 14 : 10) + shift
+}
 const farmCapFor = (age: number) => (age >= 2 ? 6 : 3)
 // gatherer quotas, in priority order
 const QUOTAS: [ResKind, number][] = [['food', 3], ['wood', 3], ['gold', 2]]
@@ -49,12 +55,18 @@ function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   return null
 }
 
-// which landmark the village is saving toward, if any: eco or military into
-// Feudal (the map seed decides its temperament), always the Guild Hall into
-// Castle — the AI quarries no stone, so the White Keep stays the player's.
+// which landmark the village is saving toward, if any: its own civ's eco or
+// military road into Feudal (the map seed decides its temperament), always
+// the eco hall into Castle — the AI quarries no stone, so the fortress
+// landmarks stay the player's.
 function nextLandmark(g: Game, tc: Ent): LandmarkKind | null {
-  if (g.age[1] === 1) return tc.seed % 2 === 0 ? 'abbeymill' : 'kingsbarracks'
-  if (g.age[1] === 2) return 'guildhall'
+  const french = g.civs[1] === 'french'
+  if (g.age[1] === 1) {
+    // the French lean hard into the cavalry road — that's rather the point
+    if (french) return tc.seed % 3 === 0 ? 'chamberofcommerce' : 'cavalryschool'
+    return tc.seed % 2 === 0 ? 'abbeymill' : 'kingsbarracks'
+  }
+  if (g.age[1] === 2) return french ? 'royalvineyard' : 'guildhall'
   return null
 }
 
@@ -62,7 +74,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
   if (!g.ai.enabled) return
   g.ai.thinkT -= dt
   if (g.ai.thinkT > 0) return
-  g.ai.thinkT = THINK_EVERY
+  g.ai.thinkT = thinkFor(g)
 
   const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter' && e.complete)
   if (!tc) return
@@ -73,7 +85,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
   const rax = g.ents.find(e =>
     e.team === 1 && (e.kind === 'barracks' || e.kind === 'kingsbarracks') && e.complete)
   const range = g.ents.find(e => e.team === 1 && e.kind === 'archeryrange' && e.complete)
-  const stable = g.ents.find(e => e.team === 1 && e.kind === 'stable' && e.complete)
+  const stable = g.ents.find(e =>
+    e.team === 1 && (e.kind === 'stable' || e.kind === 'cavalryschool') && e.complete)
   const intruder = nearest(g, tc.x, tc.y,
     o => o.team === 0 && (isUnit(o) || isBuilding(o)) && !o.hidden, 340)
 
@@ -160,11 +173,14 @@ export function updateEnemyAI(g: Game, dt: number): void {
       tryPlace(g, 'farm', tc)
     } else if (g.age[1] >= 2 && !mill && g.res[1].wood > 150) {
       tryPlace(g, 'mill', tc) // a feudal village wants its mill
+    } else if (g.civs[1] === 'french' && g.age[1] >= 2 && g.res[1].wood > 150 &&
+      !g.ents.some(e => e.team === 1 && (e.kind === 'stable' || e.kind === 'cavalryschool'))) {
+      tryPlace(g, 'stable', tc) // a French village without horses is no French village
     } else if (g.age[1] >= 2 && g.res[1].wood > 220 &&
       !g.ents.some(e => e.team === 1 && e.kind === 'archeryrange')) {
       tryPlace(g, 'archeryrange', tc) // archers, for when spears crowd the meadow
     } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
-      !g.ents.some(e => e.team === 1 && e.kind === 'stable')) {
+      !g.ents.some(e => e.team === 1 && (e.kind === 'stable' || e.kind === 'cavalryschool'))) {
       tryPlace(g, 'stable', tc) // a stable, so a fallen scout can be replaced
     }
   }
@@ -200,7 +216,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
   // -- training --
   // villagers ARE the economy: their training ignores the landmark bank
   // (the goal caps them, so the detour is small and pays for itself)
-  if ((tc.queue?.length ?? 0) === 0 && vills.length < villagerGoalFor(g.age[1]) &&
+  if ((tc.queue?.length ?? 0) === 0 && vills.length < villagerGoalFor(g, g.age[1]) &&
     p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.villager.cost)) {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
@@ -225,7 +241,16 @@ export function updateEnemyAI(g: Game, dt: number): void {
   type TrainKind = 'spearman' | 'swordsman' | 'archer' | 'knight'
   const levy = rax?.kind === 'kingsbarracks'
   const spearCost = levy ? LEVY_SPEAR_COST : UNITS.spearman.cost
+  const french = g.civs[1] === 'french'
+  const knightAge = unitAgeReq(g, 1, 'knight')
+  const stableKnightCost = stable?.kind === 'cavalryschool' ? SCHOOL_KNIGHT_COST : UNITS.knight.cost
   const pickTrainKind = (): TrainKind | null => {
+    // the French save their coppers for cavalry: with a horse hall standing,
+    // don't fritter the food away on spears while a knight is nearly afforded
+    if (french && stable && g.age[1] >= knightAge && !canSpend(stableKnightCost) &&
+      g.res[1].food < stableKnightCost.food + 40) {
+      return null
+    }
     const opts: { kind: TrainKind; w: number }[] = []
     if (rax && (rax.queue?.length ?? 0) < 2 && canSpend(spearCost)) {
       opts.push({ kind: 'spearman', w: 1 + 2 * foe.cav })
@@ -236,8 +261,10 @@ export function updateEnemyAI(g: Game, dt: number): void {
     if (range && (range.queue?.length ?? 0) < 2 && g.age[1] >= 2 && canSpend(UNITS.archer.cost)) {
       opts.push({ kind: 'archer', w: 0.6 + 1.5 * foe.spear })
     }
-    if (stable && (stable.queue?.length ?? 0) < 2 && g.age[1] >= 3 && canSpend(UNITS.knight.cost)) {
-      opts.push({ kind: 'knight', w: 0.8 + 1.2 * foe.archer })
+    if (stable && (stable.queue?.length ?? 0) < 2 && g.age[1] >= knightAge &&
+      canSpend(stableKnightCost)) {
+      // the French answer most questions with cavalry
+      opts.push({ kind: 'knight', w: (french ? 2.4 : 0.8) + 1.2 * foe.archer })
     }
     if (!opts.length) return null
     let roll = Math.random() * opts.reduce((s, o) => s + o.w, 0)
@@ -250,8 +277,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
     if (!kind) break
     const host = kind === 'archer' ? range! : kind === 'knight' ? stable! : rax!
     const isLevy = kind === 'spearman' && host.kind === 'kingsbarracks'
-    pay(g, 1, isLevy ? LEVY_SPEAR_COST : UNITS[kind].cost)
-    const time = isLevy ? LEVY_SPEAR_TIME : UNITS[kind].time
+    const isSchool = kind === 'knight' && host.kind === 'cavalryschool'
+    pay(g, 1, isLevy ? LEVY_SPEAR_COST : isSchool ? SCHOOL_KNIGHT_COST : UNITS[kind].cost)
+    const time = isLevy ? LEVY_SPEAR_TIME : isSchool ? SCHOOL_KNIGHT_TIME : UNITS[kind].time
     host.queue!.push({ kind, t: time, total: time })
   }
 
@@ -264,7 +292,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
   const fighting = soldiers.some(s => s.state === 'attack' || s.state === 'attackmove')
   if (g.ai.attacking && !fighting) {
     g.ai.attacking = false
-    g.ai.attackSize = Math.min(14, g.ai.attackSize + 2) // bolder every push
+    g.ai.attackSize = Math.min(attackCapFor(g), g.ai.attackSize + 2) // bolder every push
   }
   if (!g.ai.attacking && idleSoldiers.length >= g.ai.attackSize) {
     const target = g.ents.find(e => e.team === 0 && e.kind === 'towncenter') ??

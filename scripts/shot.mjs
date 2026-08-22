@@ -18,6 +18,12 @@ async function waitSim(pg, simSeconds, timeoutMs = 60000) {
     if (Date.now() - start > timeoutMs) throw new Error(`sim only advanced ${(t - t0).toFixed(1)}s of ${simSeconds}s`)
   }
 }
+// walk the main menu: Solo → (defaults: English banner, Fair) → Begin
+async function startGame(pg) {
+  await pg.tap('#menu-solo')
+  await pg.waitForTimeout(150)
+  await pg.tap('#play-btn')
+}
 // open a build category tab in the villager dock (backing out of any open one)
 async function openCat(pg, cat) {
   if (await pg.isVisible('[data-cmd="back"]')) {
@@ -48,7 +54,7 @@ await page.screenshot({ path: 'shots/1-start.png' })
 
 // start the game; freeze the enemy AI so the smoke test can verify the
 // economy/training flow deterministically (the AI is checked separately below)
-await page.tap('#play-btn')
+await startGame(page)
 await page.evaluate(() => { window.__game.state.ai.enabled = false })
 await page.waitForTimeout(400)
 await page.screenshot({ path: 'shots/2-base.png' })
@@ -291,7 +297,7 @@ const page3 = await browser.newPage({ viewport: { width: 390, height: 844 }, dev
 await page3.bringToFront()
 await page3.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await page3.evaluate(() => window.__game.allowPortrait())
-await page3.tap('#play-btn')
+await startGame(page3)
 await page3.evaluate(() => {
   const g = window.__game.state
   // the AI must not actually win while we watch it grow
@@ -313,7 +319,8 @@ const aiCheck = await page3.evaluate(() => {
     over: g.over,
     age: g.age[1],
     landmark: g.ents.some(e => e.team === 1 &&
-      ['abbeymill', 'kingsbarracks', 'guildhall', 'whitekeep'].includes(e.kind)),
+      ['abbeymill', 'kingsbarracks', 'guildhall', 'whitekeep',
+        'chamberofcommerce', 'cavalryschool', 'royalvineyard', 'redpalace'].includes(e.kind)),
   }
 })
 console.log('enemy AI after 340 sim-s:', aiCheck)
@@ -2058,13 +2065,88 @@ console.log('croc hunters standing:', crocAfter)
 if (crocAfter.survivors < 2) throw new Error('the crocodile took too many hunters down with it')
 await waitSim(page3, 1)
 
+// 18.9) the main menu and the French: banner picking, feudal knights, the School
+const pageF = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
+await pageF.goto('file://' + resolve('dist/index.html') + '?map=classic')
+await pageF.evaluate(() => window.__game.allowPortrait())
+if (!(await pageF.isVisible('#menu-home'))) throw new Error('main menu missing')
+const soonBadge = await pageF.evaluate(() =>
+  document.querySelector('#menu-multi .soon-badge')?.textContent ?? '')
+if (!soonBadge.includes('soon')) throw new Error('multiplayer should wear a coming-soon badge')
+await pageF.tap('#menu-solo')
+await pageF.waitForTimeout(200)
+if (!(await pageF.isVisible('#civ-french'))) throw new Error('the banner screen is missing the French')
+await pageF.tap('#civ-french')
+await pageF.tap('[data-diff="hard"]')
+await pageF.waitForTimeout(150)
+await pageF.tap('#play-btn')
+await pageF.waitForTimeout(250)
+const frStart = await pageF.evaluate(() => {
+  const g = window.__game.state
+  return { civs: g.civs, aiLevel: g.aiLevel, enemyFood: Math.round(g.res[1].food), started: g.started }
+})
+console.log('french start:', frStart)
+if (!frStart.started) throw new Error('Begin did not start the game')
+if (frStart.civs[0] !== 'french' || frStart.civs[1] !== 'english') throw new Error('civ picks wrong: ' + frStart.civs.join(','))
+if (frStart.aiLevel !== 'hard' || frStart.enemyFood < 200) throw new Error('difficulty pick did not take')
+// the French Town Hall offers the French landmark pair
+await pageF.evaluate(() => {
+  const g = window.__game.state
+  g.ai.enabled = false
+  g.res[0].food = 400; g.res[0].wood = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  window.__game.select(tc.id)
+})
+await pageF.waitForTimeout(250)
+await pageF.tap('[data-cmd="age-up"]')
+await pageF.waitForTimeout(250)
+const frMenu = await pageF.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="build-"]')].map(b => b.dataset.cmd))
+console.log('french landmark menu:', frMenu)
+if (frMenu.join(',') !== 'build-chamberofcommerce,build-cavalryschool')
+  throw new Error('expected the two French Feudal landmarks, got: ' + frMenu.join(','))
+// feudal knights: in age 2 the School of Cavalry musters discounted knights
+const frKnight = await pageF.evaluate(() => {
+  const g = window.__game.state
+  g.placing = null; g.placePos = null; g.uiDirty = true
+  g.age = [2, 1]
+  g.res[0].food = 400; g.res[0].gold = 300; g.res[0].wood = 400
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const schoolId = window.__game.spawn('cavalryschool', 0, tc.x + 300, tc.y - 220)
+  window.__game.select(schoolId)
+  return { schoolId }
+})
+await pageF.waitForTimeout(250)
+const schoolDock = await pageF.evaluate(() => ({
+  buttons: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
+  locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
+}))
+console.log('school dock:', schoolDock)
+if (!schoolDock.buttons.includes('train-knight')) throw new Error('School of Cavalry missing its knight')
+if (schoolDock.locked.includes('train-knight')) throw new Error('French knights should ride in the Feudal Age')
+const frRes = await pageF.evaluate(() => ({
+  food: window.__game.state.res[0].food, gold: window.__game.state.res[0].gold,
+}))
+await pageF.tap('[data-cmd="train-knight"]')
+await pageF.waitForTimeout(200)
+const frCost = await pageF.evaluate(({ schoolId }) => {
+  const g = window.__game.state
+  const school = g.byId.get(schoolId)
+  return { queued: school.queue.length, food: g.res[0].food, gold: g.res[0].gold }
+}, frKnight)
+console.log('school knight:', frCost.queued, 'queued')
+if (frCost.queued !== 1) throw new Error('the School of Cavalry did not queue a knight')
+if (Math.round(frRes.food - frCost.food) !== 50 || Math.round(frRes.gold - frCost.gold) !== 60)
+  throw new Error('school knight should cost 50 food + 60 gold')
+await pageF.close()
+
 // landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await page2.bringToFront()
 // in landscape the rotate prompt must NOT be up
 if (await page2.isVisible('#rotate-overlay')) throw new Error('rotate prompt showing in landscape')
-await page2.tap('#play-btn')
+await startGame(page2)
 await page2.waitForTimeout(400)
 const landscapeHud = await page2.evaluate(() => {
   const inView = el => {

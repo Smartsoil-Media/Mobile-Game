@@ -103,12 +103,22 @@ chase at its edge.
   **Wheelbarrow** at the Mill (+20% food, farms included), **Miner's Picks**
   at the Mining Camp (+20% gold & stone). The enemy researches them too.
 
-## Ages & Landmarks — the English
+## The menu, the banners, the rivalry
 
-Both villages play as **the English** (the first civilisation; more to
-come). You start in the **Dark Age** (spearmen only; the archery range,
-stable, watchtower, swordsman and new Town Halls are locked). There's no
-age research bar: **an age is a landmark you build**. Tap the laurel on the
+The game opens on a **main menu**: **Solo** leads to the banner screen —
+pick **the English or the French**, set the rival's temper (**Gentle /
+Fair / Fierce**), and Begin. **Multiplayer** wears a *coming soon* badge
+(a ranked trophy ladder arrives with it). Every match is **civ vs civ**:
+the enemy village always marches under the other banner, plays its own
+civ's landmarks, and leans into its own civ's habits. A Fierce rival
+thinks faster, runs a deeper economy, starts flush, and pushes with
+bigger armies; a Gentle one gives you room to breathe.
+
+## Ages & Landmarks
+
+You start in the **Dark Age** (spearmen only; the archery range, stable,
+watchtower, swordsman and new Town Halls are locked). There's no age
+research bar: **an age is a landmark you build**. Tap the laurel on the
 Town Hall, choose the eco road or the military road, place the landmark,
 and when your villagers finish raising it the new age dawns. Landmarks are
 real buildings on the map — the enemy can raid the site while it rises.
@@ -116,10 +126,20 @@ There's no age indicator in the HUD either: your **architecture shows the
 age** — timber planks in the Dark Age, cream plaster once Feudal, dressed
 stone in the Castle Age.
 
+**The English:**
+
 | To reach | Eco road | Military road |
 | --- | --- | --- |
 | **Feudal Age** | **Abbey Mill** (200f + 100w): a food drop-off that also tithes a steady food trickle | **King's Barracks** (150f + 150w): trains full infantry, and musters **levy spearmen** for 20 food + 10 wood |
 | **Castle Age** | **Guild Hall** (300f + 100g): merchants bring a steady gold trickle | **The White Keep** (250f + 200 stone): an arrow fortress with a long reach — garrison up to 8 for more arrows |
+
+**The French** — chivalry comes early: **knights ride in the Feudal Age**
+(everyone else waits for Castle):
+
+| To reach | Eco road | Military road |
+| --- | --- | --- |
+| **Feudal Age** | **Chamber of Commerce** (200f + 100w): a gold trickle a whole age early | **School of Cavalry** (150f + 150w): trains scouts and **discounted knights** (50 food + 60 gold, faster too) |
+| **Castle Age** | **Royal Vineyard** (300f + 100g): the harvest trickles in food on its own | **The Red Palace** (250f + 200 stone): a brick bolt-fortress — garrison up to 8 for more bolts |
 
 ## Champions (Castle Age)
 

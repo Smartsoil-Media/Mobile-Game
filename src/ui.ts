@@ -1,11 +1,12 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import {
-  Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, LandmarkKind, UNITS, BUILDINGS,
-  CHAMPS, TECHS, LANDMARKS, LEVY_SPEAR_COST, LEVY_SPEAR_TIME, AGE_NAMES,
+  Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
+  CHAMPS, TECHS, CIVS, LANDMARKS, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
+  SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES,
 } from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints } from './world'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq } from './world'
 import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -64,6 +65,10 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     kingsbarracks: { scale: 0.6, cx: 0, cy: -9 },
     guildhall: { scale: 0.58, cx: 0, cy: -12 },
     whitekeep: { scale: 0.46, cx: 0, cy: -24 },
+    chamberofcommerce: { scale: 0.58, cx: 0, cy: -11 },
+    cavalryschool: { scale: 0.6, cx: 0, cy: -9 },
+    royalvineyard: { scale: 0.58, cx: 0, cy: -10 },
+    redpalace: { scale: 0.46, cx: 0, cy: -24 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
     spearman: { scale: 1.4, cx: 0, cy: -8 },
@@ -93,6 +98,10 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'kingsbarracks': drawKingsBarracks(ctx, fake, 0.8); break
     case 'guildhall': drawGuildhall(ctx, fake, 0.8); break
     case 'whitekeep': drawWhiteKeep(ctx, fake, 0.8); break
+    case 'chamberofcommerce': drawChamberOfCommerce(ctx, fake, 0.8); break
+    case 'cavalryschool': drawCavalrySchool(ctx, fake, 0.8); break
+    case 'royalvineyard': drawRoyalVineyard(ctx, fake, 0.8); break
+    case 'redpalace': drawRedPalace(ctx, fake, 0.8); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
     case 'spearman': drawSpearman(ctx, fake, 0); break
@@ -126,9 +135,37 @@ export function initUI(g: Game): void {
   }
   el('p-pop').addEventListener('click', () => cycleIdleVillager(g, canvas))
 
+  // ---- the main menu: home → solo screen (banner + difficulty) → begin ----
+  let civPick: CivId = 'english'
+  el('menu-solo').addEventListener('click', () => {
+    el('menu-home').classList.add('hidden')
+    el('menu-solo-screen').classList.remove('hidden')
+  })
+  el('menu-back').addEventListener('click', () => {
+    el('menu-solo-screen').classList.add('hidden')
+    el('menu-home').classList.remove('hidden')
+  })
+  document.querySelectorAll<HTMLButtonElement>('.civ-card').forEach(cardEl => {
+    cardEl.addEventListener('click', () => {
+      document.querySelectorAll('.civ-card').forEach(c => c.classList.remove('selected'))
+      cardEl.classList.add('selected')
+      civPick = (cardEl.dataset.civ as CivId) ?? 'english'
+    })
+  })
+  document.querySelectorAll<HTMLButtonElement>('.diff-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.diff-chip').forEach(c => c.classList.remove('selected'))
+      chip.classList.add('selected')
+      g.aiLevel = (chip.dataset.diff as Game['aiLevel']) ?? 'normal'
+    })
+  })
   el('play-btn').addEventListener('click', () => {
+    // the enemy always marches under the other banner — every match is civ vs civ
+    g.civs = [civPick, civPick === 'english' ? 'french' : 'english']
+    if (g.aiLevel === 'hard') { g.res[1].food += 150; g.res[1].wood += 150 } // a fierce rival starts flush
     g.started = true
     el('start-overlay').classList.add('hidden')
+    toast(g, `${CIVS[g.civs[1]].name} raise their banner across the meadow.`)
   })
   el('replay-btn').addEventListener('click', () => location.reload())
 }
@@ -145,11 +182,14 @@ function queueLen(g: Game): number {
 
 function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'): void {
   const s = UNITS[kind]
-  if ((s.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[s.age ?? 1]} first!`); return }
-  // the King's Barracks musters its spear levy for a pittance
+  const ageReq = unitAgeReq(g, 0, kind)
+  if (ageReq > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
+  // the King's Barracks musters its spear levy for a pittance;
+  // the School of Cavalry saddles knights at a chevalier's discount
   const levy = b.kind === 'kingsbarracks' && kind === 'spearman'
-  const trainCost = levy ? LEVY_SPEAR_COST : s.cost
-  const trainTime = levy ? LEVY_SPEAR_TIME : s.time
+  const school = b.kind === 'cavalryschool' && kind === 'knight'
+  const trainCost = levy ? LEVY_SPEAR_COST : school ? SCHOOL_KNIGHT_COST : s.cost
+  const trainTime = levy ? LEVY_SPEAR_TIME : school ? SCHOOL_KNIGHT_TIME : s.time
   const p = pop(g, 0)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
   if (!canAfford(g, 0, trainCost)) {
@@ -435,7 +475,8 @@ export function syncUI(g: Game): void {
       back.addEventListener('click', () => { agePick = false; g.uiDirty = true })
       dock.appendChild(back)
       const nextAge = g.age[0] + 1
-      const choices = (Object.keys(LANDMARKS) as LandmarkKind[]).filter(k => LANDMARKS[k].toAge === nextAge)
+      const choices = (Object.keys(LANDMARKS) as LandmarkKind[])
+        .filter(k => LANDMARKS[k].toAge === nextAge && LANDMARKS[k].civ === g.civs[0])
       for (const kind of choices) {
         const spec = BUILDINGS[kind]
         const lm = LANDMARKS[kind]
@@ -479,7 +520,17 @@ export function syncUI(g: Game): void {
   } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill') &&
     first.complete && first.team === 0) {
     researchDock(g, dock, first)
-  } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
+  } else if (first && first.kind === 'cavalryschool' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
+      () => tryTrain(g, first, 'scout')))
+    dock.appendChild(iconButton(
+      { cmd: 'train-knight', label: "Muster knight — a chevalier's discount", icon: spriteIcon('knight'),
+        cost: SCHOOL_KNIGHT_COST, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
+      () => tryTrain(g, first, 'knight')))
+    champDock(g, dock, first)
+    if (first.queue?.length) dock.appendChild(queuePill(first))
+  } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
       () => openDoors(g, first)))
@@ -506,8 +557,8 @@ export function syncUI(g: Game): void {
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
       () => tryTrain(g, first, 'scout')))
     dock.appendChild(iconButton(
-      { cmd: 'train-knight', label: 'Train knight (Castle Age)', icon: spriteIcon('knight'),
-        cost: UNITS.knight.cost, locked: g.age[0] < (UNITS.knight.age ?? 1) },
+      { cmd: 'train-knight', label: `Train knight (${AGE_NAMES[unitAgeReq(g, 0, 'knight')]})`, icon: spriteIcon('knight'),
+        cost: UNITS.knight.cost, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
     if (first.queue?.length) dock.appendChild(queuePill(first))

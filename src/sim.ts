@@ -1,7 +1,7 @@
 // Fixed-timestep simulation: unit state machines, combat, economy, enemy AI.
 import {
   Game, Ent, Particle, LandmarkKind, TechId, ChampId, ResKind, UNITS, BUILDINGS, RESOURCES, SOURCE_OF, DMG_BONUS,
-  CHAMPS, TECHS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
+  CHAMPS, TECHS, LANDMARKS, LANDMARK_TRICKLES, AGE_NAMES,
   KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
   DEER_STRIKE, DEER_AMBLE, DEER_FLEE,
   CROC_DMG, CROC_CD, CROC_AGGRO, CROC_LEASH, CROC_SPEED,
@@ -601,10 +601,10 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     }
   }
   // the eco landmarks earn their keep on their own
-  if (e.kind === 'abbeymill') g.res[e.team].food += LANDMARK_TRICKLE * dt
-  if (e.kind === 'guildhall') g.res[e.team].gold += LANDMARK_TRICKLE * dt
-  // the White Keep rains arrows — more with soldiers on its walls
-  if (e.kind === 'whitekeep') {
+  const trickle = LANDMARK_TRICKLES[e.kind as LandmarkKind]
+  if (trickle) g.res[e.team][trickle.res] += trickle.rate * dt
+  // the fortress landmarks rain arrows — more with soldiers on their walls
+  if (e.kind === 'whitekeep' || e.kind === 'redpalace') {
     e.volleyT = (e.volleyT ?? KEEP_VOLLEY) - dt
     if (e.volleyT <= 0) {
       e.volleyT = KEEP_VOLLEY
@@ -613,7 +613,7 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
           dist(e.x, e.y, o.x, o.y) < KEEP_RANGE)
         .sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y))
       if (foes.length) {
-        const arrows = KEEP_BASE_ARROWS + Math.min(e.garrison ?? 0, BUILDINGS.whitekeep.garrisonCap)
+        const arrows = KEEP_BASE_ARROWS + Math.min(e.garrison ?? 0, BUILDINGS[e.kind].garrisonCap)
         for (let i = 0; i < arrows; i++) {
           const t = foes[i % Math.min(foes.length, 4)]
           g.projectiles.push({

@@ -15,12 +15,35 @@
     <div id="dock-buttons"></div>
   </div>
   <div id="start-overlay" class="overlay">
-    <div class="card">
+    <div class="card" id="menu-home">
       <div class="tagline">A tiny cosy RTS</div>
       <h1>Bramblewick</h1>
-      <p>Ride your scout into the dark meadow; gather wood, food, gold and stone; farm, expand, and march your little soldiers on the enemy town hall before their village outgrows yours.</p>
-      <p>Tap to select and command &middot; double-tap a villager for the whole crew &middot; drag to look around &middot; pinch to zoom.</p>
-      <button class="big-btn" id="play-btn">Play</button>
+      <p>Gather, build, age up through landmarks, and march your little soldiers on the enemy town hall before their village outgrows yours.</p>
+      <button class="big-btn" id="menu-solo">Solo</button>
+      <button class="big-btn menu-locked" id="menu-multi" aria-disabled="true">Multiplayer<span class="soon-badge">coming soon</span></button>
+      <div class="menu-note">🏆 Ranked ladder arrives with multiplayer</div>
+    </div>
+    <div class="card hidden" id="menu-solo-screen">
+      <div class="tagline">Choose your banner</div>
+      <div class="civ-cards">
+        <button class="civ-card selected" id="civ-english" data-civ="english">
+          <span class="civ-emblem">&#x1F3F9;</span>
+          <b>The English</b>
+          <small>Levy spearmen &amp; longbows. Sturdy landmarks, the long game.</small>
+        </button>
+        <button class="civ-card" id="civ-french" data-civ="french">
+          <span class="civ-emblem">&#x2694;&#xFE0F;</span>
+          <b>The French</b>
+          <small>Knights ride in the Feudal Age — cheap at the School of Cavalry.</small>
+        </button>
+      </div>
+      <div class="diff-row" id="diff-row">
+        <button class="diff-chip" data-diff="easy">Gentle</button>
+        <button class="diff-chip selected" data-diff="normal">Fair</button>
+        <button class="diff-chip" data-diff="hard">Fierce</button>
+      </div>
+      <button class="big-btn" id="play-btn">Begin</button>
+      <button class="menu-back" id="menu-back">&#8249; back</button>
     </div>
   </div>
   <div id="end-overlay" class="overlay hidden">

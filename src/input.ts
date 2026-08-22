@@ -87,6 +87,7 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
   if ((b.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
   const lm = LANDMARKS[kind as LandmarkKind]
   if (lm) {
+    if (lm.civ !== g.civs[0]) { toast(g, 'That landmark belongs to another banner.'); return false }
     if (g.age[0] >= lm.toAge) { toast(g, `The ${AGE_NAMES[lm.toAge]} is already yours.`); return false }
     if (lm.toAge !== g.age[0] + 1) { toast(g, `Reach the ${AGE_NAMES[lm.toAge - 1]} first!`); return false }
     if (g.ents.some(e => e.team === 0 && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
@@ -225,7 +226,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
-      if (hit.kind === 'watchtower' || hit.kind === 'whitekeep') {
+      if (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') {
         for (const u of myUnits.filter(e => e.kind !== 'villager')) {
           u.state = 'garrison'
           u.targetId = hit.id
@@ -235,8 +236,8 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
-  // units tap one of your watchtowers (or the White Keep): climb inside
-  if (hit && hit.team === 0 && (hit.kind === 'watchtower' || hit.kind === 'whitekeep') && hit.complete && myUnits.length) {
+  // units tap one of your watchtowers (or a fortress landmark): climb inside
+  if (hit && hit.team === 0 && (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') && hit.complete && myUnits.length) {
     for (const u of myUnits) {
       u.state = 'garrison'
       u.targetId = hit.id

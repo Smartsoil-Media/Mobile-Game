@@ -7,6 +7,7 @@ import {
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawWall, drawGate,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
+  drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
 } from './sprites'
 
@@ -521,6 +522,10 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'kingsbarracks': e.complete ? drawKingsBarracks(ctx, e, time) : drawSite(ctx, e); break
       case 'guildhall': e.complete ? drawGuildhall(ctx, e, time) : drawSite(ctx, e); break
       case 'whitekeep': e.complete ? drawWhiteKeep(ctx, e, time) : drawSite(ctx, e); break
+      case 'chamberofcommerce': e.complete ? drawChamberOfCommerce(ctx, e, time) : drawSite(ctx, e); break
+      case 'cavalryschool': e.complete ? drawCavalrySchool(ctx, e, time) : drawSite(ctx, e); break
+      case 'royalvineyard': e.complete ? drawRoyalVineyard(ctx, e, time) : drawSite(ctx, e); break
+      case 'redpalace': e.complete ? drawRedPalace(ctx, e, time) : drawSite(ctx, e); break
       case 'wall': e.complete ? drawWall(ctx, e) : drawSite(ctx, e); break
       case 'gate': e.complete
         ? drawGate(ctx, e, time, g.ents.some(u =>
@@ -646,6 +651,10 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'kingsbarracks': drawKingsBarracks(ctx, ghost, time); break
       case 'guildhall': drawGuildhall(ctx, ghost, time); break
       case 'whitekeep': drawWhiteKeep(ctx, ghost, time); break
+      case 'chamberofcommerce': drawChamberOfCommerce(ctx, ghost, time); break
+      case 'cavalryschool': drawCavalrySchool(ctx, ghost, time); break
+      case 'royalvineyard': drawRoyalVineyard(ctx, ghost, time); break
+      case 'redpalace': drawRedPalace(ctx, ghost, time); break
     }
     ctx.globalAlpha = 1
   }

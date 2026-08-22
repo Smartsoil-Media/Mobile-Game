@@ -92,6 +92,8 @@ export function createGame(opts?: { seed?: number }): Game {
     visionT: 0,
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     age: [1, 1],
+    civs: ['english', 'french'], // the menu re-deals these before the first tick
+    aiLevel: 'normal',
     champs: [{ ...NO_CHAMPS }, { ...NO_CHAMPS }],
     techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
     world: { w: W, h: H },
@@ -369,6 +371,14 @@ export function farmTaken(g: Game, farm: Ent, except?: Ent | Ent[]): boolean {
 // walking speed for a unit (a hook for future civ or upgrade effects)
 export function unitSpeed(g: Game, e: Ent): number {
   return UNITS[e.kind].speed
+}
+
+// which age a team needs before training this unit — civs bend the rules:
+// French chivalry puts knights in the saddle a whole age early
+export function unitAgeReq(g: Game, team: number, kind: Kind): number {
+  const base = UNITS[kind]?.age ?? 1
+  if (kind === 'knight' && g.civs[team] === 'french') return Math.min(base, 2)
+  return base
 }
 
 export function updateVision(g: Game): void {

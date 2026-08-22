@@ -183,6 +183,289 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
   ctx.beginPath(); ctx.arc(e.x - 4 * s + sway, cy - 8 * s, 5 * s, 0, Math.PI * 2); ctx.fill()
 }
 
+// a little fleur-de-lis, the French signature, at (x, y) roughly s tall
+function fleur(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color = '#E9B44C'): void {
+  ctx.fillStyle = color
+  ctx.beginPath() // center petal
+  ctx.moveTo(x, y - s)
+  ctx.quadraticCurveTo(x + s * 0.34, y - s * 0.3, x, y + s * 0.28)
+  ctx.quadraticCurveTo(x - s * 0.34, y - s * 0.3, x, y - s)
+  ctx.fill()
+  ctx.beginPath() // side petals curling out
+  ctx.moveTo(x - s * 0.16, y - s * 0.1)
+  ctx.quadraticCurveTo(x - s * 0.8, y - s * 0.55, x - s * 0.62, y + s * 0.16)
+  ctx.quadraticCurveTo(x - s * 0.4, y + s * 0.3, x - s * 0.16, y + s * 0.12)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(x + s * 0.16, y - s * 0.1)
+  ctx.quadraticCurveTo(x + s * 0.8, y - s * 0.55, x + s * 0.62, y + s * 0.16)
+  ctx.quadraticCurveTo(x + s * 0.4, y + s * 0.3, x + s * 0.16, y + s * 0.12)
+  ctx.fill()
+  ctx.fillRect(x - s * 0.34, y + s * 0.3, s * 0.68, s * 0.2) // the band
+}
+
+const SLATE = '#5B7BA6' // French rooftops wear the blue of the crown
+const SLATE_DARK = '#48628A'
+
+// Chamber of Commerce (French Feudal eco landmark): a fine merchants' hall —
+// striped market awning, hanging coin sign, crates of goods, slate roof
+export function drawChamberOfCommerce(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 22, 40, 12)
+  agedWall(ctx, x - 30, y - 22, 60, 40, 6, 2)
+  // slate roof
+  ctx.fillStyle = SLATE
+  ctx.beginPath()
+  ctx.moveTo(x - 38, y - 20)
+  ctx.lineTo(x, y - 44)
+  ctx.lineTo(x + 38, y - 20)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = SLATE_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 38, y - 20)
+  ctx.lineTo(x - 30, y - 20)
+  ctx.lineTo(x + 2, y - 41)
+  ctx.lineTo(x, y - 44)
+  ctx.closePath()
+  ctx.fill()
+  fleur(ctx, x, y - 48, 5)
+  // striped awning over the counter
+  ctx.fillStyle = '#C9525E'
+  ctx.beginPath()
+  ctx.moveTo(x - 28, y - 8)
+  ctx.lineTo(x - 2, y - 8)
+  ctx.lineTo(x - 4, y - 1)
+  ctx.lineTo(x - 26, y - 1)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#FBF3E4'
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath()
+    ctx.moveTo(x - 24 + i * 8, y - 8)
+    ctx.lineTo(x - 20 + i * 8, y - 8)
+    ctx.lineTo(x - 21.5 + i * 8, y - 1)
+    ctx.lineTo(x - 25.5 + i * 8, y - 1)
+    ctx.closePath()
+    ctx.fill()
+  }
+  // door and hanging coin sign
+  ctx.fillStyle = WOOD
+  rr(ctx, x + 8, y + 2, 13, 16, 5)
+  ctx.fill()
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 1.6
+  ctx.beginPath(); ctx.moveTo(x + 26, y - 6); ctx.lineTo(x + 26, y + 0.5); ctx.stroke()
+  const sway = Math.sin(t * 1.4 + e.seed) * 1.4
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(x + 26 + sway, y + 4, 4.4, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#F5D584'
+  ctx.beginPath(); ctx.arc(x + 26 + sway, y + 4, 2.4, 0, Math.PI * 2); ctx.fill()
+  // crates of goods
+  ctx.fillStyle = TIMBER
+  rr(ctx, x - 40, y + 8, 11, 10, 2); ctx.fill()
+  rr(ctx, x - 33, y + 1, 9, 8, 2); ctx.fill()
+  ctx.strokeStyle = TIMBER_EDGE
+  ctx.lineWidth = 1
+  rr(ctx, x - 40, y + 8, 11, 10, 2); ctx.stroke()
+  rr(ctx, x - 33, y + 1, 9, 8, 2); ctx.stroke()
+}
+
+// School of Cavalry (French Feudal military landmark): a long riding hall
+// with paddock rails, a horse-head sign and the fleur flying high
+export function drawCavalrySchool(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 26, 48, 13)
+  agedWall(ctx, x - 40, y - 16, 80, 38, 6, 2)
+  // twin slate roofs, the riding hall long and low
+  ctx.fillStyle = SLATE
+  ctx.beginPath()
+  ctx.moveTo(x - 46, y - 14)
+  ctx.lineTo(x - 18, y - 36)
+  ctx.lineTo(x + 10, y - 14)
+  ctx.closePath()
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(x + 2, y - 14)
+  ctx.lineTo(x + 26, y - 32)
+  ctx.lineTo(x + 48, y - 14)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = SLATE_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 46, y - 14)
+  ctx.lineTo(x - 40, y - 14)
+  ctx.lineTo(x - 15, y - 33.5)
+  ctx.lineTo(x - 18, y - 36)
+  ctx.closePath()
+  ctx.fill()
+  // wide stable door
+  ctx.fillStyle = WOOD
+  rr(ctx, x - 12, y + 2, 22, 20, 7)
+  ctx.fill()
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(x - 1, y + 2); ctx.lineTo(x - 1, y + 22)
+  ctx.stroke()
+  // horse-head sign
+  ctx.fillStyle = '#8B5A32'
+  ctx.beginPath()
+  ctx.ellipse(x - 26, y - 4, 4.6, 3.4, -0.5, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.ellipse(x - 29.5, y - 7.5, 2.4, 3.2, -0.7, 0, Math.PI * 2)
+  ctx.fill()
+  // paddock rails
+  ctx.strokeStyle = TIMBER_EDGE
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x + 22, y + 12); ctx.lineTo(x + 46, y + 12)
+  ctx.moveTo(x + 22, y + 18); ctx.lineTo(x + 46, y + 18)
+  ctx.moveTo(x + 26, y + 8); ctx.lineTo(x + 26, y + 22)
+  ctx.moveTo(x + 42, y + 8); ctx.lineTo(x + 42, y + 22)
+  ctx.stroke()
+  // banner with the fleur
+  const wave = Math.sin(t * 2 + e.seed) * 2
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(x - 18, y - 36); ctx.lineTo(x - 18, y - 52); ctx.stroke()
+  ctx.fillStyle = SLATE
+  ctx.beginPath()
+  ctx.moveTo(x - 18, y - 52)
+  ctx.quadraticCurveTo(x - 6 + wave, y - 50, x - 2 + wave, y - 46)
+  ctx.lineTo(x - 18, y - 44)
+  ctx.closePath()
+  ctx.fill()
+  fleur(ctx, x - 11 + wave * 0.5, y - 48, 3.4, '#FBF3E4')
+}
+
+// Royal Vineyard (French Castle eco landmark): a stone villa over trellis
+// rows heavy with grapes, barrels waiting by the door
+export function drawRoyalVineyard(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 24, 42, 12)
+  agedWall(ctx, x - 34, y - 24, 52, 34, 6, 3)
+  ctx.fillStyle = SLATE
+  ctx.beginPath()
+  ctx.moveTo(x - 40, y - 22)
+  ctx.lineTo(x - 8, y - 42)
+  ctx.lineTo(x + 24, y - 22)
+  ctx.closePath()
+  ctx.fill()
+  fleur(ctx, x - 8, y - 46, 4.6)
+  // arched door and round window
+  ctx.fillStyle = WOOD
+  ctx.beginPath()
+  ctx.arc(x - 8, y + 0, 6.5, Math.PI, 0)
+  ctx.lineTo(x - 1.5, y + 10)
+  ctx.lineTo(x - 14.5, y + 10)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#A8C6E0'
+  ctx.beginPath(); ctx.arc(x - 8, y - 16, 3.4, 0, Math.PI * 2); ctx.fill()
+  // trellis rows with grape clusters
+  for (let row = 0; row < 2; row++) {
+    const ry = y + 12 + row * 9
+    ctx.strokeStyle = '#6F5238'
+    ctx.lineWidth = 1.6
+    ctx.beginPath(); ctx.moveTo(x + 6, ry); ctx.lineTo(x + 44, ry); ctx.stroke()
+    ctx.fillStyle = '#75A055'
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath()
+      ctx.ellipse(x + 11 + i * 10, ry - 1.5, 4, 2.6, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = '#7B5AA6'
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.arc(x + 10 + i * 10, ry + 2.4, 1.7, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(x + 13 + i * 10, ry + 2, 1.4, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+  // barrels by the door
+  ctx.fillStyle = '#A8794F'
+  rr(ctx, x - 32, y + 6, 9, 11, 3.5); ctx.fill()
+  rr(ctx, x - 22, y + 9, 8, 9, 3); ctx.fill()
+  ctx.strokeStyle = '#6F5238'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(x - 32, y + 11.5); ctx.lineTo(x - 23, y + 11.5)
+  ctx.moveTo(x - 22, y + 13.5); ctx.lineTo(x - 14, y + 13.5)
+  ctx.stroke()
+}
+
+// The Red Palace (French Castle military landmark): a brick fortress tower,
+// slate cone roof, fleur banner — bolts rain from its walls
+export function drawRedPalace(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 20, 34, 11)
+  // tapered brick tower
+  ctx.fillStyle = '#B06A58'
+  ctx.beginPath()
+  ctx.moveTo(x - 24, y + 18)
+  ctx.lineTo(x - 18, y - 46)
+  ctx.lineTo(x + 18, y - 46)
+  ctx.lineTo(x + 24, y + 18)
+  ctx.closePath()
+  ctx.fill()
+  ctx.strokeStyle = '#8E5344'
+  ctx.lineWidth = 2
+  ctx.stroke()
+  // brick coursing
+  ctx.strokeStyle = 'rgba(120, 66, 52, 0.45)'
+  ctx.lineWidth = 1.2
+  ctx.beginPath()
+  for (let sy = y + 8; sy > y - 42; sy -= 9) {
+    const w = 24 - (y + 18 - sy) * 0.09
+    ctx.moveTo(x - w + 2, sy)
+    ctx.lineTo(x + w - 2, sy)
+  }
+  ctx.stroke()
+  // arrow slits
+  ctx.fillStyle = '#5E3A2E'
+  for (const sy of [-30, -12, 4]) {
+    rr(ctx, x - 1.8, y + sy, 3.6, 9, 1.8)
+    ctx.fill()
+  }
+  // machicolated top + slate cone
+  ctx.fillStyle = '#8E5344'
+  rr(ctx, x - 22, y - 52, 44, 9, 3)
+  ctx.fill()
+  ctx.fillStyle = '#B06A58'
+  for (let i = 0; i < 5; i++) {
+    rr(ctx, x - 20 + i * 9, y - 57, 6, 6, 1.5)
+    ctx.fill()
+  }
+  ctx.fillStyle = SLATE
+  ctx.beginPath()
+  ctx.moveTo(x - 16, y - 56)
+  ctx.lineTo(x, y - 76)
+  ctx.lineTo(x + 16, y - 56)
+  ctx.closePath()
+  ctx.fill()
+  // fleur banner streaming from the peak
+  const wave = Math.sin(t * 2.2 + e.seed) * 2.4
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(x, y - 76); ctx.lineTo(x, y - 90); ctx.stroke()
+  ctx.fillStyle = '#C9525E'
+  ctx.beginPath()
+  ctx.moveTo(x, y - 90)
+  ctx.quadraticCurveTo(x + 12 + wave, y - 88, x + 16 + wave, y - 83)
+  ctx.lineTo(x, y - 81)
+  ctx.closePath()
+  ctx.fill()
+  fleur(ctx, x + 7 + wave * 0.5, y - 85.5, 3.2, '#FBF3E4')
+  // arched door
+  ctx.fillStyle = WOOD
+  ctx.beginPath()
+  ctx.arc(x, y + 8, 6.5, Math.PI, 0)
+  ctx.lineTo(x + 6.5, y + 18)
+  ctx.lineTo(x - 6.5, y + 18)
+  ctx.closePath()
+  ctx.fill()
+}
+
 // a rocky crag: an impassable outcrop rising from the meadow — terrain with
 // a bit of storybook drama, sized by e.r (little sister rocks ride the same fn)
 export function drawCrag(ctx: CanvasRenderingContext2D, e: Ent): void {

@@ -7,10 +7,25 @@ export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
+  | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag' | 'croc'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
+  | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
+
+// ---- civilisations: each fights under its own banner and landmarks ----
+export type CivId = 'english' | 'french'
+export const CIVS: Record<CivId, { name: string; blurb: string }> = {
+  english: {
+    name: 'The English',
+    blurb: 'Sturdy landmarks and cheap levy spearmen — the long game of field and fletching.',
+  },
+  french: {
+    name: 'The French',
+    blurb: 'Chivalry comes early: knights ride in the Feudal Age, and the School of Cavalry musters them cheap.',
+  },
+}
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
@@ -108,6 +123,8 @@ export interface Game {
   visionT: number
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
   age: number[] // per team: 1 = Dark, 2 = Feudal, 3 = Castle (advanced by landmarks)
+  civs: CivId[] // per team: whose banner flies over the village
+  aiLevel: 'easy' | 'normal' | 'hard' // how sharp the rival village plays
   champs: Record<ChampId, boolean>[] // per team: bought champion upgrades
   techs: Record<TechId, boolean>[] // per team: researched economy techs
   world: { w: number; h: number } // this map's size (random maps are bigger than classic)
@@ -155,22 +172,38 @@ export const BUILDINGS: Record<string, {
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
   wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
   gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
-  // English landmarks — building one IS the age-up; it dawns when the walls rise
+  // Landmarks — building one IS the age-up; it dawns when the walls rise
   abbeymill: { hp: 400, r: 30, foot: 34, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
   kingsbarracks: { hp: 500, r: 40, foot: 44, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
   guildhall: { hp: 500, r: 34, foot: 38, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
   whitekeep: { hp: 900, r: 30, foot: 34, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
+  chamberofcommerce: { hp: 400, r: 32, foot: 36, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Chamber of Commerce' },
+  cavalryschool: { hp: 500, r: 40, foot: 44, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'School of Cavalry' },
+  royalvineyard: { hp: 500, r: 34, foot: 38, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Royal Vineyard' },
+  redpalace: { hp: 900, r: 30, foot: 34, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The Red Palace' },
 }
 
 // ---- landmarks: the age-up IS a building, eco path or military path ----
 export type LandmarkKind = 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
-export const LANDMARKS: Record<LandmarkKind, { toAge: number; path: 'eco' | 'military'; blurb: string }> = {
-  abbeymill: { toAge: 2, path: 'eco', blurb: 'A mill whose tithes trickle in food on their own' },
-  kingsbarracks: { toAge: 2, path: 'military', blurb: 'Musters spearmen for nearly half the price' },
-  guildhall: { toAge: 3, path: 'eco', blurb: 'Merchants bring a steady trickle of gold' },
-  whitekeep: { toAge: 3, path: 'military', blurb: 'A stone fortress that rains arrows on raiders' },
+  | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
+export const LANDMARKS: Record<LandmarkKind, { civ: CivId; toAge: number; path: 'eco' | 'military'; blurb: string }> = {
+  abbeymill: { civ: 'english', toAge: 2, path: 'eco', blurb: 'A mill whose tithes trickle in food on their own' },
+  kingsbarracks: { civ: 'english', toAge: 2, path: 'military', blurb: 'Musters spearmen for nearly half the price' },
+  guildhall: { civ: 'english', toAge: 3, path: 'eco', blurb: 'Merchants bring a steady trickle of gold' },
+  whitekeep: { civ: 'english', toAge: 3, path: 'military', blurb: 'A stone fortress that rains arrows on raiders' },
+  chamberofcommerce: { civ: 'french', toAge: 2, path: 'eco', blurb: 'Merchants bring a steady trickle of gold' },
+  cavalryschool: { civ: 'french', toAge: 2, path: 'military', blurb: 'Musters knights at a chevalier’s discount' },
+  royalvineyard: { civ: 'french', toAge: 3, path: 'eco', blurb: 'The harvest trickles in food on its own' },
+  redpalace: { civ: 'french', toAge: 3, path: 'military', blurb: 'A brick fortress that rains bolts on raiders' },
 }
-export const LANDMARK_TRICKLE = 0.4 // food/gold per second from the eco landmarks
+// eco landmarks earn their keep on their own: which resource trickles in
+export const LANDMARK_TRICKLES: Partial<Record<LandmarkKind, { res: ResKind; rate: number }>> = {
+  abbeymill: { res: 'food', rate: 0.4 },
+  guildhall: { res: 'gold', rate: 0.4 },
+  chamberofcommerce: { res: 'gold', rate: 0.35 }, // gold a whole age early, a touch slower
+  royalvineyard: { res: 'food', rate: 0.5 },
+}
+export const LANDMARK_TRICKLE = 0.4 // (kept for reference; see LANDMARK_TRICKLES)
 export const KEEP_RANGE = 260
 export const KEEP_VOLLEY = 1.5
 export const KEEP_DMG = 5
@@ -178,6 +211,9 @@ export const KEEP_BASE_ARROWS = 2
 // the cheap spear levy at the King's Barracks
 export const LEVY_SPEAR_COST = cost({ food: 20, wood: 10 })
 export const LEVY_SPEAR_TIME = 6
+// the chevalier's discount at the School of Cavalry
+export const SCHOOL_KNIGHT_COST = cost({ food: 50, gold: 60 })
+export const SCHOOL_KNIGHT_TIME = 10
 
 // ---- champions: one mighty upgrade per military hall, Castle Age ----
 export type ChampId = 'infantry' | 'ranged' | 'cavalry'
@@ -197,7 +233,7 @@ export const CHAMPS: Record<ChampId, {
   },
   cavalry: {
     name: 'Champion Knights', blurb: 'Knights: +20 health, +3 damage',
-    at: ['stable'], kinds: ['knight'],
+    at: ['stable', 'cavalryschool'], kinds: ['knight'],
     cost: cost({ food: 150, gold: 150 }), time: 30, hp: 20, dmg: 3,
   },
 }
@@ -293,7 +329,8 @@ export function isBuilding(e: Ent): boolean {
     e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
     e.kind === 'miningcamp' || e.kind === 'mill' ||
     e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate' ||
-    e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep'
+    e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep' ||
+    e.kind === 'chamberofcommerce' || e.kind === 'cavalryschool' || e.kind === 'royalvineyard' || e.kind === 'redpalace'
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' ||
