@@ -222,6 +222,137 @@ export function drawCrag(ctx: CanvasRenderingContext2D, e: Ent): void {
   }
 }
 
+// a crocodile: lurking mostly-submerged in the water (eyes, nostrils and a
+// ridge of scutes above the ripples), hauled out long and low on the bank,
+// and belly-up once three brave villagers have had their say
+export function drawCroc(ctx: CanvasRenderingContext2D, e: Ent, t: number, submerged = false): void {
+  const f = (e.face ?? 1) >= 0 ? 1 : -1
+  const DARK = '#4E7434'
+  const HIDE = '#6B8F53'
+  const BELLY = '#C9C29B'
+  if (e.hp <= 0) {
+    // down: rolled over in the shallows, harvested gently
+    const left = Math.max(0.45, (e.amount ?? 130) / 130)
+    shadow(ctx, e.x, e.y + 4, 16 * left + 2, 4.5)
+    ctx.fillStyle = BELLY
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 3, 15 * left + 2, 6 * left + 1, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = HIDE
+    ctx.beginPath(); ctx.ellipse(e.x + 12 * f * left, e.y - 3, 5.5, 3, 0.1 * f, 0, Math.PI * 2); ctx.fill()
+    // stubby legs skyward
+    ctx.strokeStyle = HIDE
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(e.x - 6 * f * left, e.y - 8); ctx.lineTo(e.x - 7 * f * left, e.y - 12)
+    ctx.moveTo(e.x + 2 * f * left, e.y - 8); ctx.lineTo(e.x + 3 * f * left, e.y - 12)
+    ctx.stroke()
+    ctx.strokeStyle = '#3E5C2A'
+    ctx.lineWidth = 1.1
+    ctx.beginPath() // a peacefully closed eye
+    ctx.moveTo(e.x + 11 * f * left, e.y - 4.5); ctx.lineTo(e.x + 13.5 * f * left, e.y - 4.5)
+    ctx.stroke()
+    return
+  }
+  const wag = Math.sin(t * 3 + (e.phase ?? 0)) * 3
+  if (submerged) {
+    // just the tell-tale bits above the waterline
+    ctx.strokeStyle = 'rgba(240, 248, 252, 0.45)'
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.ellipse(e.x, e.y, 20 + Math.sin(t * 1.6 + (e.phase ?? 0)) * 2.5, 7, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(e.x, e.y, 28 + Math.sin(t * 1.6 + 1.4 + (e.phase ?? 0)) * 3, 10.5, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = HIDE
+    // eye knobs + snout tip + a ridge of scutes trailing behind
+    ctx.beginPath(); ctx.ellipse(e.x + 8 * f, e.y - 1.5, 3, 2.4, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(e.x + 3.5 * f, e.y - 1.8, 2.7, 2.2, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(e.x + 13.5 * f, e.y, 2.4, 1.7, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = DARK
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath()
+      ctx.ellipse(e.x - (3 + i * 6) * f + wag * i * 0.2, e.y + 0.5, 2.6, 1.6, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = '#F6E7A0'
+    ctx.beginPath(); ctx.arc(e.x + 7 * f, e.y - 2.6, 1, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(e.x + 4.5 * f, e.y - 2.8, 0.9, 0, Math.PI * 2); ctx.fill()
+    return
+  }
+  // hauled out on the bank
+  const biting = (e.cd ?? 0) > 1.2 * 0.6 // jaws still wide from the last snap
+  shadow(ctx, e.x, e.y + 4, 20, 5)
+  // tail, swishing
+  ctx.fillStyle = HIDE
+  ctx.beginPath()
+  ctx.moveTo(e.x - 8 * f, e.y - 6)
+  ctx.quadraticCurveTo(e.x - 20 * f, e.y - 7 + wag, e.x - 26 * f, e.y - 2 + wag)
+  ctx.quadraticCurveTo(e.x - 19 * f, e.y + 1 + wag * 0.5, e.x - 8 * f, e.y + 1)
+  ctx.closePath()
+  ctx.fill()
+  // body
+  ctx.fillStyle = HIDE
+  ctx.beginPath(); ctx.ellipse(e.x, e.y - 4, 13, 5.5, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = BELLY
+  ctx.beginPath(); ctx.ellipse(e.x, e.y - 1.5, 11, 2.8, 0, 0, Math.PI * 2); ctx.fill()
+  // stubby legs
+  ctx.strokeStyle = DARK
+  ctx.lineWidth = 2.4
+  ctx.beginPath()
+  ctx.moveTo(e.x - 7 * f, e.y - 2); ctx.lineTo(e.x - 9 * f, e.y + 3)
+  ctx.moveTo(e.x + 5 * f, e.y - 2); ctx.lineTo(e.x + 3 * f, e.y + 3)
+  ctx.stroke()
+  // head and jaws
+  if (biting) {
+    ctx.fillStyle = HIDE
+    ctx.beginPath() // upper jaw thrown open
+    ctx.moveTo(e.x + 9 * f, e.y - 7)
+    ctx.lineTo(e.x + 22 * f, e.y - 13)
+    ctx.lineTo(e.x + 21 * f, e.y - 8)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath() // lower jaw
+    ctx.moveTo(e.x + 9 * f, e.y - 5)
+    ctx.lineTo(e.x + 22 * f, e.y - 2)
+    ctx.lineTo(e.x + 10 * f, e.y - 1)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = '#FBF3E4' // teeth
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath()
+      ctx.arc(e.x + (12 + i * 3.4) * f, e.y - 8.5 - i * 1.1, 0.9, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  } else {
+    ctx.fillStyle = HIDE
+    ctx.beginPath(); ctx.ellipse(e.x + 14 * f, e.y - 5, 7.5, 3, 0.05 * f, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = DARK
+    ctx.lineWidth = 1
+    ctx.beginPath() // the long smiling jaw line
+    ctx.moveTo(e.x + 8 * f, e.y - 4)
+    ctx.quadraticCurveTo(e.x + 15 * f, e.y - 3, e.x + 20.5 * f, e.y - 4.4)
+    ctx.stroke()
+    ctx.fillStyle = DARK // nostril
+    ctx.beginPath(); ctx.arc(e.x + 20 * f, e.y - 6.4, 0.9, 0, Math.PI * 2); ctx.fill()
+  }
+  // eye
+  ctx.fillStyle = '#F6E7A0'
+  ctx.beginPath(); ctx.arc(e.x + 10.5 * f, e.y - 7.2, 1.6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#2E2213'
+  ctx.beginPath(); ctx.arc(e.x + 10.9 * f, e.y - 7.2, 0.8, 0, Math.PI * 2); ctx.fill()
+  // scutes down the spine
+  ctx.fillStyle = DARK
+  for (let i = 0; i < 4; i++) {
+    const sx = e.x + (4 - i * 5) * f
+    ctx.beginPath()
+    ctx.moveTo(sx - 1.6, e.y - 8)
+    ctx.lineTo(sx, e.y - 10.6)
+    ctx.lineTo(sx + 1.6, e.y - 8)
+    ctx.closePath()
+    ctx.fill()
+  }
+}
+
 // a shy little deer — and, once brought down, a quiet bundle in the grass
 export function drawDeer(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const f = (e.face ?? 1) >= 0 ? 1 : -1

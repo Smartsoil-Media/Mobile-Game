@@ -1,7 +1,7 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP,
+  CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
@@ -49,11 +49,12 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   } else {
     const s = RESOURCES[kind]
     e.r = s.r; e.amount = s.amount; e.hp = e.maxHp = 1
-    if (kind === 'deer') {
-      // deer start alive and shy; brought down, they linger as a quiet bundle
-      e.hp = e.maxHp = DEER_HP
+    if (kind === 'deer' || kind === 'croc') {
+      // wildlife starts alive; brought down, it lingers as a quiet bundle
+      e.hp = e.maxHp = kind === 'croc' ? CROC_HP : DEER_HP
       e.homeX = x; e.homeY = y
       e.scanT = Math.random() * 3
+      e.cd = 0
       e.face = Math.random() < 0.5 ? -1 : 1
       e.phase = Math.random() * Math.PI * 2
     }
@@ -198,6 +199,17 @@ export function createGame(opts?: { seed?: number }): Game {
     for (const ft of [0.2 + rnd() * 0.1, 0.47 + rnd() * 0.08, 0.74 + rnd() * 0.1]) {
       const i = Math.round(ft * N)
       g.fords.push({ x: pts[i].x, y: pts[i].y, r: 62 })
+    }
+
+    // crocodiles lurk along the water — two guard crossings, two roam the banks
+    const streamPt = (t: number) => pts[Math.max(0, Math.min(N, Math.round(t * N)))]
+    const crocSpots = [
+      g.fords[0], g.fords[2],
+      streamPt(0.32 + rnd() * 0.08), streamPt(0.58 + rnd() * 0.1),
+    ]
+    for (const c of crocSpots) {
+      const a = rnd() * Math.PI * 2
+      spawn(g, 'croc', NEUTRAL, c.x + Math.cos(a) * 24, c.y + Math.sin(a) * 18)
     }
 
     // rocky crags: impassable outcrops that break the meadow into ground
@@ -445,7 +457,7 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
     if (e.hidden) continue
     if (e.kind === 'crag') continue // terrain, not a thing to select
     if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
-    if (e.kind === 'deer' && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // deer slip out of sight
+    if ((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // wildlife slips out of sight
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }

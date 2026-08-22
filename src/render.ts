@@ -1,8 +1,9 @@
 // Camera + world rendering.
 import { Game, Ent, BUILDINGS, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, wallLinePoints, fogIndex } from './world'
+import { inWater } from './nav'
 import {
-  drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawTC, drawHouse, drawBarracks,
+  drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawCroc, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawWall, drawGate,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
@@ -173,6 +174,36 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
     ctx.setLineDash([9, 138]); ctx.lineDashOffset = -time * 18 + 60; ctx.stroke()
     ctx.setLineDash([])
   }
+  // one clump of reeds with cattail heads (shared by banks and ford framing)
+  const reedClump = (bx: number, by: number, seed: number, sc = 1) => {
+    const sway = Math.sin(time * 1.1 + seed) * 1.6 * sc
+    ctx.strokeStyle = '#5E8A4E'
+    ctx.lineWidth = 1.6 * sc
+    ctx.beginPath()
+    ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx - 2 * sc, by - 9 * sc, bx - 3 * sc + sway, by - 15 * sc)
+    ctx.moveTo(bx + 3 * sc, by); ctx.quadraticCurveTo(bx + 3 * sc, by - 10 * sc, bx + 5 * sc + sway, by - 17 * sc)
+    ctx.moveTo(bx - 3 * sc, by); ctx.quadraticCurveTo(bx - 5 * sc, by - 7 * sc, bx - 8 * sc + sway, by - 11 * sc)
+    ctx.stroke()
+    ctx.fillStyle = '#8B6A4A'
+    ctx.beginPath(); ctx.ellipse(bx - 3 * sc + sway, by - 15 * sc, 1.6 * sc, 3.4 * sc, 0.15, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(bx + 5 * sc + sway, by - 17 * sc, 1.4 * sc, 3 * sc, -0.1, 0, Math.PI * 2); ctx.fill()
+  }
+  // the stream's direction where it passes a point (for framing the fords)
+  const tangentAt = (x: number, y: number): { tx: number; ty: number } => {
+    let best = Infinity, tx = 0, ty = 1
+    for (const s of g.streams) {
+      for (let i = 0; i + 1 < s.pts.length; i++) {
+        const p = s.pts[i], q = s.pts[i + 1]
+        const d = Math.hypot(x - (p.x + q.x) / 2, y - (p.y + q.y) / 2)
+        if (d < best) {
+          best = d
+          const dl = Math.hypot(q.x - p.x, q.y - p.y) || 1
+          tx = (q.x - p.x) / dl; ty = (q.y - p.y) / dl
+        }
+      }
+    }
+    return { tx, ty }
+  }
   // fords: shallow sandy crossings, stepping stones showing the way
   for (const f of g.fords) {
     ctx.fillStyle = 'rgba(216, 200, 156, 0.9)'
@@ -184,8 +215,39 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
       ctx.ellipse(f.x + Math.cos(a) * f.r * 0.45, f.y + Math.sin(a) * f.r * 0.28, 7, 4.6, a, 0, Math.PI * 2)
       ctx.fill()
     }
+    // rich reed beds frame the crossing up- and downstream, where the
+    // shallows meet deep water — the walking lane between stays open
+    const { tx, ty } = tangentAt(f.x, f.y)
+    for (const dir of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const along = f.r * (0.72 + k * 0.3)
+        const aside = (k - 1) * 14
+        reedClump(
+          f.x + tx * dir * along - ty * aside,
+          f.y + ty * dir * along + tx * aside,
+          f.x * 0.03 + dir * 7 + k, 1 + (k === 1 ? 0.25 : 0))
+      }
+      // a lily pad or two resting just off the shallows
+      const lx = f.x + tx * dir * f.r * 1.15 + ty * dir * 6
+      const ly = f.y + ty * dir * f.r * 1.15 - tx * dir * 6
+      const bob = Math.sin(time * 0.9 + dir + f.x * 0.01) * 1.2
+      ctx.fillStyle = '#6F9C55'
+      ctx.beginPath()
+      ctx.ellipse(lx + bob, ly, 6.5, 4.2, 0.3 * dir, 0.35, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#82AF66'
+      ctx.beginPath()
+      ctx.ellipse(lx + bob - 4, ly + 5, 4.6, 3, -0.2 * dir, 0.35, Math.PI * 2)
+      ctx.fill()
+      if (dir > 0) { // one shy blossom
+        ctx.fillStyle = '#F0C9CF'
+        ctx.beginPath(); ctx.arc(lx + bob + 2, ly - 2, 2, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = '#E9B44C'
+        ctx.beginPath(); ctx.arc(lx + bob + 2, ly - 2, 0.9, 0, Math.PI * 2); ctx.fill()
+      }
+    }
   }
-  // reeds and cattails along the banks (never on a ford)
+  // reeds and cattails scattered along the banks between crossings
   for (const s of g.streams) {
     for (let i = 2; i + 1 < s.pts.length; i += 3) {
       const p = s.pts[i], q = s.pts[i + 1]
@@ -194,18 +256,8 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
       const side = i % 2 ? 1 : -1
       const bx = p.x + nx * side * (s.w / 2 + 10)
       const by = p.y + ny * side * (s.w / 2 + 10)
-      if (g.fords.some(f => Math.hypot(bx - f.x, by - f.y) < f.r + 18)) continue
-      const sway = Math.sin(time * 1.1 + i) * 1.6
-      ctx.strokeStyle = '#5E8A4E'
-      ctx.lineWidth = 1.6
-      ctx.beginPath()
-      ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx - 2, by - 9, bx - 3 + sway, by - 15)
-      ctx.moveTo(bx + 3, by); ctx.quadraticCurveTo(bx + 3, by - 10, bx + 5 + sway, by - 17)
-      ctx.moveTo(bx - 3, by); ctx.quadraticCurveTo(bx - 5, by - 7, bx - 8 + sway, by - 11)
-      ctx.stroke()
-      ctx.fillStyle = '#8B6A4A'
-      ctx.beginPath(); ctx.ellipse(bx - 3 + sway, by - 15, 1.6, 3.4, 0.15, 0, Math.PI * 2); ctx.fill()
-      ctx.beginPath(); ctx.ellipse(bx + 5 + sway, by - 17, 1.4, 3, -0.1, 0, Math.PI * 2); ctx.fill()
+      if (g.fords.some(f => Math.hypot(bx - f.x, by - f.y) < f.r + 30)) continue
+      reedClump(bx, by, i)
     }
   }
 }
@@ -405,12 +457,13 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   // unseen; deer, like anything that moves, only exist in live sight)
   const sorted = g.ents
     .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
-      !(e.kind === 'deer' && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1))
+      !((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1))
     .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
       case 'deer': drawDeer(ctx, e, time); break
+      case 'croc': drawCroc(ctx, e, time, e.hp > 0 && inWater(g, e.x, e.y)); break
       case 'crag': drawCrag(ctx, e); break
       case 'goldmine': drawMine(ctx, e); break
       case 'berrybush': drawBush(ctx, e, time); break
@@ -442,8 +495,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'scout': drawScout(ctx, e, time); break
       case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry); break
     }
-    // health bar when hurt (a hunted deer shows its last strength too)
-    if ((isUnit(e) || isBuilding(e) || e.kind === 'deer') && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
+    // health bar when hurt (hunted wildlife shows its last strength too)
+    if ((isUnit(e) || isBuilding(e) || e.kind === 'deer' || e.kind === 'croc') && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
       const w = isBuilding(e) ? 40 : 18
       const y = e.y - e.r - (isBuilding(e) ? e.r * 0.8 : 22)
       ctx.fillStyle = 'rgba(60, 46, 30, 0.45)'

@@ -7,7 +7,7 @@ export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
-  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag'
+  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag' | 'croc'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
@@ -209,6 +209,7 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
   berrybush: { r: 14, amount: 120, gives: 'food', name: 'Berry Bush' },
   stonequarry: { r: 30, amount: 350, gives: 'stone', name: 'Stone Quarry' },
   deer: { r: 11, amount: 90, gives: 'food', name: 'Deer' },
+  croc: { r: 14, amount: 130, gives: 'food', name: 'Crocodile' },
 }
 
 // ---- economy techs: researched the honest way at their home buildings ----
@@ -225,6 +226,14 @@ export const DEER_HP = 24
 export const DEER_STRIKE = 8 // a villager's hunting poke
 export const DEER_AMBLE = 22
 export const DEER_FLEE = 95
+// crocodiles: they lurk at the water and bite whatever strays close.
+// One villager loses that fight; three hunters end it in seconds.
+export const CROC_HP = 100
+export const CROC_DMG = 7
+export const CROC_CD = 1.2
+export const CROC_AGGRO = 70
+export const CROC_LEASH = 135 // it gives up the chase before the meal is truly gone
+export const CROC_SPEED = 46
 // farms are steady but small: one pair of hands per field
 export const FARM_CREW = 1
 
@@ -288,5 +297,5 @@ export function isBuilding(e: Ent): boolean {
 }
 export function isResource(e: Ent): boolean {
   return e.kind === 'tree' || e.kind === 'goldmine' || e.kind === 'berrybush' ||
-    e.kind === 'stonequarry' || e.kind === 'deer'
+    e.kind === 'stonequarry' || e.kind === 'deer' || e.kind === 'croc'
 }

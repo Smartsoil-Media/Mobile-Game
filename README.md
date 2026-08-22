@@ -35,8 +35,17 @@ rolled map — deep water that no one swims, crossed only at three sandy
 dam a ford, and the pathfinder routes armies through the crossings).
 **Rocky crags** rise from the meadow as impassable outcrops, and the
 ground shifts through **broad soft zones** — lush hollows, dry golden
-grass, mossy shade, scree aprons, gentle sunlit rises — with reeds and
-cattails swaying on the banks and glints drifting downstream.
+grass, mossy shade, scree aprons, gentle sunlit rises — with reed beds
+framing every ford, lily pads off the shallows, and glints drifting
+downstream.
+
+**Crocodiles** lurk along the water — mostly submerged, eyes and scutes
+above the ripples, some right beside the fords. Stray too close and they
+lunge: one bite sends a villager (or scout) bolting; soldiers bite back
+with steel. They're also **food (130)**: a lone villager loses that hunt,
+so send **three** — they'll bring one down in seconds and haul the meat
+to any food drop-off. Crocs keep to a short territory and give up the
+chase at its edge.
 
 ## Controls
 

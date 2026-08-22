@@ -2003,6 +2003,61 @@ const pocketResult = await page3.evaluate(({ treeIds, villId }) => {
 console.log('forest pocket:', pocketResult)
 if (pocketResult.d > 40) throw new Error('villager got trapped in the forest pocket: ' + pocketResult.d)
 
+// 18.6) crocodiles: one bite sends a villager running; three hunters end it fast
+const crocSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const crocId = window.__game.spawn('croc', -1, 1700, 1150)
+  const vId = window.__game.spawn('villager', 0, 1755, 1150) // strays too close
+  window.__game.setSpeed(10)
+  return { crocId, vId }
+})
+await waitSim(page3, 7)
+const crocBite = await page3.evaluate(({ crocId, vId }) => {
+  const g = window.__game.state
+  const v = g.byId.get(vId)
+  const c = g.byId.get(crocId)
+  return {
+    alive: !!v, hurt: v ? v.hp < 30 : true,
+    fledTo: v ? Math.round(Math.hypot(v.x - c.x, v.y - c.y)) : 0,
+  }
+}, crocSetup)
+console.log('croc bite:', crocBite)
+if (!crocBite.alive) throw new Error('the crocodile ate a fleeing villager outright')
+if (!crocBite.hurt) throw new Error('the crocodile never bit the villager beside it')
+const crocHunt = await page3.evaluate(({ crocId }) => {
+  const g = window.__game.state
+  const c = g.byId.get(crocId)
+  const ids = []
+  for (let i = 0; i < 3; i++) {
+    const id = window.__game.spawn('villager', 0, c.x - 42 - i * 14, c.y + 26)
+    const v = g.byId.get(id)
+    v.state = 'gather'; v.targetId = crocId; v.gatherT = 0
+    ids.push(id)
+  }
+  return { ids, t0: Math.round(g.t) }
+}, crocSetup)
+await waitSim(page3, 12)
+const crocDown = await page3.evaluate(({ crocId }) => {
+  const g = window.__game.state
+  const c = g.byId.get(crocId)
+  return { down: !c || c.hp <= 0 }
+}, crocSetup)
+console.log('croc hunt:', crocDown)
+if (!crocDown.down) throw new Error('three hunters could not bring the crocodile down quickly')
+const crocAfter = await page3.evaluate(({ crocId, vId, ids }) => {
+  const g = window.__game.state
+  const survivors = ids.filter(id => g.byId.has(id)).length
+  // muster the practice crew out and tidy the carcass away
+  for (const id of [...ids, vId]) { const v = g.byId.get(id); if (v) v.hp = 0 }
+  const c = g.byId.get(crocId)
+  if (c) { const i = g.ents.indexOf(c); if (i >= 0) g.ents.splice(i, 1); g.byId.delete(crocId) }
+  window.__game.setSpeed(1)
+  return { survivors }
+}, { ...crocSetup, ids: crocHunt.ids })
+console.log('croc hunters standing:', crocAfter)
+if (crocAfter.survivors < 2) throw new Error('the crocodile took too many hunters down with it')
+await waitSim(page3, 1)
+
 // landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
 await page2.goto('file://' + resolve('dist/index.html') + '?map=classic')
@@ -2116,10 +2171,11 @@ for (const seed of [7, 13, 2026]) {
       streams: g.streams.length,
       fords: g.fords.length,
       crags: g.ents.filter(e => e.kind === 'crag').length,
+      crocs: g.ents.filter(e => e.kind === 'croc').length,
       // the stream must not strand anyone: a path from home to home exists,
-      // and nothing spawned in the drink
+      // and nothing spawned in the drink (except the crocodiles, who live there)
       reachable: !!window.__game.findPath(0, tcs[0].x, tcs[0].y, tcs[1].x, tcs[1].y),
-      wetSpawns: g.ents.filter(e => window.__game.inWater(e.x, e.y)).length,
+      wetSpawns: g.ents.filter(e => e.kind !== 'croc' && window.__game.inWater(e.x, e.y)).length,
     }
   })
   console.log(`random map (seed ${seed}):`, JSON.stringify(inv))
@@ -2136,6 +2192,7 @@ for (const seed of [7, 13, 2026]) {
   if (inv.vills !== 6) throw new Error('starting villagers wrong: ' + inv.vills)
   if (inv.streams < 1 || inv.fords < 3) throw new Error('the map is missing its stream or fords')
   if (inv.crags < 3) throw new Error('the map is short of crags: ' + inv.crags)
+  if (inv.crocs < 3) throw new Error('the water is short of crocodiles: ' + inv.crocs)
   if (!inv.reachable) throw new Error('the stream strands the two villages — no path home to home')
   if (inv.wetSpawns > 0) throw new Error('entities spawned in the water: ' + inv.wetSpawns)
   await pg.close()

@@ -260,6 +260,12 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
       commandAttack(g, myUnits, hit)
       return
     }
+    // a live crocodile: soldiers put it to the sword, villagers hunt it
+    if (hit && hit.kind === 'croc' && hit.hp > 0) {
+      if (soldiers.length) commandAttack(g, soldiers, hit)
+      if (villagers.length) commandGather(g, villagers, hit)
+      return
+    }
     if (hit && isResource(hit)) {
       if (villagers.length) commandGather(g, villagers, hit)
       if (soldiers.length) commandMove(g, soldiers, x, y)

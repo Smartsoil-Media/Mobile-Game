@@ -4,6 +4,7 @@ import {
   CHAMPS, TECHS, LANDMARKS, LANDMARK_TRICKLE, AGE_NAMES,
   KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
   DEER_STRIKE, DEER_AMBLE, DEER_FLEE,
+  CROC_DMG, CROC_CD, CROC_AGGRO, CROC_LEASH, CROC_SPEED,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
@@ -118,6 +119,13 @@ function inRange(a: Ent, b: Ent, range: number): boolean {
 function attackTarget(g: Game, e: Ent, dt: number): void {
   const s = UNITS[e.kind]
   const t = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+  if (t && (t.kind === 'croc' || t.kind === 'deer') && t.hp <= 0) {
+    // the beast is down — a bundle for the villagers, not a foe
+    if (e.resume) { e.state = 'attackmove'; e.tx = e.resume.x; e.ty = e.resume.y }
+    else e.state = 'idle'
+    e.targetId = undefined
+    return
+  }
   if (!t || t.hidden) {
     // target gone (or safely garrisoned): resume attack-move or go idle
     if (e.resume) { e.state = 'attackmove'; e.tx = e.resume.x; e.ty = e.resume.y }
@@ -154,7 +162,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
     }
     // defenders fight back: idle victims turn on their attacker
     if (isUnit(t) && (t.state === 'idle' || t.state === 'gather' || t.state === 'return') &&
-      (t.kind === 'swordsman' || t.kind === 'spearman' || t.kind === 'archer')) {
+      (t.kind === 'swordsman' || t.kind === 'spearman' || t.kind === 'archer' || t.kind === 'knight')) {
       t.state = 'attack'; t.targetId = e.id
     }
   }
@@ -170,10 +178,10 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
     case 'gather': {
       const res = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
       const isFarm = res?.kind === 'farm'
-      const isDeer = res?.kind === 'deer'
+      const isBeast = res?.kind === 'deer' || res?.kind === 'croc'
       const dead = !res ||
         (isFarm ? (!res.complete || res.team !== e.team || res.hp <= 0) :
-          isDeer ? res.hp <= 0 && (res.amount ?? 0) <= 0 : (res.amount ?? 0) <= 0)
+          isBeast ? res.hp <= 0 && (res.amount ?? 0) <= 0 : (res.amount ?? 0) <= 0)
       if (dead) {
         // find another source of the same kind nearby, else head home with what we carry
         if (isFarm || res?.kind === undefined && e.carryRes === 'food') {
@@ -201,8 +209,9 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         e.state = 'idle'; e.targetId = undefined
         break
       }
-      // a living deer must be run down first: close in, strike, and it bolts
-      if (isDeer && res!.hp > 0) {
+      // a living beast must be brought down first: close in and strike —
+      // a deer bolts between pokes; a crocodile stands its ground and bites back
+      if (isBeast && res!.hp > 0) {
         if (!inRange(e, res!, 8)) { moveToward(g, e, res!.x, res!.y, spd, dt); break }
         if (Math.abs(res!.x - e.x) > 1) e.face = res!.x > e.x ? 1 : -1
         e.gatherT = (e.gatherT ?? 0) + dt
@@ -210,15 +219,15 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
           e.gatherT = 0
           res!.hp -= DEER_STRIKE
           puff(g, res!.x, res!.y - 8, '#FFF3D6', 2, 'hit')
-          if (res!.hp > 0) {
+          if (res!.hp <= 0) {
+            puff(g, res!.x, res!.y - 6, '#E8D5B5', 5)
+          } else if (res!.kind === 'deer') {
             // startled: a short bolt away from the hunter, then it tires
             const dx = res!.x - e.x, dy = res!.y - e.y
             const d = Math.hypot(dx, dy) || 1
             res!.tx = res!.x + (dx / d) * 55
             res!.ty = res!.y + (dy / d) * 55
             res!.fleeT = 0.7
-          } else {
-            puff(g, res!.x, res!.y - 6, '#E8D5B5', 5)
           }
         }
         break
@@ -249,7 +258,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         }
         if (!isFarm && res.amount! <= 0) {
           // depleted resources stay in the world as scenery
-          if (res.kind === 'deer') {
+          if (res.kind === 'deer' || res.kind === 'croc') {
             // a picked-clean bundle fades from the meadow entirely
             puff(g, res.x, res.y - 4, '#E8D5B5', 6, 'leaf')
             killEnt(g, res)
@@ -384,6 +393,75 @@ function updateDeer(g: Game, e: Ent, dt: number): void {
   }
   e.x = Math.max(30, Math.min(g.world.w - 30, e.x))
   e.y = Math.max(30, Math.min(g.world.h - 30, e.y))
+}
+
+// crocs glide straight — no land pathfinding for a beast that lives in the
+// water the grid marks as blocked (its whole world is a short leash anyway)
+function crocStep(e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
+  const dx = tx - e.x, dy = ty - e.y
+  const d = Math.hypot(dx, dy)
+  if (d < 3) return true
+  const step = Math.min(speed * dt, d)
+  e.x += (dx / d) * step
+  e.y += (dy / d) * step
+  e.stepped = true
+  if (Math.abs(dx) > 3) e.face = dx > 0 ? 1 : -1
+  return d - step < 3
+}
+
+// crocodiles laze by the water, lunge at whatever strays close, and bite hard.
+// They keep to a short leash around home — a lost meal is soon forgotten.
+function updateCroc(g: Game, e: Ent, dt: number): void {
+  if (e.hp <= 0) return // belly-up: a bundle for the brave
+  e.cd = Math.max(0, (e.cd ?? 0) - dt)
+  const homeD = dist(e.x, e.y, e.homeX ?? e.x, e.homeY ?? e.y)
+  const t = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+  if (t && isUnit(t) && !t.hidden && homeD < CROC_LEASH &&
+    dist(t.x, t.y, e.homeX ?? e.x, e.homeY ?? e.y) < CROC_LEASH + 40) {
+    if (!inRange(e, t, 8)) {
+      crocStep(e, t.x, t.y, CROC_SPEED, dt)
+    } else if (e.cd <= 0) {
+      e.cd = CROC_CD
+      t.hp -= CROC_DMG
+      puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 3, 'hit')
+      if ((t.kind === 'villager' || t.kind === 'scout') && t.targetId !== e.id) {
+        // the bitten bolt for safety (hunters committed to the fight stay in it)
+        const dx = t.x - e.x, dy = t.y - e.y
+        const dl = Math.hypot(dx, dy) || 1
+        t.state = 'move'
+        t.tx = t.x + (dx / dl) * 120
+        t.ty = t.y + (dy / dl) * 120
+        t.targetId = undefined
+        t.resume = null
+        if (t.team === 0) toast(g, 'A crocodile snaps at your villagers!')
+      } else if ((t.kind === 'swordsman' || t.kind === 'spearman' || t.kind === 'archer' || t.kind === 'knight') &&
+        (t.state === 'idle' || t.state === 'move' || t.state === 'attackmove')) {
+        if (t.state === 'attackmove') t.resume = { x: t.tx!, y: t.ty! }
+        t.state = 'attack'; t.targetId = e.id // soldiers answer teeth with steel
+      }
+    }
+    return
+  }
+  e.targetId = undefined
+  // too far from the water: pad quietly home
+  if (homeD > 40 && (e.tx === undefined || homeD > CROC_LEASH * 0.7)) {
+    e.tx = e.homeX; e.ty = e.homeY
+  }
+  // watch for a meal
+  e.scanT = (e.scanT ?? 0) - dt
+  if (e.scanT <= 0) {
+    e.scanT = 0.4
+    const prey = nearest(g, e.x, e.y, o => isUnit(o) && !o.hidden, CROC_AGGRO)
+    if (prey) { e.targetId = prey.id; return }
+    if (e.tx === undefined && Math.random() < 0.25) {
+      // a lazy drift about the lair
+      e.tx = (e.homeX ?? e.x) + (Math.random() - 0.5) * 70
+      e.ty = (e.homeY ?? e.y) + (Math.random() - 0.5) * 55
+    }
+  }
+  if (e.tx !== undefined && crocStep(e, e.tx, e.ty!, CROC_SPEED * 0.45, dt)) {
+    e.tx = undefined; e.ty = undefined
+  }
 }
 
 // walk to a garrisonable building and shelter inside (villagers and soldiers alike)
@@ -609,6 +687,7 @@ function separation(g: Game): void {
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'deer') continue // soft little things — they step around us
+      if (o.kind === 'croc' && o.hp <= 0) continue // a bundle doesn't block the bank
       if (o.kind === 'tree' && (o.amount ?? 0) <= 0) continue // chopped through — a path!
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
@@ -666,6 +745,8 @@ export function update(g: Game, dt: number): void {
       else updateSoldier(g, e, dt)
     } else if (e.kind === 'deer') {
       updateDeer(g, e, dt)
+    } else if (e.kind === 'croc') {
+      updateCroc(g, e, dt)
     } else if (isBuilding(e)) {
       updateBuilding(g, e, dt)
     }
