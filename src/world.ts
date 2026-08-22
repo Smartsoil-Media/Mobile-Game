@@ -5,6 +5,7 @@ import {
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
 } from './data'
+import { inWater } from './nav'
 
 const RES_KINDS: ResKind[] = ['wood', 'food', 'gold', 'stone']
 
@@ -24,7 +25,10 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
     id: g.nextId++, kind, team, x, y, r: 12, hp: 1, maxHp: 1,
     seed: Math.floor(Math.random() * 1e9),
   }
-  if (isUnit(e)) {
+  if (kind === 'crag') {
+    // bare rock: pure terrain, sized by whoever raises it
+    e.r = 40; e.hp = e.maxHp = 1
+  } else if (isUnit(e)) {
     const s = UNITS[kind]
     e.r = s.r; e.hp = e.maxHp = s.hp
     const champ = champOf(kind)
@@ -56,7 +60,7 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   }
   g.ents.push(e)
   g.byId.set(e.id, e)
-  if (kind === 'tree' || isBuilding(e)) g.navDirty = true // terrain changed
+  if (kind === 'tree' || kind === 'crag' || isBuilding(e)) g.navDirty = true // terrain changed
   return e
 }
 
@@ -90,7 +94,9 @@ export function createGame(opts?: { seed?: number }): Game {
     champs: [{ ...NO_CHAMPS }, { ...NO_CHAMPS }],
     techs: [{ ...NO_TECHS }, { ...NO_TECHS }],
     world: { w: W, h: H },
-    nav: null, navDirty: true,
+    nav: null, navDirty: true, navWater: null,
+    mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
+    streams: [], fords: [],
     toasts: [], started: false, uiDirty: true,
   }
 
@@ -98,6 +104,7 @@ export function createGame(opts?: { seed?: number }): Game {
   const placed: { x: number; y: number; r: number }[] = []
   const clear = (x: number, y: number, r: number) =>
     x > 60 && x < W - 60 && y > 60 && y < H - 60 &&
+    !inWater(g, x, y, r + 10, true) && // nothing spawns in the water or on a ford
     placed.every(p => dist(x, y, p.x, p.y) > r + p.r + 14)
   const mark = (x: number, y: number, r: number) => placed.push({ x, y, r })
 
@@ -170,6 +177,56 @@ export function createGame(opts?: { seed?: number }): Game {
     mark(pTC.x, pTC.y, 90); mark(eTC.x, eTC.y, 90)
     spawn(g, 'towncenter', 0, pTC.x, pTC.y)
     spawn(g, 'towncenter', 1, eTC.x, eTC.y)
+
+    // a stream winds down the middle of the land, crossable at three fords —
+    // the villages sit far to either side, so the water shapes the war
+    const streamW = 44 + rnd() * 14
+    const baseX = (0.44 + rnd() * 0.12) * W
+    const meander = (0.05 + rnd() * 0.04) * W
+    const phase = rnd() * Math.PI * 2
+    const wobble = 1.7 + rnd() * 1.2
+    const pts: { x: number; y: number }[] = []
+    const N = 30
+    for (let i = 0; i <= N; i++) {
+      const t = i / N
+      pts.push({
+        x: baseX + Math.sin(t * Math.PI * wobble + phase) * meander,
+        y: t * H,
+      })
+    }
+    g.streams.push({ pts, w: streamW })
+    for (const ft of [0.2 + rnd() * 0.1, 0.47 + rnd() * 0.08, 0.74 + rnd() * 0.1]) {
+      const i = Math.round(ft * N)
+      g.fords.push({ x: pts[i].x, y: pts[i].y, r: 62 })
+    }
+
+    // rocky crags: impassable outcrops that break the meadow into ground
+    // worth fighting over (and hide a knight or two behind)
+    for (let i = 0; i < 7; i++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const x = 260 + rnd() * (W - 520)
+        const y = 240 + rnd() * (H - 480)
+        const r = 34 + rnd() * 22
+        if (dist(x, y, pTC.x, pTC.y) < 520 || dist(x, y, eTC.x, eTC.y) < 520) continue
+        if (!clear(x, y, r)) continue
+        const crag = spawn(g, 'crag', NEUTRAL, x, y)
+        crag.r = r
+        mark(x, y, r)
+        // a little sister rock beside the big one, when it fits
+        if (rnd() < 0.6) {
+          const a = rnd() * Math.PI * 2
+          const s2r = 16 + rnd() * 8
+          const sx = x + Math.cos(a) * (r + s2r + 20)
+          const sy = y + Math.sin(a) * (r + s2r + 20) * 0.8
+          if (clear(sx, sy, s2r)) {
+            const s2 = spawn(g, 'crag', NEUTRAL, sx, sy)
+            s2.r = s2r
+            mark(sx, sy, s2r)
+          }
+        }
+        break
+      }
+    }
 
     // a clear spot on a ring around a point — for each home's guaranteed kit
     const ring = (cx: number, cy: number, minD: number, maxD: number, r: number) => {
@@ -386,6 +443,7 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
   let best: Ent | null = null, bd = Infinity
   for (const e of g.ents) {
     if (e.hidden) continue
+    if (e.kind === 'crag') continue // terrain, not a thing to select
     if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
     if (e.kind === 'deer' && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // deer slip out of sight
     const slack = isUnit(e) ? 14 : 8
@@ -455,6 +513,7 @@ export function openDoors(g: Game, b: Ent): void {
 export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
   const f = BUILDINGS[kind].foot
   if (x - f < 40 || x + f > g.world.w - 40 || y - f < 40 || y + f > g.world.h - 40) return false
+  if (inWater(g, x, y, f + 6, true)) return false // no building in the water — or damming a ford
   const isPal = kind === 'wall' || kind === 'gate'
   for (const e of g.ents) {
     if (isUnit(e)) continue

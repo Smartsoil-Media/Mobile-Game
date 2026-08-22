@@ -9,7 +9,7 @@ import {
   dist, isUnit, isBuilding, isResource,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
-import { lineClear, findPath } from './nav'
+import { lineClear, findPath, inWater, streamDist } from './nav'
 import { updateEnemyAI } from './ai'
 
 export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: Particle['kind'] = 'puff'): void {
@@ -69,9 +69,9 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   let block: Ent | null = null
   for (const o of g.ents) {
     if (o === e) continue
-    // living trees are terrain now; stumps and everything else stay open
-    const treeWall = o.kind === 'tree' && (o.amount ?? 0) > 0
-    if (!treeWall && !isBuilding(o)) continue
+    // living trees and bare rock are terrain; stumps and everything else stay open
+    const terrain = (o.kind === 'tree' && (o.amount ?? 0) > 0) || o.kind === 'crag'
+    if (!terrain && !isBuilding(o)) continue
     if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
     if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // just pegs in the grass
     const clearance = e.r + o.r * 0.85
@@ -622,6 +622,33 @@ function separation(g: Game): void {
     }
     a.x = Math.max(16, Math.min(g.world.w - 16, a.x))
     a.y = Math.max(16, Math.min(g.world.h - 16, a.y))
+  }
+  // nobody swims: anything that ends the tick in deep water is set back on
+  // the bank it came from (fords are shallow and pass freely)
+  if (g.streams.length) {
+    for (const a of g.ents) {
+      if (!(isUnit(a) || a.kind === 'deer') || a.hidden) continue
+      if (!inWater(g, a.x, a.y, a.r * 0.3)) continue
+      const s = streamDist(g, a.x, a.y)
+      // push directly away from the centerline to just past the bank
+      let bestD = Infinity, cx = a.x, cy = a.y
+      for (const st of g.streams) {
+        for (let i = 0; i + 1 < st.pts.length; i++) {
+          const p = st.pts[i], q = st.pts[i + 1]
+          const abx = q.x - p.x, aby = q.y - p.y
+          const len2 = abx * abx + aby * aby || 1
+          const t = Math.max(0, Math.min(1, ((a.x - p.x) * abx + (a.y - p.y) * aby) / len2))
+          const px = p.x + abx * t, py = p.y + aby * t
+          const d = dist(a.x, a.y, px, py)
+          if (d < bestD) { bestD = d; cx = px; cy = py }
+        }
+      }
+      const dx = a.x - cx, dy = a.y - cy
+      const dl = Math.hypot(dx, dy) || 1
+      const out = s.w / 2 + a.r * 0.5 + 4
+      a.x = cx + (dx / dl) * out
+      a.y = cy + (dy / dl) * out
+    }
   }
 }
 

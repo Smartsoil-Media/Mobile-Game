@@ -7,7 +7,7 @@ export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
-  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer'
+  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
@@ -113,6 +113,10 @@ export interface Game {
   world: { w: number; h: number } // this map's size (random maps are bigger than classic)
   nav: { w: number; h: number; block: Uint8Array } | null // coarse walkability grid (lazy)
   navDirty: boolean // terrain changed — rebuild the grid before the next query
+  navWater: Uint8Array | null // cached water stamp (streams never move)
+  mapSeed: number // 0 = the classic meadow; anything else = a rolled map
+  streams: { pts: { x: number; y: number }[]; w: number }[] // winding water, crossable at fords
+  fords: { x: number; y: number; r: number }[] // shallow crossings through the streams
   toasts: { text: string; t: number }[]
   started: boolean
   uiDirty: boolean

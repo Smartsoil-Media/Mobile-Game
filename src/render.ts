@@ -2,7 +2,7 @@
 import { Game, Ent, BUILDINGS, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, wallLinePoints, fogIndex } from './world'
 import {
-  drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawTC, drawHouse, drawBarracks,
+  drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
   drawWall, drawGate,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
@@ -72,6 +72,144 @@ function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
   return ctx.createPattern(c, 'repeat')!
 }
 
+interface View { x0: number; y0: number; x1: number; y1: number }
+
+// ---- terrain character: broad, soft ground zones so the land reads as
+// PLACES — lush hollows, dry golden grass, mossy shade, scree aprons, and
+// gentle rises — instead of one repeating meadow tile ----
+interface Zone { x: number; y: number; r: number; kind: 'lush' | 'dry' | 'moss' | 'scree' | 'rise'; seed: number }
+let zones: Zone[] | null = null
+let zoneKey = ''
+function makeZones(g: Game): Zone[] {
+  const rnd = (() => {
+    let s = 91 + ((g.mapSeed >>> 0) % 1000000)
+    return () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+  })()
+  const out: Zone[] = []
+  const count = Math.round(26 * (g.world.w * g.world.h) / (1920 * 1280))
+  const kinds: Zone['kind'][] = ['lush', 'lush', 'dry', 'dry', 'moss', 'scree', 'rise', 'rise']
+  for (let i = 0; i < count; i++) {
+    out.push({
+      x: 120 + rnd() * (g.world.w - 240),
+      y: 120 + rnd() * (g.world.h - 240),
+      r: 90 + rnd() * 130,
+      kind: kinds[Math.floor(rnd() * kinds.length)],
+      seed: Math.floor(rnd() * 1000),
+    })
+  }
+  return out
+}
+
+function drawZones(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
+  const key = `${g.mapSeed}:${g.world.w}x${g.world.h}`
+  if (!zones || zoneKey !== key) { zones = makeZones(g); zoneKey = key }
+  for (const z of zones) {
+    if (z.x + z.r * 1.6 < view.x0 || z.x - z.r * 1.6 > view.x1 ||
+      z.y + z.r * 1.2 < view.y0 || z.y - z.r * 1.2 > view.y1) continue
+    const blob = (ox: number, oy: number, rx: number, ry: number, fill: string) => {
+      ctx.fillStyle = fill
+      ctx.beginPath()
+      ctx.ellipse(z.x + ox, z.y + oy, rx, ry, (z.seed + ox) * 0.1, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    const o = (k: number) => ((z.seed >> k) % 5 - 2) * z.r * 0.14
+    if (z.kind === 'lush') {
+      blob(o(0), o(1), z.r, z.r * 0.66, 'rgba(122, 168, 82, 0.18)')
+      blob(o(2) + z.r * 0.3, o(3), z.r * 0.7, z.r * 0.5, 'rgba(122, 168, 82, 0.14)')
+      blob(o(4) - z.r * 0.3, o(5) + z.r * 0.2, z.r * 0.55, z.r * 0.4, 'rgba(140, 181, 106, 0.14)')
+    } else if (z.kind === 'dry') {
+      blob(o(0), o(1), z.r, z.r * 0.62, 'rgba(205, 193, 118, 0.20)')
+      blob(o(2) - z.r * 0.25, o(3) + z.r * 0.15, z.r * 0.6, z.r * 0.42, 'rgba(214, 199, 128, 0.16)')
+      // a few straw tufts
+      ctx.strokeStyle = 'rgba(178, 162, 92, 0.6)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      for (let i = 0; i < 5; i++) {
+        const a = z.seed + i * 2.3
+        const tx = z.x + Math.cos(a) * z.r * 0.5, ty = z.y + Math.sin(a) * z.r * 0.35
+        ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + 2, ty - 6, tx + 4, ty - 9)
+        ctx.moveTo(tx + 4, ty); ctx.quadraticCurveTo(tx + 5, ty - 5, tx + 8, ty - 7)
+      }
+      ctx.stroke()
+    } else if (z.kind === 'moss') {
+      blob(o(0), o(1), z.r * 0.9, z.r * 0.6, 'rgba(92, 138, 84, 0.15)')
+      blob(o(2) + z.r * 0.2, o(3) + z.r * 0.1, z.r * 0.55, z.r * 0.4, 'rgba(80, 124, 76, 0.12)')
+    } else if (z.kind === 'scree') {
+      blob(o(0), o(1), z.r * 0.8, z.r * 0.5, 'rgba(172, 166, 148, 0.18)')
+      for (let i = 0; i < 6; i++) {
+        const a = z.seed * 0.7 + i * 1.9
+        ctx.fillStyle = i % 2 ? 'rgba(150, 144, 126, 0.55)' : 'rgba(190, 184, 166, 0.6)'
+        ctx.beginPath()
+        ctx.ellipse(z.x + Math.cos(a) * z.r * 0.45, z.y + Math.sin(a) * z.r * 0.3,
+          3.6 - (i % 3), 2.4 - (i % 3) * 0.5, a, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    } else { // rise: a gentle hill swell — soft light on its brow, soft shade below
+      blob(0, z.r * 0.12, z.r, z.r * 0.62, 'rgba(66, 84, 44, 0.10)')
+      blob(-z.r * 0.08, -z.r * 0.1, z.r * 0.88, z.r * 0.52, 'rgba(255, 252, 235, 0.13)')
+      blob(-z.r * 0.16, -z.r * 0.22, z.r * 0.5, z.r * 0.3, 'rgba(255, 252, 235, 0.12)')
+    }
+  }
+}
+
+// ---- streams: winding water with sandy fords, drifting glints, bank reeds ----
+function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void {
+  if (!g.streams.length) return
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  for (const s of g.streams) {
+    const path = () => {
+      ctx.beginPath()
+      ctx.moveTo(s.pts[0].x, s.pts[0].y)
+      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i].x, s.pts[i].y)
+    }
+    path(); ctx.strokeStyle = '#C9BC94'; ctx.lineWidth = s.w + 16; ctx.stroke() // muddy banks
+    path(); ctx.strokeStyle = '#6D9DC5'; ctx.lineWidth = s.w; ctx.stroke()
+    path(); ctx.strokeStyle = '#7FB2D6'; ctx.lineWidth = Math.max(8, s.w - 14); ctx.stroke()
+    // glints drifting downstream
+    path(); ctx.strokeStyle = 'rgba(232, 244, 252, 0.7)'; ctx.lineWidth = 2.4
+    ctx.setLineDash([14, 96]); ctx.lineDashOffset = -time * 26; ctx.stroke()
+    ctx.lineWidth = 1.8
+    ctx.setLineDash([9, 138]); ctx.lineDashOffset = -time * 18 + 60; ctx.stroke()
+    ctx.setLineDash([])
+  }
+  // fords: shallow sandy crossings, stepping stones showing the way
+  for (const f of g.fords) {
+    ctx.fillStyle = 'rgba(216, 200, 156, 0.9)'
+    ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r * 0.88, f.r * 0.62, 0, 0, Math.PI * 2); ctx.fill()
+    for (let i = 0; i < 6; i++) {
+      const a = i * 1.9 + f.x * 0.013
+      ctx.fillStyle = i % 2 ? '#B8B2A0' : '#CFC9B8'
+      ctx.beginPath()
+      ctx.ellipse(f.x + Math.cos(a) * f.r * 0.45, f.y + Math.sin(a) * f.r * 0.28, 7, 4.6, a, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  // reeds and cattails along the banks (never on a ford)
+  for (const s of g.streams) {
+    for (let i = 2; i + 1 < s.pts.length; i += 3) {
+      const p = s.pts[i], q = s.pts[i + 1]
+      const dl = Math.hypot(q.x - p.x, q.y - p.y) || 1
+      const nx = -(q.y - p.y) / dl, ny = (q.x - p.x) / dl
+      const side = i % 2 ? 1 : -1
+      const bx = p.x + nx * side * (s.w / 2 + 10)
+      const by = p.y + ny * side * (s.w / 2 + 10)
+      if (g.fords.some(f => Math.hypot(bx - f.x, by - f.y) < f.r + 18)) continue
+      const sway = Math.sin(time * 1.1 + i) * 1.6
+      ctx.strokeStyle = '#5E8A4E'
+      ctx.lineWidth = 1.6
+      ctx.beginPath()
+      ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx - 2, by - 9, bx - 3 + sway, by - 15)
+      ctx.moveTo(bx + 3, by); ctx.quadraticCurveTo(bx + 3, by - 10, bx + 5 + sway, by - 17)
+      ctx.moveTo(bx - 3, by); ctx.quadraticCurveTo(bx - 5, by - 7, bx - 8 + sway, by - 11)
+      ctx.stroke()
+      ctx.fillStyle = '#8B6A4A'
+      ctx.beginPath(); ctx.ellipse(bx - 3 + sway, by - 15, 1.6, 3.4, 0.15, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(bx + 5 + sway, by - 17, 1.4, 3, -0.1, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+}
+
 // Little touches of life scattered over the meadow: pebble clusters, toadstool
 // rings, clover patches. Purely decorative, fixed per map, drawn under everything.
 interface Decor { x: number; y: number; kind: 'pebbles' | 'mushrooms' | 'clover'; seed: number }
@@ -93,10 +231,11 @@ function makeDecor(g: Game): Decor[] {
   return out
 }
 
-function drawDecor(ctx: CanvasRenderingContext2D, g: Game): void {
+function drawDecor(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
   const key = `${g.world.w}x${g.world.h}`
   if (!decor || decorKey !== key) { decor = makeDecor(g); decorKey = key }
   for (const d of decor) {
+    if (d.x < view.x0 - 30 || d.x > view.x1 + 30 || d.y < view.y0 - 30 || d.y > view.y1 + 30) continue
     if (d.kind === 'pebbles') {
       ctx.fillStyle = 'rgba(160, 152, 130, 0.8)'
       for (let i = 0; i < 3; i++) {
@@ -236,7 +375,14 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.closePath()
   ctx.fill()
 
-  drawDecor(ctx, g)
+  // what the camera can see, for culling the ground dressing
+  const view: View = {
+    x0: cam.x - vw / 2 / cam.zoom - 60, x1: cam.x + vw / 2 / cam.zoom + 60,
+    y0: cam.y - vh / 2 / cam.zoom - 60, y1: cam.y + vh / 2 / cam.zoom + 60,
+  }
+  drawZones(ctx, g, view)
+  drawStreams(ctx, g, time)
+  drawDecor(ctx, g, view)
   drawWornEarth(ctx, g)
 
   // selection rings under everything else
@@ -265,6 +411,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
       case 'deer': drawDeer(ctx, e, time); break
+      case 'crag': drawCrag(ctx, e); break
       case 'goldmine': drawMine(ctx, e); break
       case 'berrybush': drawBush(ctx, e, time); break
       case 'stonequarry': drawQuarry(ctx, e); break

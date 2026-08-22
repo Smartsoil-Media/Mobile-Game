@@ -2113,6 +2113,13 @@ for (const seed of [7, 13, 2026]) {
       })),
       deer: g.ents.filter(e => e.kind === 'deer').length,
       vills: g.ents.filter(e => e.kind === 'villager').length,
+      streams: g.streams.length,
+      fords: g.fords.length,
+      crags: g.ents.filter(e => e.kind === 'crag').length,
+      // the stream must not strand anyone: a path from home to home exists,
+      // and nothing spawned in the drink
+      reachable: !!window.__game.findPath(0, tcs[0].x, tcs[0].y, tcs[1].x, tcs[1].y),
+      wetSpawns: g.ents.filter(e => window.__game.inWater(e.x, e.y)).length,
     }
   })
   console.log(`random map (seed ${seed}):`, JSON.stringify(inv))
@@ -2127,6 +2134,10 @@ for (const seed of [7, 13, 2026]) {
   }
   if (inv.deer < 9) throw new Error('the wilds are short of deer: ' + inv.deer)
   if (inv.vills !== 6) throw new Error('starting villagers wrong: ' + inv.vills)
+  if (inv.streams < 1 || inv.fords < 3) throw new Error('the map is missing its stream or fords')
+  if (inv.crags < 3) throw new Error('the map is short of crags: ' + inv.crags)
+  if (!inv.reachable) throw new Error('the stream strands the two villages — no path home to home')
+  if (inv.wetSpawns > 0) throw new Error('entities spawned in the water: ' + inv.wetSpawns)
   await pg.close()
 }
 // two different seeds must not deal the same map

@@ -29,6 +29,15 @@ cap is **50**. URL flags: `?map=classic` pins the original handcrafted
 meadow (the regression suite lives there); `?map=<number>` replays a
 specific roll.
 
+The land itself has character. A **stream** winds down the middle of every
+rolled map — deep water that no one swims, crossed only at three sandy
+**fords** (stepping stones show the way; you can't build in the water or
+dam a ford, and the pathfinder routes armies through the crossings).
+**Rocky crags** rise from the meadow as impassable outcrops, and the
+ground shifts through **broad soft zones** — lush hollows, dry golden
+grass, mossy shade, scree aprons, gentle sunlit rises — with reeds and
+cattails swaying on the banks and glints drifting downstream.
+
 ## Controls
 
 - **Tap** a villager or building to select it

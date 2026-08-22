@@ -10,12 +10,51 @@ export const NAV_CELL = 32
 // bit 1 blocks team 0, bit 2 blocks team 1 (gates open for their own side)
 function bitFor(team: number): number { return team === 1 ? 2 : 1 }
 
+// distance from a point to the nearest stream centerline (Infinity when dry)
+export function streamDist(g: Game, x: number, y: number): { d: number; w: number } {
+  let best = Infinity, bw = 0
+  for (const s of g.streams) {
+    for (let i = 0; i + 1 < s.pts.length; i++) {
+      const a = s.pts[i], b = s.pts[i + 1]
+      const abx = b.x - a.x, aby = b.y - a.y
+      const len2 = abx * abx + aby * aby || 1
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby) / len2))
+      const d = dist(x, y, a.x + abx * t, a.y + aby * t)
+      if (d < best) { best = d; bw = s.w }
+    }
+  }
+  return { d: best, w: bw }
+}
+
+// deep water at this point? Fords are shallow — crossable on foot — unless
+// the caller asks for them counted (placement wants nothing built there)
+export function inWater(g: Game, x: number, y: number, margin = 0, fordsCount = false): boolean {
+  if (!g.streams.length) return false
+  const s = streamDist(g, x, y)
+  if (s.d >= s.w / 2 + margin) return false
+  if (fordsCount) return true
+  return !g.fords.some(f => dist(x, y, f.x, f.y) < f.r)
+}
+
 export function rebuildNav(g: Game): void {
   const w = Math.ceil(g.world.w / NAV_CELL)
   const h = Math.ceil(g.world.h / NAV_CELL)
   if (!g.nav || g.nav.w !== w || g.nav.h !== h) g.nav = { w, h, block: new Uint8Array(w * h) }
   const grid = g.nav.block
-  grid.fill(0)
+  // streams never move: stamp them once, then start every rebuild from that
+  if (!g.navWater) {
+    g.navWater = new Uint8Array(w * h)
+    if (g.streams.length) {
+      for (let cy = 0; cy < h; cy++) {
+        for (let cx = 0; cx < w; cx++) {
+          if (inWater(g, cx * NAV_CELL + NAV_CELL / 2, cy * NAV_CELL + NAV_CELL / 2, 8)) {
+            g.navWater[cy * w + cx] = 3
+          }
+        }
+      }
+    }
+  }
+  grid.set(g.navWater)
   const stamp = (x: number, y: number, r: number, bits: number) => {
     const x0 = Math.max(0, Math.floor((x - r) / NAV_CELL))
     const x1 = Math.min(w - 1, Math.floor((x + r) / NAV_CELL))
@@ -32,6 +71,8 @@ export function rebuildNav(g: Game): void {
   for (const o of g.ents) {
     if (o.kind === 'tree') {
       if ((o.amount ?? 0) > 0) stamp(o.x, o.y, o.r * 0.85 + 10, 3) // stumps stay open
+    } else if (o.kind === 'crag') {
+      stamp(o.x, o.y, o.r * 0.85 + 10, 3) // bare rock climbs for no one
     } else if (isBuilding(o)) {
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // pegs
       const bits = o.kind === 'gate' ? (o.team === 0 ? 2 : o.team === 1 ? 1 : 3) : 3

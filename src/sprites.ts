@@ -183,6 +183,45 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
   ctx.beginPath(); ctx.arc(e.x - 4 * s + sway, cy - 8 * s, 5 * s, 0, Math.PI * 2); ctx.fill()
 }
 
+// a rocky crag: an impassable outcrop rising from the meadow — terrain with
+// a bit of storybook drama, sized by e.r (little sister rocks ride the same fn)
+export function drawCrag(ctx: CanvasRenderingContext2D, e: Ent): void {
+  const R = e.r
+  const tilt = ((e.seed % 5) - 2) * 0.06
+  shadow(ctx, e.x, e.y + R * 0.42, R * 1.15, R * 0.42)
+  // a cosy pile of rounded boulders, lit from the upper left
+  const boulder = (ox: number, oy: number, rx: number, ry: number, base: string, lit: string) => {
+    ctx.fillStyle = base
+    ctx.beginPath()
+    ctx.ellipse(e.x + ox * R, e.y + oy * R, rx * R, ry * R, tilt, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = lit
+    ctx.beginPath()
+    ctx.ellipse(e.x + (ox - rx * 0.24) * R, e.y + (oy - ry * 0.3) * R, rx * R * 0.62, ry * R * 0.55, tilt, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  boulder(0.02, 0.02, 1.0, 0.66, '#9A968A', '#ADA99B') // the broad base
+  boulder(-0.42, -0.42, 0.55, 0.46, '#A8A395', '#BCB7A8') // left shoulder
+  boulder(0.4, -0.52, 0.48, 0.42, '#B0AB9C', '#C5C0B1') // right shoulder
+  boulder(-0.02, -0.78, 0.4, 0.34, '#BCB7A8', '#D3CEC1') // the crown
+  // a couple of cracks so the stone reads as stone
+  ctx.strokeStyle = 'rgba(110, 105, 92, 0.55)'
+  ctx.lineWidth = Math.max(1.2, R * 0.045)
+  ctx.beginPath()
+  ctx.moveTo(e.x - R * 0.2, e.y - R * 0.45)
+  ctx.quadraticCurveTo(e.x - R * 0.1, e.y - R * 0.2, e.x - R * 0.24, e.y + R * 0.05)
+  ctx.moveTo(e.x + R * 0.35, e.y - R * 0.3)
+  ctx.quadraticCurveTo(e.x + R * 0.44, e.y - R * 0.08, e.x + R * 0.32, e.y + R * 0.12)
+  ctx.stroke()
+  // grass tucked around the foot
+  ctx.fillStyle = '#7AA058'
+  for (const [ox, oy, rr] of [[-0.88, 0.34, 0.16], [-0.15, 0.46, 0.13], [0.55, 0.4, 0.15], [0.92, 0.26, 0.11]] as [number, number, number][]) {
+    ctx.beginPath()
+    ctx.ellipse(e.x + ox * R, e.y + oy * R, rr * R + 3, (rr * R + 3) * 0.55, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
 // a shy little deer — and, once brought down, a quiet bundle in the grass
 export function drawDeer(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const f = (e.face ?? 1) >= 0 ? 1 : -1
