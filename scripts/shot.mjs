@@ -470,12 +470,13 @@ await page3.evaluate(() => {
 })
 await page3.waitForTimeout(250)
 const risingDock = await page3.evaluate(() => ({
-  progress: !!document.querySelector('[data-cmd="age-progress"]'),
+  // the rise shows as a top-right loader chip now, not a dock pill
+  loader: !!document.querySelector('#prod-panel .prod-chip[data-key^="l"]'),
   laurel: !!document.querySelector('[data-cmd="age-up"]'),
 }))
 console.log('rising dock:', risingDock)
-if (!risingDock.progress || risingDock.laurel)
-  throw new Error('Town Hall should show landmark progress while one rises')
+if (!risingDock.loader || risingDock.laurel)
+  throw new Error('a rising landmark should show a top-right loader and hide the laurel')
 await page3.evaluate(() => window.__game.setSpeed(20))
 await waitSim(page3, 80)
 const feudal = await page3.evaluate(() => {
@@ -676,12 +677,12 @@ const champStart = await page3.evaluate(({ raxId }) => {
   return {
     id: rax.research ? rax.research.id : null,
     food: g.res[0].food, gold: g.res[0].gold,
-    pill: !!document.querySelector('[data-cmd="research-progress"]'),
+    loader: !!document.querySelector('#prod-panel .prod-chip[data-key^="r"]'),
   }
 }, champSetup)
 console.log('champion research start:', champStart)
 if (champStart.id !== 'infantry') throw new Error('champion research did not start')
-if (!champStart.pill) throw new Error('champion progress pill missing')
+if (!champStart.loader) throw new Error('champion research loader missing top-right')
 // the Abbey Mill and Guild Hall trickle a hair of food/gold while we look
 if (Math.round(champSetup.food - champStart.food) !== 150 || Math.round(champSetup.gold - champStart.gold) !== 100)
   throw new Error('Champion Infantry should cost 150 food + 100 gold')
@@ -2083,6 +2084,36 @@ const crocAfter = await page3.evaluate(({ crocId, vId, ids }) => {
 console.log('croc hunters standing:', crocAfter)
 if (crocAfter.survivors < 2) throw new Error('the crocodile took too many hunters down with it')
 await waitSim(page3, 1)
+
+// 18.65) training shows as a top-right loader chip; tapping it selects the building
+await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  tc.queue.push({ kind: 'villager', t: 7, total: 7 })
+  tc.queue.push({ kind: 'villager', t: 7, total: 7 })
+  g.selection = []
+  g.uiDirty = true
+})
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('#prod-panel .prod-chip'))) throw new Error('training should show a top-right loader')
+await page3.tap('#prod-panel .prod-chip')
+await page3.waitForTimeout(200)
+const qLoader = await page3.evaluate(() => {
+  const g = window.__game.state
+  const chip = document.querySelector('#prod-panel .prod-chip[data-key^="q"]')
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const out = {
+    count: chip?.querySelector('.count')?.textContent ?? '',
+    selectedTC: g.selection.length === 1 && g.selection[0] === tc.id,
+  }
+  tc.queue.length = 0 // tidy the practice queue away
+  g.selection = []
+  g.uiDirty = true
+  return out
+})
+console.log('training loader:', qLoader)
+if (qLoader.count !== '×2') throw new Error('training loader count wrong: ' + qLoader.count)
+if (!qLoader.selectedTC) throw new Error('tapping the loader should select its building')
 
 // 18.7) tap feedback: things flash when touched, bare meadow gets a mark
 const fxSetup = await page3.evaluate(() => {

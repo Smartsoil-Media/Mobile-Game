@@ -262,12 +262,75 @@ function iconButton(opts: IconBtn, onClick: () => void): HTMLButtonElement {
   return b
 }
 
-function queuePill(b: Ent): HTMLElement {
-  const q = document.createElement('div')
-  q.className = 'queue'
-  const t0 = b.queue![0]
-  q.innerHTML = `<div class="qring"><div style="width:${(1 - t0.t / t0.total) * 100}%"></div></div><span>×${b.queue!.length}</span>`
-  return q
+// ---- production loaders (top right): one ring per thing underway — a unit
+// training (with its queue count), an upgrade researching, a landmark rising.
+// The ring fills like an app download; tapping it selects the busy building.
+const RING_C = 2 * Math.PI * 22
+let prodSig = ''
+function syncProdPanel(g: Game): void {
+  interface Item { key: string; hostId: number; icon: string; frac: number; count: number }
+  const items: Item[] = []
+  for (const e of g.ents) {
+    if (e.team !== 0) continue
+    if (e.queue?.length) {
+      items.push({
+        key: `q${e.id}`, hostId: e.id, icon: `unit:${e.queue[0].kind}`,
+        frac: 1 - e.queue[0].t / e.queue[0].total, count: e.queue.length,
+      })
+    }
+    if (e.research) {
+      items.push({
+        key: `r${e.id}`, hostId: e.id, icon: `research:${e.research.id}`,
+        frac: 1 - e.research.t / e.research.total, count: 1,
+      })
+    }
+    if (!e.complete && LANDMARKS[e.kind as LandmarkKind]) {
+      items.push({
+        key: `l${e.id}`, hostId: e.id, icon: `landmark:${e.kind}`,
+        frac: e.progress ?? 0, count: 1,
+      })
+    }
+  }
+  const panel = el('prod-panel')
+  const sig = items.map(i => `${i.key}:${i.icon}`).join(',')
+  if (sig !== prodSig) {
+    prodSig = sig
+    panel.innerHTML = ''
+    for (const it of items) {
+      const chip = document.createElement('button')
+      chip.className = 'prod-chip'
+      chip.dataset.key = it.key
+      const [what, id] = it.icon.split(':')
+      chip.setAttribute('aria-label',
+        what === 'unit' ? `Training ${UNITS[id]?.name ?? id}` :
+        what === 'landmark' ? `${BUILDINGS[id].name} rising` :
+        `Researching ${CHAMPS[id as ChampId]?.name ?? TECHS[id as TechId]?.name ?? id}`)
+      if (what === 'unit' || what === 'landmark') chip.appendChild(spriteIcon(id))
+      else if (CHAMPS[id as ChampId]) chip.insertAdjacentHTML('beforeend', ICON.crown.replace('<svg ', '<svg class="picon" '))
+      else chip.insertAdjacentHTML('beforeend', (TECH_ICON[id as TechId] ?? ICON.crown).replace('<svg ', '<svg class="picon" '))
+      chip.insertAdjacentHTML('beforeend',
+        `<svg class="ring" viewBox="0 0 50 50"><circle class="track" cx="25" cy="25" r="22"/><circle class="fill" cx="25" cy="25" r="22" stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}"/></svg>`)
+      chip.insertAdjacentHTML('beforeend', `<span class="count hidden">×1</span>`)
+      chip.addEventListener('click', () => {
+        // a gentle nudge: select the busy building (the camera stays put)
+        if (g.byId.has(it.hostId)) { g.selection = [it.hostId]; g.uiDirty = true }
+      })
+      panel.appendChild(chip)
+    }
+  }
+  // every frame: rings fill, counts tick
+  panel.querySelectorAll<HTMLElement>('.prod-chip').forEach((chip, i) => {
+    const it = items[i]
+    if (!it) return
+    const fill = chip.querySelector<SVGCircleElement>('.ring .fill')
+    if (fill) fill.style.strokeDashoffset = String(RING_C * (1 - Math.max(0, Math.min(1, it.frac))))
+    const count = chip.querySelector<HTMLElement>('.count')
+    if (count) {
+      count.classList.toggle('hidden', it.count < 2)
+      const want = `×${it.count}`
+      if (count.textContent !== want) count.textContent = want
+    }
+  })
 }
 
 // which build submenu is open (per selection; resets when the selection changes)
@@ -289,14 +352,7 @@ function landmarkSite(g: Game): Ent | null {
 function researchDock(g: Game, dock: HTMLElement, b: Ent): void {
   const ids = (Object.keys(TECHS) as TechId[]).filter(t => TECHS[t].at === b.kind)
   if (!ids.length) return
-  if (b.research) {
-    const q = document.createElement('div')
-    q.className = 'queue'
-    q.dataset.cmd = 'research-progress'
-    q.innerHTML = `<div class="qring"><div style="width:${(1 - b.research.t / b.research.total) * 100}%"></div></div><span>${TECHS[b.research.id as TechId]?.name ?? ''}…</span>`
-    dock.appendChild(q)
-    return
-  }
+  if (b.research) return // the top-right loader tells the story now
   for (const id of ids) {
     if (g.techs[0][id]) continue // already known
     const spec = TECHS[id]
@@ -317,14 +373,7 @@ function researchDock(g: Game, dock: HTMLElement, b: Ent): void {
 function champDock(g: Game, dock: HTMLElement, b: Ent): void {
   const id = (Object.keys(CHAMPS) as ChampId[]).find(c => CHAMPS[c].at.includes(b.kind))
   if (!id) return
-  if (b.research) {
-    const q = document.createElement('div')
-    q.className = 'queue'
-    q.dataset.cmd = 'research-progress'
-    q.innerHTML = `<div class="qring"><div style="width:${(1 - b.research.t / b.research.total) * 100}%"></div></div><span>${CHAMPS[b.research.id as ChampId]?.name ?? ''}…</span>`
-    dock.appendChild(q)
-    return
-  }
+  if (b.research) return // the top-right loader tells the story now
   if (g.champs[0][id]) return // already sworn in
   const spec = CHAMPS[id]
   dock.appendChild(iconButton(
@@ -525,6 +574,7 @@ export function syncUI(g: Game): void {
   if (el('idle-n').textContent !== idleStr) el('idle-n').textContent = idleStr
   el('s-pop').classList.toggle('alert', idleVills > 0)
   syncArmyPanel(g)
+  syncProdPanel(g)
   drawMinimap(g)
   updateAffordability(g)
 
@@ -542,23 +592,6 @@ export function syncUI(g: Game): void {
       if (costEl && costEl.dataset.was !== want) { costEl.innerHTML = want; costEl.dataset.was = want }
     }
   }
-
-  // keep visible progress rings moving between full dock rebuilds
-  const sel0 = g.byId.get(g.selection[0] ?? -1)
-  document.querySelectorAll<HTMLElement>('#dock-buttons .queue').forEach(q => {
-    const cmd = q.dataset.cmd
-    let frac = -1
-    if (cmd === 'age-progress') {
-      const site = landmarkSite(g)
-      if (site) frac = site.progress ?? 0
-    }
-    else if (cmd === 'research-progress' && sel0?.research) frac = 1 - sel0.research.t / sel0.research.total
-    else if (!cmd && sel0?.queue?.length) frac = 1 - sel0.queue[0].t / sel0.queue[0].total
-    if (frac >= 0) {
-      const bar = q.querySelector<HTMLElement>('.qring > div')
-      if (bar) bar.style.width = `${frac * 100}%`
-    }
-  })
 
   if (!g.uiDirty) return
   g.uiDirty = false
@@ -633,13 +666,7 @@ export function syncUI(g: Game): void {
       dock.appendChild(iconButton(
         { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
         () => tryTrain(g, first, 'villager')))
-      if (rising) {
-        const q = document.createElement('div')
-        q.className = 'queue'
-        q.dataset.cmd = 'age-progress'
-        q.innerHTML = `<div class="qring"><div style="width:${(rising.progress ?? 0) * 100}%"></div></div><span>${BUILDINGS[rising.kind].name} rises…</span>`
-        dock.appendChild(q)
-      } else if (g.age[0] < 3) {
+      if (!rising && g.age[0] < 3) {
         dock.appendChild(iconButton(
           { cmd: 'age-up', label: `Advance to the ${AGE_NAMES[g.age[0] + 1]} — raise a landmark`, icon: ICON.laurel },
           () => { agePick = true; g.uiDirty = true }))
@@ -654,8 +681,7 @@ export function syncUI(g: Game): void {
           { cmd: 'bell', label: 'Ring the bell — shelter villagers', icon: ICON.bell },
           () => ringBell(g, first)))
       }
-      if (first.queue?.length) dock.appendChild(queuePill(first))
-    }
+      }
   } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill') &&
     first.complete && first.team === 0) {
     researchDock(g, dock, first)
@@ -668,7 +694,6 @@ export function syncUI(g: Game): void {
         cost: SCHOOL_KNIGHT_COST, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
-    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
@@ -684,13 +709,11 @@ export function syncUI(g: Game): void {
         cost: UNITS.swordsman.cost, locked: g.age[0] < (UNITS.swordsman.age ?? 1) },
       () => tryTrain(g, first, 'swordsman')))
     champDock(g, dock, first)
-    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-archer', label: 'Train longbowman', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
       () => tryTrain(g, first, 'archer')))
     champDock(g, dock, first)
-    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (first && first.kind === 'stable' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
@@ -700,7 +723,6 @@ export function syncUI(g: Game): void {
         cost: UNITS.knight.cost, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
-    if (first.queue?.length) dock.appendChild(queuePill(first))
   } else if (sameKind && first.kind === 'villager') {
     if (buildCat === null) {
       // two clear doors: what kind of building?

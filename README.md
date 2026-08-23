@@ -80,6 +80,11 @@ chase at its edge.
 - **Tap feedback**: whatever you touch flashes briefly; a tap on bare
   meadow leaves a small settling ring. Selecting units (army chips
   included) never moves the camera — the minimap is the way to travel
+- **Production loaders** (top-right): everything in progress shows as a
+  little circular loader — like apps downloading — one ring per training
+  queue (with a ×count badge), per tech being researched, and per landmark
+  rising. Tap a loader to select the building doing the work; the command
+  dock stays clean for giving orders
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army panel** (right edge): one chip per unit type you field, with a
   live count — tap a chip to grab all spearmen / swordsmen / archers at
