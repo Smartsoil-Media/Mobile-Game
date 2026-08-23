@@ -470,13 +470,13 @@ await page3.evaluate(() => {
 })
 await page3.waitForTimeout(250)
 const risingDock = await page3.evaluate(() => ({
-  // the rise shows as a top-right loader chip now, not a dock pill
+  // the rise shows as a top-left loader chip now, not a dock pill
   loader: !!document.querySelector('#prod-panel .prod-chip[data-key^="l"]'),
   laurel: !!document.querySelector('[data-cmd="age-up"]'),
 }))
 console.log('rising dock:', risingDock)
 if (!risingDock.loader || risingDock.laurel)
-  throw new Error('a rising landmark should show a top-right loader and hide the laurel')
+  throw new Error('a rising landmark should show a top-left loader and hide the laurel')
 await page3.evaluate(() => window.__game.setSpeed(20))
 await waitSim(page3, 80)
 const feudal = await page3.evaluate(() => {
@@ -682,7 +682,7 @@ const champStart = await page3.evaluate(({ raxId }) => {
 }, champSetup)
 console.log('champion research start:', champStart)
 if (champStart.id !== 'infantry') throw new Error('champion research did not start')
-if (!champStart.loader) throw new Error('champion research loader missing top-right')
+if (!champStart.loader) throw new Error('champion research loader missing top-left')
 // the Abbey Mill and Guild Hall trickle a hair of food/gold while we look
 if (Math.round(champSetup.food - champStart.food) !== 150 || Math.round(champSetup.gold - champStart.gold) !== 100)
   throw new Error('Champion Infantry should cost 150 food + 100 gold')
@@ -2085,7 +2085,7 @@ console.log('croc hunters standing:', crocAfter)
 if (crocAfter.survivors < 2) throw new Error('the crocodile took too many hunters down with it')
 await waitSim(page3, 1)
 
-// 18.65) training shows as a top-right loader chip; tapping it selects the building
+// 18.65) training shows as a top-left loader chip; tapping it selects the building
 await page3.evaluate(() => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
@@ -2095,7 +2095,7 @@ await page3.evaluate(() => {
   g.uiDirty = true
 })
 await page3.waitForTimeout(250)
-if (!(await page3.isVisible('#prod-panel .prod-chip'))) throw new Error('training should show a top-right loader')
+if (!(await page3.isVisible('#prod-panel .prod-chip'))) throw new Error('training should show a top-left loader')
 await page3.tap('#prod-panel .prod-chip')
 await page3.waitForTimeout(200)
 const qLoader = await page3.evaluate(() => {

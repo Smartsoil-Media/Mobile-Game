@@ -298,66 +298,68 @@ button.cmd.ghost {
 #army-all svg { width: 20px; height: 20px; }
 #army-all:active { transform: translateY(2px); border-bottom-width: 2px; }
 
-/* ---- production loaders (top-right): what's training, researching, rising ---- */
+/* ---- production loaders (top-left row): what's training, researching, rising ---- */
 #prod-panel {
   position: absolute;
   top: calc(10px + env(safe-area-inset-top));
-  right: calc(10px + env(safe-area-inset-right));
+  left: calc(12px + env(safe-area-inset-left));
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
+  max-width: min(26vw, 150px);
   z-index: 5;
 }
 .prod-chip {
   appearance: none;
   position: relative;
-  width: 46px;
-  height: 46px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--cream);
   border: none;
-  box-shadow: 0 3px 0 rgba(50, 66, 34, 0.3);
+  box-shadow: 0 2px 0 rgba(50, 66, 34, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
 }
-.prod-chip canvas.sprite-icon { width: 30px; height: 30px; }
-.prod-chip svg.picon { width: 26px; height: 26px; }
+.prod-chip canvas.sprite-icon { width: 20px; height: 20px; }
+.prod-chip svg.picon { width: 17px; height: 17px; }
 .prod-chip .ring {
   position: absolute;
   inset: -2px;
-  width: 50px;
-  height: 50px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
   transform: rotate(-90deg);
   pointer-events: none;
 }
 .prod-chip .ring .track {
   fill: none;
   stroke: rgba(90, 70, 50, 0.18);
-  stroke-width: 4;
+  stroke-width: 5;
 }
 .prod-chip .ring .fill {
   fill: none;
   stroke: var(--honey);
-  stroke-width: 4;
+  stroke-width: 5;
   stroke-linecap: round;
 }
 .prod-chip .count {
   position: absolute;
-  bottom: -3px;
-  right: -3px;
+  bottom: -4px;
+  right: -4px;
   background: var(--honey);
-  border: 1.5px solid #C98F2B;
+  border: 1px solid #C98F2B;
   color: #4A3413;
   font-family: 'Nunito', system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 800;
   border-radius: 999px;
-  padding: 0 5px;
-  line-height: 15px;
+  padding: 0 3.5px;
+  line-height: 12px;
 }
 
 /* ---- minimap ---- */

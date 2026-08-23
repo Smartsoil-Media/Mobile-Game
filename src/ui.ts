@@ -262,7 +262,7 @@ function iconButton(opts: IconBtn, onClick: () => void): HTMLButtonElement {
   return b
 }
 
-// ---- production loaders (top right): one ring per thing underway — a unit
+// ---- production loaders (a small top-left row): one ring per thing underway — a unit
 // training (with its queue count), an upgrade researching, a landmark rising.
 // The ring fills like an app download; tapping it selects the busy building.
 const RING_C = 2 * Math.PI * 22
