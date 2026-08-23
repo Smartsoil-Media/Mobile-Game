@@ -2344,6 +2344,29 @@ for (const seed of [7, 13, 2026]) {
   }
   if (inv.deer < 9) throw new Error('the wilds are short of deer: ' + inv.deer)
   if (inv.vills !== 6) throw new Error('starting villagers wrong: ' + inv.vills)
+  // the river is a discovery: the minimap must not draw it before it's found
+  const riverReveal = await pg.evaluate(() => {
+    const g = window.__game.state
+    const c = document.getElementById('minimap')
+    const cx = c.getContext('2d')
+    const sx = c.width / g.world.w, sy = c.height / g.world.h
+    const pts = g.streams[0].pts.slice(9, 21) // the middle stretch, far from both homes
+    const bluePixels = () => {
+      let n = 0
+      for (const p of pts) {
+        const d = cx.getImageData(Math.round(p.x * sx), Math.round(p.y * sy), 1, 1).data
+        if (d[2] > 150 && d[2] > d[0] + 40) n++
+      }
+      return n
+    }
+    const before = bluePixels()
+    g.fog.explored.fill(1)
+    return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() =>
+      res({ before, after: bluePixels() }))))
+  })
+  console.log(`river reveal (seed ${seed}):`, riverReveal)
+  if (riverReveal.before > 0) throw new Error('the minimap leaks the river before it is found')
+  if (riverReveal.after < 6) throw new Error('an explored river should show on the minimap')
   if (inv.streams < 1 || inv.fords < 3) throw new Error('the map is missing its stream or fords')
   if (inv.crags < 3) throw new Error('the map is short of crags: ' + inv.crags)
   if (inv.crocs < 3) throw new Error('the water is short of crocodiles: ' + inv.crocs)

@@ -382,19 +382,36 @@ function drawMinimap(g: Game): void {
   ctx.imageSmoothingEnabled = true
   ctx.clearRect(0, 0, W, H)
   ctx.drawImage(miniFog, 0, 0, g.fog.w, g.fog.h, 0, 0, W, H)
-  // the stream and its fords
+  // the stream and its fords — only the stretches you've actually found
+  // (rivers, and one day ponds, are discoveries, not free intelligence)
   if (g.streams.length) {
     ctx.strokeStyle = '#6D9DC5'
     ctx.lineWidth = 3
     ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
     for (const s of g.streams) {
       ctx.beginPath()
-      ctx.moveTo(s.pts[0].x * sx, s.pts[0].y * sy)
-      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i].x * sx, s.pts[i].y * sy)
+      let pen = false
+      for (let i = 0; i + 1 < s.pts.length; i++) {
+        const a = s.pts[i], b = s.pts[i + 1]
+        // walk each leg in fog-cell-sized steps so the reveal hugs the fog line
+        for (let k = 0; k < 3; k++) {
+          const t0 = k / 3, t1 = (k + 1) / 3
+          const mx = a.x + (b.x - a.x) * (t0 + t1) / 2
+          const my = a.y + (b.y - a.y) * (t0 + t1) / 2
+          if (g.fog.explored[fogIndex(g, mx, my)] === 1) {
+            if (!pen) { ctx.moveTo((a.x + (b.x - a.x) * t0) * sx, (a.y + (b.y - a.y) * t0) * sy); pen = true }
+            ctx.lineTo((a.x + (b.x - a.x) * t1) * sx, (a.y + (b.y - a.y) * t1) * sy)
+          } else {
+            pen = false
+          }
+        }
+      }
       ctx.stroke()
     }
     ctx.fillStyle = '#D8C89C'
     for (const f of g.fords) {
+      if (g.fog.explored[fogIndex(g, f.x, f.y)] !== 1) continue
       ctx.beginPath(); ctx.arc(f.x * sx, f.y * sy, 2.2, 0, Math.PI * 2); ctx.fill()
     }
   }
