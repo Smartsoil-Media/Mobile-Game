@@ -245,20 +245,39 @@ await page.evaluate(({ spearIds }) => { // retire them so the march below is swo
 }, { spearIds })
 await page.waitForTimeout(400)
 
-// the blue Army button still grabs the whole battle line and recenters
+// the blue Army button grabs the whole battle line — and leaves the camera be
+const camBefore = await page.evaluate(() => ({ x: window.__game.state.camera.x, y: window.__game.state.camera.y }))
 await page.tap('#army-all')
 await page.waitForTimeout(200)
-const armySel = await page.evaluate(() => {
+const armySel = await page.evaluate(({ camBefore }) => {
   const g = window.__game.state
-  const army = g.ents.filter(e => e.team === 0 && e.kind === 'swordsman')
-  const cx = army.reduce((s, e) => s + e.x, 0) / army.length
-  const cy = army.reduce((s, e) => s + e.y, 0) / army.length
-  // y is often clamped on tall viewports (whole map height fits), so check x only
-  return { sel: g.selection.length, offCenterX: Math.abs(g.camera.x - cx) }
-})
+  return {
+    sel: g.selection.length,
+    camMoved: Math.hypot(g.camera.x - camBefore.x, g.camera.y - camBefore.y),
+  }
+}, { camBefore })
 console.log('army select:', armySel)
 if (armySel.sel < s3.playerSoldiers) throw new Error('army button did not select all soldiers')
-if (armySel.offCenterX > 150) throw new Error('army button did not recenter the camera')
+if (armySel.camMoved > 1) throw new Error('selecting the army should not move the camera')
+
+// the minimap: tap it and the camera travels there
+const miniJump = await page.evaluate(() => {
+  const g = window.__game.state
+  const r = document.getElementById('minimap').getBoundingClientRect()
+  return { r: { x: r.left, y: r.top, w: r.width, h: r.height }, world: g.world }
+})
+await page.tap('#minimap', { position: { x: miniJump.r.w * 0.8, y: miniJump.r.h * 0.2 } })
+await page.waitForTimeout(200)
+const jumped = await page.evaluate(({ world }) => {
+  const g = window.__game.state
+  return {
+    // the camera should land near the tapped spot (clamping allowed for slack)
+    dx: Math.abs(g.camera.x - world.w * 0.8),
+    dy: Math.abs(g.camera.y - world.h * 0.2),
+  }
+}, miniJump)
+console.log('minimap jump:', jumped)
+if (jumped.dx > 320 || jumped.dy > 320) throw new Error('minimap tap did not take the camera there')
 
 // 3) march the army on the enemy town hall until victory
 await page.evaluate(() => {
@@ -1029,7 +1048,7 @@ const repairSetup = await page3.evaluate(() => {
   const g = window.__game.state
   g.res[0].wood = 200
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  if (tc.hp >= tc.maxHp) tc.hp = tc.maxHp * 0.5
+  tc.hp = Math.min(tc.hp, tc.maxHp * 0.5) // always properly battered, however the raid went
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   v.state = 'idle'; v.targetId = undefined
   window.__game.select(v.id)
@@ -2065,6 +2084,58 @@ console.log('croc hunters standing:', crocAfter)
 if (crocAfter.survivors < 2) throw new Error('the crocodile took too many hunters down with it')
 await waitSim(page3, 1)
 
+// 18.7) tap feedback: things flash when touched, bare meadow gets a mark
+const fxSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.taps = []
+  g.selection = []
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  g.camera.x = tc.x; g.camera.y = tc.y
+  g.uiDirty = true
+  const c = document.getElementById('game').getBoundingClientRect()
+  return { pos: { x: c.width / 2, y: c.height / 2 } }
+})
+await page3.waitForTimeout(500) // stay outside the double-tap window
+await page3.tap('#game', { position: fxSetup.pos }) // the Town Hall: an entity flash
+await page3.waitForTimeout(120)
+const tapEnt = await page3.evaluate(() => window.__game.state.taps.map(t => t.ent))
+await page3.evaluate(() => {
+  const g = window.__game.state
+  g.selection = []
+  g.camera.x = 1050; g.camera.y = 620 // open corridor meadow
+  g.uiDirty = true
+})
+await page3.waitForTimeout(500)
+await page3.tap('#game', { position: fxSetup.pos }) // bare grass: a ground mark
+await page3.waitForTimeout(120)
+const tapGround = await page3.evaluate(() => window.__game.state.taps.map(t => t.ent))
+console.log('tap feedback:', { entTaps: tapEnt, groundTaps: tapGround })
+if (!tapEnt.includes(true)) throw new Error('tapping a thing did not flash it')
+if (!tapGround.includes(false)) throw new Error('tapping the meadow left no mark')
+
+// 18.8) minimap alerts: when your unit takes hits, a ping appears
+const pingSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.pings = []
+  const targetId = window.__game.spawn('spearman', 0, 1500, 900)
+  const raiderId = window.__game.spawn('swordsman', 1, 1540, 900)
+  const raider = g.byId.get(raiderId)
+  raider.state = 'attack'; raider.targetId = targetId
+  window.__game.setSpeed(10)
+  return { targetId, raiderId }
+})
+await waitSim(page3, 5)
+const pinged = await page3.evaluate(({ targetId, raiderId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const out = { pings: g.pings.length }
+  for (const id of [targetId, raiderId]) { const e = g.byId.get(id); if (e) e.hp = 0 }
+  return out
+}, pingSetup)
+console.log('attack pings:', pinged)
+if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
+await waitSim(page3, 1)
+
 // 18.9) the main menu and the French: banner picking, feudal knights, the School
 const pageF = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await pageF.goto('file://' + resolve('dist/index.html') + '?map=classic')
@@ -2156,10 +2227,11 @@ const landscapeHud = await page2.evaluate(() => {
   return {
     pills: [...document.querySelectorAll('#hud-top .pill')].every(inView),
     army: inView(document.getElementById('army-panel')),
+    mini: inView(document.getElementById('minimap')),
   }
 })
 console.log('landscape hud:', landscapeHud)
-if (!landscapeHud.pills || !landscapeHud.army) throw new Error('landscape HUD spills off screen')
+if (!landscapeHud.pills || !landscapeHud.army || !landscapeHud.mini) throw new Error('landscape HUD spills off screen')
 await page2.evaluate(() => {
   const g = window.__game.state
   g.ai.enabled = false

@@ -3,9 +3,10 @@ import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
   CHAMPS, TECHS, CIVS, LANDMARKS, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES,
+  isUnit, isBuilding,
 } from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq } from './world'
-import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager } from './input'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
+import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace } from './sprites'
 
 const ICON = {
@@ -134,6 +135,24 @@ export function initUI(g: Game): void {
     el(`p-${r}`).addEventListener('click', () => sendVillagerToResource(g, r))
   }
   el('p-pop').addEventListener('click', () => cycleIdleVillager(g, canvas))
+
+  // the minimap is the fast way around: tap (or drag) to send the camera there
+  const mini = el<HTMLCanvasElement>('minimap')
+  const jumpTo = (ev: PointerEvent) => {
+    const r = mini.getBoundingClientRect()
+    g.camera.x = ((ev.clientX - r.left) / r.width) * g.world.w
+    g.camera.y = ((ev.clientY - r.top) / r.height) * g.world.h
+    clampCamera(g, canvas)
+  }
+  mini.addEventListener('pointerdown', ev => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    mini.setPointerCapture(ev.pointerId)
+    jumpTo(ev)
+  })
+  mini.addEventListener('pointermove', ev => {
+    if (ev.buttons) jumpTo(ev)
+  })
 
   // ---- the main menu: home → solo screen (banner + difficulty) → begin ----
   let civPick: CivId = 'english'
@@ -335,6 +354,108 @@ function updateAffordability(g: Game): void {
   })
 }
 
+// ---- the minimap: the whole meadow at a glance, fog and all. Tap it to
+// send the camera there; red rings pulse where your things are under attack ----
+let miniFog: HTMLCanvasElement | null = null
+function drawMinimap(g: Game): void {
+  const c = el<HTMLCanvasElement>('minimap')
+  const ctx = c.getContext('2d')!
+  const W = c.width, H = c.height
+  const sx = W / g.world.w, sy = H / g.world.h
+  // fog underlay, softly scaled up from the fog grid
+  if (!miniFog || miniFog.width !== g.fog.w || miniFog.height !== g.fog.h) {
+    miniFog = document.createElement('canvas')
+    miniFog.width = g.fog.w
+    miniFog.height = g.fog.h
+  }
+  const fctx = miniFog.getContext('2d')!
+  const img = fctx.createImageData(g.fog.w, g.fog.h)
+  const d = img.data
+  for (let i = 0; i < g.fog.w * g.fog.h; i++) {
+    const o = i * 4
+    if (!g.fog.explored[i]) { d[o] = 30; d[o + 1] = 42; d[o + 2] = 26 }
+    else if (!g.fog.visible[i]) { d[o] = 74; d[o + 1] = 95; d[o + 2] = 56 }
+    else { d[o] = 122; d[o + 1] = 153; d[o + 2] = 88 }
+    d[o + 3] = 255
+  }
+  fctx.putImageData(img, 0, 0)
+  ctx.imageSmoothingEnabled = true
+  ctx.clearRect(0, 0, W, H)
+  ctx.drawImage(miniFog, 0, 0, g.fog.w, g.fog.h, 0, 0, W, H)
+  // the stream and its fords
+  if (g.streams.length) {
+    ctx.strokeStyle = '#6D9DC5'
+    ctx.lineWidth = 3
+    ctx.lineJoin = 'round'
+    for (const s of g.streams) {
+      ctx.beginPath()
+      ctx.moveTo(s.pts[0].x * sx, s.pts[0].y * sy)
+      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i].x * sx, s.pts[i].y * sy)
+      ctx.stroke()
+    }
+    ctx.fillStyle = '#D8C89C'
+    for (const f of g.fords) {
+      ctx.beginPath(); ctx.arc(f.x * sx, f.y * sy, 2.2, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+  // the land and the villages (enemy buildings once seen, units in live sight)
+  for (const e of g.ents) {
+    const fi = fogIndex(g, e.x, e.y)
+    const seen = g.fog.explored[fi] === 1
+    const lit = g.fog.visible[fi] === 1
+    const mx = e.x * sx, my = e.y * sy
+    if (e.kind === 'tree') {
+      if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#3E5A34'; ctx.fillRect(mx - 1, my - 1, 2, 2) }
+    } else if (e.kind === 'crag') {
+      if (seen) { ctx.fillStyle = '#8E8A7C'; ctx.fillRect(mx - 1.5, my - 1.5, 3, 3) }
+    } else if (e.kind === 'goldmine') {
+      if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#E9B44C'; ctx.fillRect(mx - 1.5, my - 1.5, 3, 3) }
+    } else if (e.kind === 'stonequarry') {
+      if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#BDB8AA'; ctx.fillRect(mx - 1.5, my - 1.5, 3, 3) }
+    } else if (e.kind === 'berrybush') {
+      if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#C9525E'; ctx.fillRect(mx - 1, my - 1, 2, 2) }
+    } else if (isBuilding(e)) {
+      if (e.team === 0 || seen) {
+        ctx.fillStyle = e.team === 0 ? '#6D9DC5' : '#C4746B'
+        const s = e.kind === 'towncenter' ? 5 : 3.4
+        ctx.fillRect(mx - s / 2, my - s / 2, s, s)
+        if (e.kind === 'towncenter') {
+          ctx.strokeStyle = '#FBF3E4'
+          ctx.lineWidth = 1
+          ctx.strokeRect(mx - s / 2, my - s / 2, s, s)
+        }
+      }
+    } else if (isUnit(e) && !e.hidden) {
+      if (e.team === 0 || lit) {
+        ctx.fillStyle = e.team === 0 ? '#BFD8EC' : '#E5A79F'
+        ctx.fillRect(mx - 1, my - 1, 2, 2)
+      }
+    }
+  }
+  // under attack: pulsing rings
+  for (const p of g.pings) {
+    const age = g.t - p.t
+    if (age > 3.6) continue
+    const k = (age % 1.2) / 1.2
+    ctx.globalAlpha = (1 - k) * 0.9
+    ctx.strokeStyle = '#E25B4A'
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.arc(p.x * sx, p.y * sy, 2.5 + k * 6.5, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+  // the camera's window on the world
+  const gc = document.getElementById('game') as HTMLCanvasElement
+  const halfW = gc.clientWidth / 2 / g.camera.zoom
+  const halfH = gc.clientHeight / 2 / g.camera.zoom
+  ctx.strokeStyle = 'rgba(251, 243, 228, 0.9)'
+  ctx.lineWidth = 1.4
+  ctx.strokeRect(
+    (g.camera.x - halfW) * sx, (g.camera.y - halfH) * sy,
+    halfW * 2 * sx, halfH * 2 * sy)
+}
+
 // one chip per unit type the player fields, count badges live; rebuilt only
 // when the tally actually changes
 const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight'] as const
@@ -387,6 +508,7 @@ export function syncUI(g: Game): void {
   if (el('idle-n').textContent !== idleStr) el('idle-n').textContent = idleStr
   el('s-pop').classList.toggle('alert', idleVills > 0)
   syncArmyPanel(g)
+  drawMinimap(g)
   updateAffordability(g)
 
   // wall placement: the ✓ shows a live post count and total price as you drag

@@ -172,6 +172,14 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   const hit = entAt(g, x, y)
 
+  // tap feedback: whatever you touched flashes; bare ground gets a small mark
+  g.taps.push({
+    x: hit ? hit.x : x, y: hit ? hit.y : y,
+    r: hit ? hit.r : 0, ent: !!hit,
+    at: performance.now() / 1000,
+  })
+  if (g.taps.length > 6) g.taps.shift()
+
   // double-tap on one of your units: select all its kind nearby
   const now = performance.now()
   const isDouble = !!hit && hit.id === lastTapEnt && now - lastTapT < DOUBLE_TAP_MS
@@ -346,6 +354,7 @@ export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
 }
 
 // army-panel chip: grab every soldier of one type and bring the camera along
+// selection never yanks the camera — the minimap is the way to travel
 export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanvasElement): void {
   const troop = g.ents.filter(e => e.team === 0 && e.kind === kind && !e.hidden)
   if (!troop.length) return
@@ -353,9 +362,6 @@ export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanva
   g.placePos = null
   g.placeEnd = null
   g.selection = troop.map(e => e.id)
-  g.camera.x = troop.reduce((s, e) => s + e.x, 0) / troop.length
-  g.camera.y = troop.reduce((s, e) => s + e.y, 0) / troop.length
-  if (canvas) clampCamera(g, canvas)
   g.uiDirty = true
 }
 
@@ -368,10 +374,6 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
   g.placePos = null
   g.placeEnd = null
   g.selection = army.map(e => e.id)
-  // bring the camera to the troops so the button visibly does something
-  g.camera.x = army.reduce((s, e) => s + e.x, 0) / army.length
-  g.camera.y = army.reduce((s, e) => s + e.y, 0) / army.length
-  if (canvas) clampCamera(g, canvas)
   g.uiDirty = true
 }
 

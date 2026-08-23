@@ -116,6 +116,15 @@ function inRange(a: Ent, b: Ent, range: number): boolean {
   return dist(a.x, a.y, b.x, b.y) <= a.r + b.r + range
 }
 
+// something of yours took a hit: raise a minimap alert (grouped, short-lived)
+function alertPing(g: Game, x: number, y: number): void {
+  for (const p of g.pings) {
+    if (g.t - p.t < 2.5 && dist(p.x, p.y, x, y) < 150) return // same skirmish
+  }
+  g.pings.push({ x, y, t: g.t })
+  if (g.pings.length > 8) g.pings.shift()
+}
+
 function attackTarget(g: Game, e: Ent, dt: number): void {
   const s = UNITS[e.kind]
   const t = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
@@ -159,6 +168,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
     } else {
       t.hp -= dmg
       puff(g, t.x + (Math.random() - 0.5) * t.r, t.y - t.r * 0.4, '#FFF3D6', 3, 'hit')
+      if (t.team === 0) alertPing(g, t.x, t.y)
     }
     // defenders fight back: idle victims turn on their attacker
     if (isUnit(t) && (t.state === 'idle' || t.state === 'gather' || t.state === 'return') &&
@@ -424,6 +434,7 @@ function updateCroc(g: Game, e: Ent, dt: number): void {
       e.cd = CROC_CD
       t.hp -= CROC_DMG
       puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 3, 'hit')
+      if (t.team === 0) alertPing(g, t.x, t.y)
       if ((t.kind === 'villager' || t.kind === 'scout') && t.targetId !== e.id) {
         // the bitten bolt for safety (hunters committed to the fight stay in it)
         const dx = t.x - e.x, dy = t.y - e.y
@@ -764,6 +775,7 @@ export function update(g: Game, dt: number): void {
       if (t && !t.hidden && dist(p.tx, p.ty, t.x, t.y - 6) < t.r + 12) {
         t.hp -= p.dmg
         puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 2, 'hit')
+        if (t.team === 0) alertPing(g, t.x, t.y)
       }
     } else {
       p.x += (dx / d) * step
@@ -823,10 +835,11 @@ export function update(g: Game, dt: number): void {
   }
   g.particles = g.particles.filter(p => p.life < p.maxLife)
 
-  // toasts age out
+  // toasts and minimap alerts age out
   const before = g.toasts.length
   g.toasts = g.toasts.filter(t => g.t - t.t < 4)
   if (g.toasts.length !== before) g.uiDirty = true
+  if (g.pings.length && g.t - g.pings[0].t > 4) g.pings = g.pings.filter(p => g.t - p.t < 4)
 
   // win / lose
   const playerTC = g.ents.some(e => e.team === 0 && e.kind === 'towncenter')

@@ -115,6 +115,7 @@ html, body {
   transform: translateX(-50%);
   max-width: min(calc(100% - 20px), 560px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  z-index: 8; /* commands outrank the minimap when space is tight */
   background: var(--cream);
   border: 2px solid var(--cream-edge);
   border-radius: 22px;
@@ -296,6 +297,21 @@ button.cmd.ghost {
 }
 #army-all svg { width: 20px; height: 20px; }
 #army-all:active { transform: translateY(2px); border-bottom-width: 2px; }
+
+/* ---- minimap ---- */
+#minimap {
+  position: absolute;
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  width: 132px;
+  height: 88px;
+  border: 2.5px solid var(--cream);
+  border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(50, 66, 34, 0.35);
+  background: #1E2A1A;
+  z-index: 6;
+  touch-action: none;
+}
 
 /* ---- overlays ---- */
 .overlay {

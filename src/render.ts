@@ -587,6 +587,45 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   drawFog(ctx, g)
   drawEdgeFade(ctx, g)
 
+  // tap feedback: a bright flash on whatever was touched, a settling ring on
+  // bare ground — quick, quiet, and gone
+  if (g.taps.length) {
+    for (const tp of g.taps) {
+      const age = time - tp.at
+      if (tp.ent) {
+        if (age > 0.35) continue
+        const k = age / 0.35
+        ctx.globalAlpha = (1 - k) * 0.9
+        ctx.strokeStyle = '#FFFCF0'
+        ctx.lineWidth = 2.6
+        ctx.beginPath()
+        ctx.ellipse(tp.x, tp.y + 4, tp.r + 7 + k * 14, (tp.r + 7 + k * 14) * 0.6, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.globalAlpha = (1 - k) * 0.5
+        ctx.lineWidth = 1.4
+        ctx.beginPath()
+        ctx.ellipse(tp.x, tp.y + 4, tp.r + 3 + k * 8, (tp.r + 3 + k * 8) * 0.6, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      } else {
+        if (age > 0.45) continue
+        const k = age / 0.45
+        ctx.globalAlpha = (1 - k) * 0.85
+        ctx.strokeStyle = '#E9B44C'
+        ctx.lineWidth = 2.4
+        ctx.beginPath()
+        ctx.ellipse(tp.x, tp.y, 17 - k * 11, (17 - k * 11) * 0.55, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.globalAlpha = (1 - k) * 0.9
+        ctx.fillStyle = '#FFFCF0'
+        ctx.beginPath()
+        ctx.arc(tp.x, tp.y, 2.2, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+    ctx.globalAlpha = 1
+    g.taps = g.taps.filter(tp => time - tp.at < 0.5)
+  }
+
   // placement ghost rides above the fog so it's always legible
   if (g.placing === 'wall' && g.placePos && g.placeEnd) {
     // a dragged fence line: one little square per post, ends are grab handles

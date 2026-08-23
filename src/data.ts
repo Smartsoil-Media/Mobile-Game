@@ -135,6 +135,8 @@ export interface Game {
   streams: { pts: { x: number; y: number }[]; w: number }[] // winding water, crossable at fords
   fords: { x: number; y: number; r: number }[] // shallow crossings through the streams
   toasts: { text: string; t: number }[]
+  pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
+  taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
   started: boolean
   uiDirty: boolean
 }

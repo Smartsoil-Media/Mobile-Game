@@ -72,6 +72,14 @@ chase at its edge.
   pill** to put one more villager on it (idle hands first, then borrowed
   from the busiest line). The pop pill counts idle villagers — tap it to
   jump to them
+- **Minimap** (bottom-left): the whole meadow at a glance, fog and all —
+  explored land, the stream and fords, resources, buildings (enemy once
+  seen), units (enemy in live sight), and your camera's window. **Tap or
+  drag on it** to send the camera anywhere; **red rings pulse** wherever
+  your villagers or buildings are taking hits
+- **Tap feedback**: whatever you touch flashes briefly; a tap on bare
+  meadow leaves a small settling ring. Selecting units (army chips
+  included) never moves the camera — the minimap is the way to travel
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army panel** (right edge): one chip per unit type you field, with a
   live count — tap a chip to grab all spearmen / swordsmen / archers at
