@@ -85,6 +85,13 @@ chase at its edge.
   training queue (with a ×count badge), per tech being researched, and per
   landmark rising. Tap a loader to select the building doing the work; the
   command dock stays clean for giving orders
+- **Deselect** (the empty frame beside the stone pill): one tap drops the
+  whole selection — far easier than picking villagers off one by one
+- **Info mode** (the ⓘ to the left of the resources): tap it to light it
+  up, then tap *anything* — a building, a unit, a deer, a relic — and a
+  card explains what it is for, what it costs, what it trains or
+  researches, and what it's doing right now. Nothing gets selected and no
+  order goes out while it's lit; tap the ⓘ again to switch it off
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army panel** (right edge): one chip per unit type you field, with a
   live count — tap a chip to grab all spearmen / swordsmen / archers at

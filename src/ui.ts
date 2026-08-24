@@ -1,13 +1,13 @@
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
-  CHAMPS, TECHS, CIVS, LANDMARKS, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
-  SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES,
-  isUnit, isBuilding,
+  CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
+  SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
+  isUnit, isBuilding, isSiege,
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
 import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -27,6 +27,8 @@ const ICON = {
   barrow: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M6.3 8.7c2.2-1.4 6.2-1.4 8.4 0l-.6 1.6H6.9z" fill="#E4CB8F"/><path d="M5 10.3h11.2l-1.9 5H7.9z" fill="#8B6A4A"/><path d="M16.2 10.3h3.3" stroke="#6F5238" stroke-width="1.8" stroke-linecap="round"/><path d="M8.5 15.3l-1.3 3M13.7 15.3l1.3 3" stroke="#6F5238" stroke-width="1.6" stroke-linecap="round"/><circle cx="11" cy="18" r="2.4" fill="#6F5238"/><circle cx="11" cy="18" r="1" fill="#FBF3E4"/></svg>`,
   pick: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M7 18.5 15 8" stroke="#8B6A4A" stroke-width="2.2" stroke-linecap="round"/><path d="M8.3 6.3c3.6-2.1 8.3-1.5 10.9 1.2l-1 1.4c-2.4-2.2-6-2.6-8.9-1.3z" fill="#C7CCD4"/><circle cx="17.5" cy="16.5" r="1.7" fill="#E9B44C"/></svg>`,
   lock: `<svg class="lockb" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="10" width="12" height="9" rx="2.5" fill="#5A4632"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" stroke="#5A4632" stroke-width="2.2" fill="none"/><circle cx="12" cy="14.5" r="1.6" fill="#FBF3E4"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" width="21" height="21"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="7.6" r="1.5" fill="currentColor"/><path d="M12 11v6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+  deselect: `<svg viewBox="0 0 24 24" width="21" height="21"><path d="M4.5 8V5.5A1 1 0 0 1 5.5 4.5H8M16 4.5h2.5a1 1 0 0 1 1 1V8M19.5 16v2.5a1 1 0 0 1-1 1H16M8 19.5H5.5a1 1 0 0 1-1-1V16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
@@ -49,6 +51,10 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     id: 0, kind, team: 0, x: 0, y: 0, r: 0, hp: 1, maxHp: 1, seed: 3,
     complete: true, state: 'idle', face: 1, phase: 0, carry: 0, amount: 60,
   }
+  // the wilds are drawn from their own radius (a crag with r 0 draws nothing)
+  if (RESOURCES[kind]) { fake.r = RESOURCES[kind].r; fake.amount = RESOURCES[kind].amount }
+  else if (kind === 'crag') fake.r = 34
+  else if (kind === 'relic') fake.r = 10
   // scale fits the sprite's bounding box into the 48px icon; (cx, cy) is the
   // sprite's visual center in its own coordinates
   const conf: Record<string, { scale: number; cx: number; cy: number }> = {
@@ -76,6 +82,14 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     ministry: { scale: 0.58, cx: 0, cy: -10 },
     siegeworkshop: { scale: 0.66, cx: 0, cy: -7 },
     mangonel: { scale: 1.1, cx: 0, cy: -6 },
+    tree: { scale: 0.9, cx: 0, cy: -16 },
+    goldmine: { scale: 0.8, cx: 0, cy: -6 },
+    berrybush: { scale: 1.5, cx: 0, cy: -6 },
+    stonequarry: { scale: 0.85, cx: 0, cy: -6 },
+    deer: { scale: 1.5, cx: 0, cy: -8 },
+    croc: { scale: 1.0, cx: 0, cy: -2 },
+    crag: { scale: 0.7, cx: 0, cy: -8 },
+    relic: { scale: 1.3, cx: 0, cy: -10 },
     trebuchet: { scale: 0.8, cx: 0, cy: -14 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     monk: { scale: 1.55, cx: 0, cy: -7 },
@@ -115,6 +129,14 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'ministry': drawMinistry(ctx, fake, 0.8); break
     case 'siegeworkshop': drawSiegeWorkshop(ctx, fake, 0.8); break
     case 'mangonel': drawMangonel(ctx, fake, 0); break
+    case 'tree': drawTree(ctx, fake, 0); break
+    case 'goldmine': drawMine(ctx, fake); break
+    case 'berrybush': drawBush(ctx, fake, 0); break
+    case 'stonequarry': drawQuarry(ctx, fake); break
+    case 'deer': drawDeer(ctx, fake, 0); break
+    case 'croc': drawCroc(ctx, fake, 0, false); break
+    case 'crag': drawCrag(ctx, fake); break
+    case 'relic': drawRelic(ctx, fake, 0); break
     case 'trebuchet': drawTrebuchet(ctx, fake, 0); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'monk': drawMonk(ctx, fake, 0); break
@@ -149,6 +171,33 @@ export function initUI(g: Game): void {
     el(`p-${r}`).addEventListener('click', () => sendVillagerToResource(g, r))
   }
   el('p-pop').addEventListener('click', () => cycleIdleVillager(g, canvas))
+
+  // ---- the two HUD tools: deselect, and info mode ----
+  // deselect: an empty frame by the stone — one tap drops a whole crowd
+  el('p-clear').insertAdjacentHTML('afterbegin', ICON.deselect)
+  el('p-clear').addEventListener('click', () => {
+    if (!g.selection.length && !g.placing) return
+    g.selection = []
+    g.placing = null
+    g.placePos = null
+    g.placeEnd = null
+    g.uiDirty = true
+  })
+  // info mode: while it's lit, taps read a thing out instead of commanding it
+  el('p-info').insertAdjacentHTML('afterbegin', ICON.info)
+  el('p-info').addEventListener('click', () => {
+    g.infoMode = !g.infoMode
+    g.infoId = null
+    if (g.infoMode) {
+      // reading, not ruling: drop the selection so no stray order slips out
+      g.selection = []
+      g.placing = null
+      g.placePos = null
+      g.placeEnd = null
+      toast(g, 'Info mode — tap anything to read about it.')
+    }
+    g.uiDirty = true
+  })
 
   // the minimap is the fast way around: tap (or drag) to send the camera there
   const mini = el<HTMLCanvasElement>('minimap')
@@ -571,6 +620,164 @@ function syncArmyPanel(g: Game): void {
   })
 }
 
+// ---- the info card: what the ? button reads out of whatever you tap ----
+// Every entry is written for someone who has never played: what the thing is
+// FOR, not just what it costs. Numbers all come from the tables, so they can
+// never drift out of step with the game.
+const INFO_BLURB: Partial<Record<Kind, string>> = {
+  villager: 'Your hands. Villagers gather wood, food, gold and stone, raise every building, mend what is battered, and shelter in the Town Hall when the bell rings.',
+  spearman: 'The cheap wall of the battle line. Spearmen carry a heavy bonus against anything mounted — scouts, knights and all.',
+  swordsman: 'The tough one. Slower to pay for than a spear, but he soaks up arrows and cuts down archers who stand too long.',
+  archer: 'The longbowman looses from well behind the front rank. Deadly on massed spearmen, helpless once cavalry reaches him.',
+  scout: 'Eyes. Fast, harmless, and the only cheap way to pull the fog back off the meadow — send him out early and often.',
+  knight: 'Armoured lance on a charger. Fast enough to run down archers, monks and siege engines; spearmen are the answer to him.',
+  monk: 'Carries no weapon. He quietly mends wounded friends standing near him, and he alone can lift a holy relic and carry it to a shrine.',
+  mangonel: 'A catapult that lobs a boulder at a spot on the ground — it shatters, and everything close is hit. Terrible against a scattered enemy, brutal against a clump. It cannot fire at anything right on top of it.',
+  trebuchet: 'The great counterweight engine: it outranges every tower and keep on the meadow. It must stand still to plant its frame before it can loose, and packs up the moment it rolls.',
+  towncenter: 'The heart of the village. Trains villagers, takes every resource as a drop-off, raises the laurel that begins an age, and shelters your people when the bell rings — a full hall shoots back.',
+  house: 'Room for five more souls. Population is the real ceiling on an army; keep houses ahead of your training.',
+  farm: 'Endless food, slowly. Each field wants exactly one farmer — a second pair of hands is waved off to a free field.',
+  mill: 'A food drop-off close to the berries and the fields, so nobody walks the long way home. Researches the Wheelbarrow.',
+  lumbercamp: 'A wood drop-off you plant beside the trees. Researches Steel Axes.',
+  miningcamp: 'A gold and stone drop-off for the mines. Researches the Miner\u2019s Picks.',
+  barracks: 'The infantry hall: spearmen from the Dark Age, swordsmen once Feudal dawns, and the Champion Infantry oath in the Castle Age.',
+  archeryrange: 'Where longbows are strung. Trains longbowmen and swears in Champion Longbows.',
+  stable: 'Horses. Scouts to see with, knights to charge with, and the Champion Knights oath.',
+  siegeworkshop: 'Where the engines of war are wrought: mangonels for clumps of soldiers, trebuchets for walls and towers.',
+  watchtower: 'Looses one arrow at a time at anything hostile in reach, garrisoned or not, and shelters up to five of your own inside.',
+  wall: 'A palisade post. Cheap on its own, stubborn in a row — drag out a fence and let the enemy chew through it while your arrows fall.',
+  gate: 'Swings open for your own people and stays barred to the enemy, who must chop it down.',
+  church: 'Ordains monks, and shrines the relics they carry home. Every relic resting here tithes gold on its own, forever.',
+  ministry: 'The hall of records: shrines relics like a church, and researches the two faith techs — Tithe Barns and Sanctuary.',
+  tree: 'Wood. Chop it and the canopy shrinks; fell it and the stump becomes open ground for your people to walk through.',
+  goldmine: 'Gold, for soldiers, monks and every upgrade worth having. It shrinks to rubble as you work it.',
+  berrybush: 'The early food that carries your opening. It forages out — have a farm or a herd lined up before it does.',
+  stonequarry: 'Stone, and stone alone builds new Town Halls and the fortress landmarks.',
+  deer: 'Shy game. One villager can bring one down in three pokes; the venison hauls to any food drop-off.',
+  croc: 'It lurks at the water and bites whatever strays near. One villager loses that fight — send three and it becomes 130 food.',
+  crag: 'Bare rock. Nothing walks through it and nothing is built on it — a chokepoint if you use it well.',
+  relic: 'A holy relic on its plinth. Only a monk may lift it; enshrined in a church or ministry it tithes gold forever.',
+}
+
+// what a building can put to work, so the card says why you would want one
+const INFO_TRAINS: Partial<Record<Kind, Kind[]>> = {
+  towncenter: ['villager'],
+  barracks: ['spearman', 'swordsman'],
+  kingsbarracks: ['spearman', 'swordsman'],
+  archeryrange: ['archer'],
+  stable: ['scout', 'knight'],
+  cavalryschool: ['scout', 'knight'],
+  siegeworkshop: ['mangonel', 'trebuchet'],
+  church: ['monk'],
+}
+
+function statChip(label: string, value: string): string {
+  return `<span class="ic-stat"><i>${label}</i>${value}</span>`
+}
+function costChips(c: Cost): string {
+  return COST_KEYS.filter(k => c[k] > 0).map(k => `<span class="ic-stat">${c[k]}${ICON[k]}</span>`).join('')
+}
+
+function buildInfoCard(g: Game, e: Ent): string {
+  const u = UNITS[e.kind]
+  const b = BUILDINGS[e.kind]
+  const r = RESOURCES[e.kind]
+  const lm = LANDMARKS[e.kind as LandmarkKind]
+  const name = u?.name ?? b?.name ?? r?.name ?? (e.kind === 'relic' ? 'Holy Relic' : e.kind === 'crag' ? 'Rocky Crag' : e.kind)
+  const tag = e.team === 0 ? 'Yours' : e.team === 1 ? 'The rival village' : isUnit(e) || b ? '' : 'The wilds'
+  const stats: string[] = []
+  const lines: string[] = []
+
+  if (u) {
+    stats.push(statChip('HP', e.hp < e.maxHp ? `${Math.ceil(e.hp)}/${e.maxHp}` : String(e.maxHp)))
+    if (u.dmg > 0) stats.push(statChip('DMG', String(u.dmg)))
+    if (u.range > 40) stats.push(statChip('RANGE', String(u.range)))
+    stats.push(statChip('SPEED', String(u.speed)))
+    stats.push(...costChips(u.cost).split('</span>').filter(Boolean).map(x => x + '</span>'))
+    stats.push(statChip('TRAINS IN', `${u.time}s`))
+  } else if (b) {
+    stats.push(statChip('HP', e.hp < e.maxHp ? `${Math.ceil(e.hp)}/${e.maxHp}` : String(e.maxHp)))
+    stats.push(...costChips(b.cost).split('</span>').filter(Boolean).map(x => x + '</span>'))
+    stats.push(statChip('BUILDS IN', `${b.time}s`))
+    if (b.pop > 0) stats.push(statChip('POP', `+${b.pop}`))
+    if (b.garrisonCap > 0) stats.push(statChip('SHELTERS', String(b.garrisonCap)))
+  } else if (r) {
+    stats.push(statChip('LEFT', String(Math.ceil(e.amount ?? 0))))
+    stats.push(statChip('GIVES', r.gives))
+    if (e.kind === 'croc' && e.hp > 0) stats.push(statChip('HP', `${Math.ceil(e.hp)}/${e.maxHp}`))
+  }
+
+  const ageReq = u ? unitAgeReq(g, 0, e.kind) : (b?.age ?? 1)
+  // (a starting Town Hall is older than the age its rebuild needs — say so plainly)
+  if (ageReq > 1 && !lm) lines.push(b ? `Can be built from the <b>${AGE_NAMES[ageReq]}</b>.` : `Available from the <b>${AGE_NAMES[ageReq]}</b>.`)
+
+  // what this building puts to work, and the upgrades kept behind its door
+  const trains = INFO_TRAINS[e.kind]
+  if (trains?.length) lines.push(`Trains: ${trains.map(k => UNITS[k].name).join(', ')}.`)
+  const techs = (Object.keys(TECHS) as TechId[]).filter(id => TECHS[id].at === e.kind)
+  if (techs.length) lines.push(`Researches: ${techs.map(id => TECHS[id].name).join(', ')}.`)
+  const champ = (Object.keys(CHAMPS) as ChampId[]).find(id => CHAMPS[id].at.includes(e.kind))
+  if (champ) lines.push(`Swears in <b>${CHAMPS[champ].name}</b>: ${CHAMPS[champ].blurb.toLowerCase()}.`)
+  const trickle = LANDMARK_TRICKLES[e.kind as LandmarkKind]
+  if (trickle) lines.push(`Trickles ${trickle.rate} ${trickle.res} a second, all on its own.`)
+
+  // and what it is doing right now
+  if (b && e.complete === false) lines.push(`<b>Rising now</b> — ${Math.round((e.progress ?? 0) * 100)}% built.`)
+  if (e.queue?.length) {
+    const q = e.queue[0]
+    lines.push(`<b>Now training:</b> ${UNITS[q.kind]?.name ?? q.kind}${e.queue.length > 1 ? ` (${e.queue.length} queued)` : ''}.`)
+  }
+  if (e.research) {
+    const id = e.research.id
+    const rn = (CHAMPS as Record<string, { name: string }>)[id]?.name ?? (TECHS as Record<string, { name: string }>)[id]?.name ?? id
+    lines.push(`<b>Now researching:</b> ${rn}.`)
+  }
+  if ((e.garrison ?? 0) > 0) lines.push(`<b>${e.garrison}</b> sheltering inside.`)
+  if (e.kind === 'relic') {
+    if (e.shrineId !== undefined) lines.push(`<b>Enshrined</b> — tithing ${RELIC_GOLD_RATE} gold a second.`)
+    else if (e.heldBy !== undefined) lines.push('<b>In a monk\u2019s arms</b> — carry it to a church or ministry.')
+    else lines.push('Unclaimed. Send a monk before the rival village does.')
+  }
+  if (isSiege(e) && e.kind === 'trebuchet') {
+    lines.push((e.setup ?? 0) >= 3 ? '<b>Planted</b> and ready to loose.' : 'Not yet planted — hold it still to set the frame.')
+  }
+
+  const blurb = lm ? `${lm.blurb}. Raising it IS the age-up: the ${AGE_NAMES[lm.toAge]} dawns when its walls stand.`
+    : INFO_BLURB[e.kind] ?? ''
+  // a canvas loses its pixels through outerHTML — bake the miniature to an image
+  const icon = spriteIcon(e.kind, g.age[e.team] ?? 2)
+  return `<div class="ic-head"><img class="ic-icon" alt="" src="${icon.toDataURL()}"><h3>${name}${tag ? `<div class="ic-tag">${tag}</div>` : ''}</h3>` +
+    `<button class="ic-close" id="info-close" aria-label="Close">\u2715</button></div>` +
+    (blurb ? `<p>${blurb}</p>` : '') +
+    (stats.length ? `<div class="ic-stats">${stats.join('')}</div>` : '') +
+    (lines.length ? `<p>${lines.join(' ')}</p>` : '')
+}
+
+// paint (or hide) the card; also keeps the two HUD tool buttons honest
+let infoSig = ''
+function syncInfoTools(g: Game): void {
+  const card = el('info-card')
+  const target = g.infoMode && g.infoId !== null ? g.byId.get(g.infoId) : undefined
+  const sig = !g.infoMode ? 'off' : target
+    ? `${target.id}:${Math.ceil(target.hp)}:${target.queue?.length ?? 0}:${target.research?.id ?? ''}:${target.garrison ?? 0}:${Math.round((target.progress ?? 1) * 20)}:${(target.setup ?? 0) >= 3}`
+    : 'none'
+  if (sig !== infoSig) {
+    infoSig = sig
+    if (!target) {
+      card.classList.add('hidden')
+      card.innerHTML = ''
+    } else {
+      card.innerHTML = buildInfoCard(g, target)
+      card.classList.remove('hidden')
+      const x = document.getElementById('info-close')
+      if (x) x.addEventListener('click', () => { g.infoId = null; g.uiDirty = true })
+    }
+  }
+  el('p-info').classList.toggle('on', g.infoMode)
+  el('p-info').setAttribute('aria-pressed', String(g.infoMode))
+  el('p-clear').classList.toggle('dim', g.selection.length === 0)
+}
+
 export function syncUI(g: Game): void {
   const p = pop(g, 0)
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
@@ -597,6 +804,7 @@ export function syncUI(g: Game): void {
   el('s-pop').classList.toggle('alert', idleVills > 0)
   syncArmyPanel(g)
   syncProdPanel(g)
+  syncInfoTools(g)
   drawMinimap(g)
   updateAffordability(g)
 

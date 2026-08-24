@@ -150,6 +150,8 @@ export interface Game {
   toasts: { text: string; t: number }[]
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
+  infoMode: boolean // the ? button: taps read a thing out instead of commanding it
+  infoId: number | null // what the info card is currently reading out
   started: boolean
   uiDirty: boolean
 }

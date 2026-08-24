@@ -3,13 +3,16 @@
 <div id="stage">
   <canvas id="game"></canvas>
   <div id="hud-top">
+    <button class="pill pill-tap hud-btn" id="p-info" aria-label="Info mode — tap anything to read about it" aria-pressed="false"></button>
     <div class="pill pill-tap" id="p-wood"><span class="top" id="t-wood"><b id="wood-n">100</b></span><span class="sub" id="s-wood"><b id="wood-v">0</b></span></div>
     <div class="pill pill-tap" id="p-food"><span class="top" id="t-food"><b id="food-n">50</b></span><span class="sub" id="s-food"><b id="food-v">0</b></span></div>
     <div class="pill pill-tap" id="p-gold"><span class="top" id="t-gold"><b id="gold-n">0</b></span><span class="sub" id="s-gold"><b id="gold-v">0</b></span></div>
     <div class="pill pill-tap" id="p-stone"><span class="top" id="t-stone"><b id="stone-n">0</b></span><span class="sub" id="s-stone"><b id="stone-v">0</b></span></div>
+    <button class="pill pill-tap hud-btn" id="p-clear" aria-label="Deselect everything"></button>
     <div class="pill pill-tap" id="p-pop"><span class="top" id="t-pop"><b id="pop-n">3/5</b></span><span class="sub" id="s-pop"><b id="idle-n">0</b>&nbsp;idle</span></div>
   </div>
   <div id="toasts"></div>
+  <div id="info-card" class="hidden"></div>
   <div id="army-panel"></div>
   <div id="prod-panel"></div>
   <canvas id="minimap" width="264" height="176"></canvas>

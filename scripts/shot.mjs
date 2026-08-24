@@ -736,6 +736,86 @@ if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + kn
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
 await waitSim(page3, 1)
 
+// 4.6653) the two HUD tools: the deselect frame and info mode
+const clearCheck = await page3.evaluate(() => {
+  const g = window.__game.state
+  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden).slice(0, 3)
+  g.selection = vills.map(v => v.id)
+  g.uiDirty = true
+  return { picked: g.selection.length }
+})
+await page3.waitForTimeout(250)
+const clearBefore = await page3.evaluate(() => ({
+  dim: document.getElementById('p-clear').classList.contains('dim'),
+  dock: !document.getElementById('dock').classList.contains('hidden'),
+}))
+if (clearCheck.picked !== 3) throw new Error('could not stage a crowd to deselect')
+if (clearBefore.dim) throw new Error('the deselect button should light up while things are selected')
+await page3.tap('#p-clear')
+await page3.waitForTimeout(250)
+const clearAfter = await page3.evaluate(() => ({
+  sel: window.__game.state.selection.length,
+  dim: document.getElementById('p-clear').classList.contains('dim'),
+  dock: !document.getElementById('dock').classList.contains('hidden'),
+}))
+console.log('deselect button:', { before: clearBefore, after: clearAfter })
+if (clearAfter.sel !== 0) throw new Error('the deselect button left units selected')
+if (!clearAfter.dim) throw new Error('the deselect button should dim once nothing is selected')
+if (clearAfter.dock) throw new Error('the dock should close when the selection is dropped')
+
+// info mode: the ? lights, a tap reads a building out instead of ordering it
+await page3.tap('#p-info')
+await page3.waitForTimeout(250)
+const infoOn = await page3.evaluate(() => ({
+  mode: window.__game.state.infoMode,
+  lit: document.getElementById('p-info').classList.contains('on'),
+}))
+if (!infoOn.mode || !infoOn.lit) throw new Error('info mode did not switch on')
+const infoTap = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  // tap the Town Hall the way a thumb would, through the real hit path
+  g.camera.x = tc.x; g.camera.y = tc.y
+  return { tcId: tc.id, x: tc.x, y: tc.y }
+})
+await page3.waitForTimeout(200)
+const infoCanvasBox = await page3.evaluate(() => {
+  const c = document.getElementById('game').getBoundingClientRect()
+  return { x: c.x + c.width / 2, y: c.y + c.height / 2 }
+})
+await page3.touchscreen.tap(infoCanvasBox.x, infoCanvasBox.y)
+await page3.waitForTimeout(300)
+const infoCard = await page3.evaluate(({ tcId }) => {
+  const g = window.__game.state
+  const card = document.getElementById('info-card')
+  return {
+    target: g.infoId,
+    tcId,
+    sel: g.selection.length,
+    shown: !card.classList.contains('hidden'),
+    title: card.querySelector('h3') ? card.querySelector('h3').textContent : '',
+    stats: card.querySelectorAll('.ic-stat').length,
+    body: card.textContent.length,
+  }
+}, infoTap)
+console.log('info card:', infoCard)
+if (infoCard.target !== infoCard.tcId) throw new Error('info mode did not read the Town Hall')
+if (infoCard.sel !== 0) throw new Error('info mode should never select what it reads')
+if (!infoCard.shown || !infoCard.title.includes('Town Hall')) throw new Error('the info card did not open on the Town Hall')
+if (infoCard.stats < 3 || infoCard.body < 80) throw new Error('the info card came up thin')
+// the close cross tidies the card away, and the button switches info mode off
+await page3.tap('#info-close')
+await page3.waitForTimeout(250)
+if (await page3.isVisible('#info-card')) throw new Error('the info card would not close')
+await page3.tap('#p-info')
+await page3.waitForTimeout(250)
+const infoOff = await page3.evaluate(() => ({
+  mode: window.__game.state.infoMode,
+  lit: document.getElementById('p-info').classList.contains('on'),
+}))
+console.log('info mode off:', infoOff)
+if (infoOff.mode || infoOff.lit) throw new Error('info mode did not switch back off')
+
 // 4.6655) siege engines: the workshop trains, the mangonel splashes a clump,
 // the trebuchet plants its frame and cracks a tower from beyond its arrows
 const siegeSetup = await page3.evaluate(() => {

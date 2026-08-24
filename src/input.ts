@@ -180,6 +180,14 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   })
   if (g.taps.length > 6) g.taps.shift()
 
+  // info mode: taps read a thing out instead of commanding it — nothing is
+  // selected, nothing is ordered, and bare ground closes the card
+  if (g.infoMode) {
+    g.infoId = hit ? hit.id : null
+    g.uiDirty = true
+    return
+  }
+
   // double-tap on one of your units: select all its kind nearby
   const now = performance.now()
   const isDouble = !!hit && hit.id === lastTapEnt && now - lastTapT < DOUBLE_TAP_MS
