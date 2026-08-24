@@ -311,6 +311,45 @@ button.cmd.ghost {
   align-items: center;
   gap: 9px;
 }
+/* the raised banners: the companies split off from the King's Army */
+#banner-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+#banner-strip.hidden { display: none; }
+.banner-chip {
+  position: relative;
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 0;
+  cursor: pointer;
+  filter: drop-shadow(0 3px 3px rgba(40, 60, 30, 0.34));
+}
+.banner-chip .pennant { display: block; width: 34px; height: 34px; }
+.banner-chip .count {
+  position: absolute;
+  bottom: 1px;
+  right: -3px;
+  background: var(--honey);
+  border: 1.5px solid var(--honey-dark);
+  color: #4A3413;
+  border-radius: 999px;
+  font-family: 'Fredoka', 'Nunito', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* an emptied banner keeps flying, but pale — its halls still muster to it */
+.banner-chip.empty { opacity: 0.42; }
+.banner-chip.active, #army-all.active { filter: drop-shadow(0 0 5px rgba(233, 180, 76, 0.95)) drop-shadow(0 3px 4px rgba(40, 60, 30, 0.34)); }
+.banner-chip:active { transform: translateY(2px); }
+
 /* the muster: one buckler per type, paired into two files once the host grows */
 #army-chips {
   display: grid;

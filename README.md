@@ -85,6 +85,20 @@ chase at its edge.
   training queue (with a ×count badge), per tech being researched, and per
   landmark rising. Tap a loader to select the building doing the work; the
   command dock stays clean for giving orders
+- **Banners** (multiple armies): every soldier and siege engine musters
+  under **the King's Army** by default — the shield *is* that banner, so
+  if you never split your host, nothing changes. Select any soldiers and
+  the dock offers *ride under a banner* or *raise a new one* (the Rose,
+  the Star, the Oak); the new banner appears as a pennant above the
+  bucklers, and the bucklers then show **that banner's roster** rather
+  than the whole village. A **military hall can send its recruits to a
+  banner** — tap the pennant on its dock — and it then *flies that
+  banner's colours on its roof*, so you can read your whole muster off
+  the rooftops. One banner per unit; an emptied banner keeps flying,
+  pale, because its halls still feed it. **Monks are the exception**:
+  they swear to no banner unless invited, can be released again, and a
+  monk carrying a relic ignores the muster entirely — the reliquary
+  matters more than the parade
 - **Deselect** (the empty frame beside the stone pill): one tap drops the
   whole selection — far easier than picking villagers off one by one
 - **Info mode** (the ⓘ to the left of the resources): tap it to light it
@@ -93,9 +107,11 @@ chase at its edge.
   researches, and what it's doing right now. Nothing gets selected and no
   order goes out while it's lit; tap the ⓘ again to switch it off
 - **Drag** to pan the camera, **pinch** to zoom
-- **Army panel** (right edge): one chip per unit type you field, with a
-  live count — tap a chip to grab all spearmen / swordsmen / archers at
-  once; the blue **Army** button below grabs the whole battle line
+- **Army panel** (right edge): a **buckler** per unit type in the active
+  banner, with a live count — tap one to grab all its spearmen /
+  swordsmen / knights at once. Below them the **heater shield** musters
+  the King's Army, and above them fly the pennants of any other banners
+  you have raised
 - **Archery Range** (175 wood) trains **longbowmen** — ranged units that
   shoot arrows from a distance (30 food + 35 gold each)
 - **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your

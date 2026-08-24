@@ -1,5 +1,5 @@
 // Cosy storybook sprites, all drawn with canvas vector shapes.
-import { Ent, TEAM_COLOR } from './data'
+import { Ent, TEAM_COLOR, BANNERS, KINGS_BANNER } from './data'
 
 const SKIN = '#F6CFA0'
 const WALL = '#F6E7C8'
@@ -843,13 +843,19 @@ function chimneySmoke(ctx: CanvasRenderingContext2D, x: number, y: number, t: nu
   }
 }
 
-function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number, t: number): void {
+// A hall that sends its recruits to another banner flies that banner's colours,
+// so the whole routing of your village can be read off the rooftops.
+function bannerTint(e: Ent): string | undefined {
+  const b = e.recruitBanner
+  return e.team === 0 && b !== undefined && b !== KINGS_BANNER ? BANNERS[b].color : undefined
+}
+function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number, t: number, tint?: string): void {
   const c = TEAM_COLOR[team] ?? TEAM_COLOR[0]
   ctx.strokeStyle = WOOD_DARK
   ctx.lineWidth = 2.4
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 20); ctx.stroke()
   const wave = Math.sin(t * 3) * 1.6
-  ctx.fillStyle = c.main
+  ctx.fillStyle = tint ?? c.main
   ctx.beginPath()
   ctx.moveTo(x, y - 20)
   ctx.quadraticCurveTo(x + 8, y - 22 + wave, x + 15, y - 18 + wave)
@@ -964,7 +970,7 @@ export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number, a
   // crossed sword sign
   ctx.strokeStyle = '#C7CCD4'; ctx.lineWidth = 2
   ctx.beginPath(); ctx.moveTo(x + 13, y - 7); ctx.lineTo(x + 23, y + 3); ctx.moveTo(x + 23, y - 7); ctx.lineTo(x + 13, y + 3); ctx.stroke()
-  flag(ctx, x + 28, y - 14, e.team, t + e.seed)
+  flag(ctx, x + 28, y - 14, e.team, t + e.seed, bannerTint(e))
 }
 
 export function drawLumberCamp(ctx: CanvasRenderingContext2D, e: Ent): void {
@@ -1198,8 +1204,8 @@ export function drawKingsBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: numb
   ctx.moveTo(x + 12, y - 6); ctx.lineTo(x + 24, y + 4)
   ctx.moveTo(x + 24, y - 6); ctx.lineTo(x + 12, y + 4)
   ctx.stroke()
-  flag(ctx, x - 16, y - 26, e.team, t + e.seed)
-  flag(ctx, x + 18, y - 26, e.team, t + e.seed + 2)
+  flag(ctx, x - 16, y - 26, e.team, t + e.seed, bannerTint(e))
+  flag(ctx, x + 18, y - 26, e.team, t + e.seed + 2, bannerTint(e))
 }
 
 export function drawGuildhall(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
@@ -1337,7 +1343,7 @@ export function drawStable(ctx: CanvasRenderingContext2D, e: Ent, t: number): vo
   // horseshoe sign
   ctx.strokeStyle = '#C7CCD4'; ctx.lineWidth = 2.2
   ctx.beginPath(); ctx.arc(x - 20, y - 1, 4, Math.PI * 0.85, Math.PI * 2.15); ctx.stroke()
-  flag(ctx, x + 30, y - 12, e.team, t + e.seed)
+  flag(ctx, x + 30, y - 12, e.team, t + e.seed, bannerTint(e))
 }
 
 export function drawBlacksmith(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
@@ -2130,7 +2136,7 @@ export function drawArcheryRange(ctx: CanvasRenderingContext2D, e: Ent, t: numbe
   ctx.beginPath(); ctx.moveTo(x + 25, y - 5); ctx.lineTo(x + 31, y - 11); ctx.stroke()
   ctx.fillStyle = '#F4E4C6'
   ctx.beginPath(); ctx.arc(x + 31.5, y - 11.5, 1.6, 0, Math.PI * 2); ctx.fill()
-  flag(ctx, x - 36, y - 12, e.team, t + e.seed)
+  flag(ctx, x - 36, y - 12, e.team, t + e.seed, bannerTint(e))
 }
 
 const UNITS_CD_SWORD = 0.9
@@ -2440,5 +2446,5 @@ export function drawSiegeWorkshop(ctx: CanvasRenderingContext2D, e: Ent, t: numb
   ctx.beginPath(); ctx.arc(x - 24, y + 17, 3.4, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.arc(x - 19, y + 18.5, 2.8, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.arc(x - 21.5, y + 13.5, 2.5, 0, Math.PI * 2); ctx.fill()
-  flag(ctx, x + 30, y - 10, e.team, t + e.seed)
+  flag(ctx, x + 30, y - 10, e.team, t + e.seed, bannerTint(e))
 }

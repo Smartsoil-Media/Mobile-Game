@@ -71,6 +71,8 @@ export interface Ent {
   lastY?: number
   phase?: number
   relicId?: number // the relic a monk is carrying
+  banner?: number // which banner this soldier rides under (monks may ride under none)
+  recruitBanner?: number // on a military hall: the banner its recruits join
   setup?: number // a trebuchet plants its frame before it can loose (resets on the move)
   // relics
   heldBy?: number // the monk carrying this relic
@@ -150,6 +152,8 @@ export interface Game {
   toasts: { text: string; t: number }[]
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
+  banners: number // how many banners are raised (1 = just the King's Army)
+  activeBanner: number // whose roster the bucklers are showing
   infoMode: boolean // the ? button: taps read a thing out instead of commanding it
   infoId: number | null // what the info card is currently reading out
   started: boolean
@@ -320,6 +324,27 @@ export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
   archer: { spearman: 4 },
   knight: { mangonel: 12, trebuchet: 12 }, // cavalry rides down the war machines
 }
+
+// ---- banners: the companies your host is split into ----
+// Every soldier and engine musters under the King's Army unless a military
+// hall sends its recruits elsewhere. Monks swear to no banner unless asked.
+export interface BannerSpec { name: string; short: string; color: string; edge: string }
+export const BANNERS: BannerSpec[] = [
+  { name: "The King's Army", short: 'Crown', color: '#6D9DC5', edge: '#4E7EA6' },
+  { name: 'The Rose Banner', short: 'Rose', color: '#C9A227', edge: '#A07D13' },
+  { name: 'The Star Banner', short: 'Star', color: '#6E9B57', edge: '#527A3E' },
+  { name: 'The Oak Banner', short: 'Oak', color: '#8A6FA8', edge: '#6B5286' },
+]
+export const BANNER_MAX = BANNERS.length
+export const KINGS_BANNER = 0
+// who may swear to a banner at all: the battle line, plus monks by invitation.
+// Villagers and scouts never do — they have their own work.
+export function canBanner(e: Ent): boolean {
+  return e.kind === 'spearman' || e.kind === 'swordsman' || e.kind === 'archer' ||
+    e.kind === 'knight' || e.kind === 'mangonel' || e.kind === 'trebuchet' || e.kind === 'monk'
+}
+// soldiers and engines always ride under some banner; only monks may stand outside one
+export function mustBanner(e: Ent): boolean { return canBanner(e) && e.kind !== 'monk' }
 
 // ---- siege engines (Castle Age) ----
 export const MANGONEL_SPLASH = 42 // the boulder shatters — everything close is hit

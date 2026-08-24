@@ -2,8 +2,8 @@
 import {
   Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
-  NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H,
-  dist, isUnit, isBuilding, isResource,
+  NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H, KINGS_BANNER,
+  dist, isUnit, isBuilding, isResource, mustBanner,
 } from './data'
 import { inWater } from './nav'
 
@@ -38,6 +38,7 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
     if (champ && g.champs[team]?.[champ]) {
       e.hp = e.maxHp = s.hp + CHAMPS[champ].hp // born a champion
     }
+    if (team === 0 && mustBanner(e)) e.banner = KINGS_BANNER
     e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = Math.random() * 0.3
     e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = Math.random() * Math.PI * 2
     e.resume = null
@@ -103,7 +104,7 @@ export function createGame(opts?: { seed?: number }): Game {
     nav: null, navDirty: true, navWater: null,
     mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
     streams: [], fords: [],
-    toasts: [], pings: [], taps: [], infoMode: false, infoId: null, started: false, uiDirty: true,
+    toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true,
   }
 
   const rnd = mulberry(random ? ((opts!.seed! | 0) || 1) : 20260819)

@@ -3,10 +3,11 @@ import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
   CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
-  isUnit, isBuilding, isSiege,
+  BANNERS, BANNER_MAX, KINGS_BANNER,
+  isUnit, isBuilding, isSiege, canBanner, mustBanner,
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
-import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
+import { selectArmy, selectBanner, assignBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
 const ICON = {
@@ -176,6 +177,22 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
   return c
 }
 
+// A pennant per banner: the same swallow-tailed flag, a different charge on
+// each field — a crown for the King's, then a rose, a star, an oak.
+const BANNER_CHARGE = [
+  `<path d="M11 14.6 L11.5 8.2 L14 10.4 L16 7.2 L18 10.4 L20.5 8.2 L21 14.6 Z" fill="#FBF3E4"/>`,
+  `<g fill="#FBF3E4"><circle cx="16" cy="7.9" r="1.9"/><circle cx="19.4" cy="10.3" r="1.9"/><circle cx="18.1" cy="14.2" r="1.9"/><circle cx="13.9" cy="14.2" r="1.9"/><circle cx="12.6" cy="10.3" r="1.9"/><circle cx="16" cy="11.4" r="1.7" fill="#F5D584"/></g>`,
+  `<path d="M16 6.6 L17.8 10.2 L21.8 10.8 L18.9 13.6 L19.6 17.5 L16 15.7 L12.4 17.5 L13.1 13.6 L10.2 10.8 L14.2 10.2 Z" fill="#FBF3E4"/>`,
+  `<g fill="#FBF3E4"><ellipse cx="16" cy="13.4" rx="3.3" ry="4"/><path d="M12.4 10.4 a3.6 2.8 0 0 1 7.2 0 z"/><path d="M16 6.6 v1.9" stroke="#FBF3E4" stroke-width="1.3" stroke-linecap="round"/></g>`,
+]
+function bannerIcon(i: number, size = 32): string {
+  const b = BANNERS[i] ?? BANNERS[0]
+  return `<svg class="pennant" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">` +
+    `<rect x="4.4" y="2.5" width="2.3" height="27" rx="1.1" fill="#8B6A4A"/>` +
+    `<path d="M6.7 4.4 H27.4 L22.7 11.4 L27.4 18.4 H6.7 Z" fill="${b.color}" stroke="${b.edge}" stroke-width="1.4" stroke-linejoin="round"/>` +
+    BANNER_CHARGE[i] + `</svg>`
+}
+
 const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
 
 export function initUI(g: Game): void {
@@ -186,6 +203,9 @@ export function initUI(g: Game): void {
   all.id = 'army-all'
   all.innerHTML = ICON.armyShield
   all.addEventListener('click', () => selectArmy(g, canvas))
+  const strip = document.createElement('div')
+  strip.id = 'banner-strip'
+  el('army-panel').appendChild(strip)
   const chipWrap = document.createElement('div')
   chipWrap.id = 'army-chips'
   el('army-panel').appendChild(chipWrap)
@@ -430,6 +450,7 @@ function syncProdPanel(g: Game): void {
 let buildCat: 'economy' | 'military' | null = null
 let agePick = false // the landmark-choice menu on the Town Hall
 let lastSelKey = ''
+let bannerPick = false
 
 // the landmark site currently rising toward the player's next age, if any
 function landmarkSite(g: Game): Ent | null {
@@ -625,14 +646,24 @@ function drawMinimap(g: Game): void {
 
 // one chip per unit type the player fields, count badges live; rebuilt only
 // when the tally actually changes
-const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight', 'mangonel', 'trebuchet'] as const
+const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight', 'mangonel', 'trebuchet', 'monk'] as const
 let armySig = ''
 function syncArmyPanel(g: Game): void {
+  // the bucklers are the ACTIVE banner's roster, not the whole village
   const counts = ARMY_TYPES.map(k =>
-    g.ents.reduce((n, e) => n + (e.team === 0 && e.kind === k && !e.hidden ? 1 : 0), 0))
-  const sig = counts.join(',')
+    g.ents.reduce((n, e) =>
+      n + (e.team === 0 && e.kind === k && !e.hidden && e.banner === g.activeBanner ? 1 : 0), 0))
+  // every banner's headcount rides in the signature, or a death in a company
+  // you aren't looking at would leave its pennant showing a stale number
+  const tally: number[] = []
+  for (let i = 0; i < g.banners; i++) {
+    tally.push(g.ents.reduce((c, e) =>
+      c + (e.team === 0 && !e.hidden && e.banner === i ? 1 : 0), 0))
+  }
+  const sig = `${g.banners}:${g.activeBanner}:${counts.join(',')}:${tally.join(',')}`
   if (sig === armySig) return
   armySig = sig
+  syncBannerStrip(g)
   const panel = el('army-chips')
   panel.querySelectorAll('.army-chip').forEach(c => c.remove())
   const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -646,9 +677,75 @@ function syncArmyPanel(g: Game): void {
     chip.setAttribute('aria-label', `Select all ${UNITS[kind].name.toLowerCase()}s`)
     chip.appendChild(spriteIcon(kind))
     chip.insertAdjacentHTML('beforeend', `<span class="count">${counts[i]}</span>`)
-    chip.addEventListener('click', () => selectUnitsOfKind(g, kind, canvas))
+    chip.addEventListener('click', () => selectUnitsOfKind(g, kind, canvas, g.activeBanner))
     panel.appendChild(chip)
   })
+}
+
+// ---- banners in the dock ----
+// With soldiers selected the dock is otherwise empty, so the join buttons live
+// there directly: no long-press, no hidden gesture, right where every other
+// command in the game appears.
+function bannerDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
+  const troop = sel.filter(e => canBanner(e) && e.team === 0)
+  for (let i = 0; i < g.banners; i++) {
+    if (troop.length && troop.every(u => u.banner === i)) continue // already theirs
+    dock.appendChild(iconButton(
+      { cmd: `banner-join-${i}`, label: `Ride under ${BANNERS[i].name}`, icon: bannerIcon(i, 38) },
+      () => assignBanner(g, troop, i)))
+  }
+  if (g.banners < BANNER_MAX) {
+    dock.appendChild(iconButton(
+      { cmd: 'banner-raise', label: 'Raise a new banner and give it these', icon: bannerIcon(g.banners, 38) },
+      () => raiseBanner(g, troop)))
+    dock.querySelector('[data-cmd="banner-raise"]')!.insertAdjacentHTML('beforeend', '<i>new</i>')
+  }
+  // only a monk may stand outside a banner — a loose soldier would just get lost
+  if (troop.some(u => !mustBanner(u) && u.banner !== undefined)) {
+    dock.appendChild(iconButton(
+      { cmd: 'banner-leave', label: 'Release the monks from their banner', icon: ICON.deselect },
+      () => assignBanner(g, troop.filter(u => !mustBanner(u)), null)))
+  }
+}
+
+// A military hall flies a banner: everything it musters rides under it.
+function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
+  const cur = b.recruitBanner ?? KINGS_BANNER
+  if (!bannerPick) {
+    dock.appendChild(iconButton(
+      { cmd: 'recruit-banner', label: `Recruits ride under ${BANNERS[cur].name} — tap to change`,
+        icon: bannerIcon(cur, 38) },
+      () => { bannerPick = true; g.uiDirty = true }))
+    return
+  }
+  const back = document.createElement('button')
+  back.className = 'cmd ghost'
+  back.dataset.cmd = 'back'
+  back.setAttribute('aria-label', 'Back')
+  back.textContent = '‹'
+  back.addEventListener('click', () => { bannerPick = false; g.uiDirty = true })
+  dock.appendChild(back)
+  for (let i = 0; i < g.banners; i++) {
+    dock.appendChild(iconButton(
+      { cmd: `recruit-to-${i}`, label: `Send recruits to ${BANNERS[i].name}`, icon: bannerIcon(i, 38) },
+      () => {
+        b.recruitBanner = i
+        bannerPick = false
+        toast(g, `${BUILDINGS[b.kind].name}: recruits ride under ${BANNERS[i].name}.`)
+        g.uiDirty = true
+      }))
+  }
+  if (g.banners < BANNER_MAX) {
+    dock.appendChild(iconButton(
+      { cmd: 'recruit-to-new', label: 'Raise a new banner for these recruits', icon: bannerIcon(g.banners, 38) },
+      () => {
+        b.recruitBanner = g.banners
+        raiseBanner(g, [])
+        bannerPick = false
+        g.uiDirty = true
+      }))
+    dock.querySelector('[data-cmd="recruit-to-new"]')!.insertAdjacentHTML('beforeend', '<i>new</i>')
+  }
 }
 
 // ---- the info card: what the ? button reads out of whatever you tap ----
@@ -701,6 +798,8 @@ const INFO_TRAINS: Partial<Record<Kind, Kind[]>> = {
   siegeworkshop: ['mangonel', 'trebuchet'],
   church: ['monk'],
 }
+
+const HALL_KINDS: string[] = ['barracks', 'kingsbarracks', 'archeryrange', 'stable', 'cavalryschool', 'siegeworkshop']
 
 function statChip(label: string, value: string): string {
   return `<span class="ic-stat"><i>${label}</i>${value}</span>`
@@ -764,6 +863,14 @@ function buildInfoCard(g: Game, e: Ent): string {
     lines.push(`<b>Now researching:</b> ${rn}.`)
   }
   if ((e.garrison ?? 0) > 0) lines.push(`<b>${e.garrison}</b> sheltering inside.`)
+  if (e.team === 0 && canBanner(e)) {
+    lines.push(e.banner !== undefined
+      ? `Rides under <b>${BANNERS[e.banner].name}</b>.`
+      : 'Sworn to no banner — send him to one from the dock.')
+  }
+  if (e.team === 0 && HALL_KINDS.includes(e.kind)) {
+    lines.push(`Recruits ride under <b>${BANNERS[e.recruitBanner ?? KINGS_BANNER].name}</b>.`)
+  }
   if (e.kind === 'relic') {
     if (e.shrineId !== undefined) lines.push(`<b>Enshrined</b> — tithing ${RELIC_GOLD_RATE} gold a second.`)
     else if (e.heldBy !== undefined) lines.push('<b>In a monk\u2019s arms</b> — carry it to a church or ministry.')
@@ -807,6 +914,26 @@ function syncInfoTools(g: Game): void {
   el('p-info').classList.toggle('on', g.infoMode)
   el('p-info').setAttribute('aria-pressed', String(g.infoMode))
   el('p-clear').classList.toggle('dim', g.selection.length === 0)
+}
+
+// the raised banners, above the roster. The King's Army keeps the shield —
+// these are the companies you have split off from it.
+function syncBannerStrip(g: Game): void {
+  const strip = el('banner-strip')
+  strip.innerHTML = ''
+  strip.classList.toggle('hidden', g.banners <= 1)
+  for (let i = 1; i < g.banners; i++) {
+    const n = g.ents.reduce((c, e) =>
+      c + (e.team === 0 && !e.hidden && e.banner === i ? 1 : 0), 0)
+    const b = document.createElement('button')
+    b.className = 'banner-chip' + (g.activeBanner === i ? ' active' : '') + (n === 0 ? ' empty' : '')
+    b.dataset.cmd = `banner-select-${i}`
+    b.setAttribute('aria-label', `Muster ${BANNERS[i].name}`)
+    b.innerHTML = bannerIcon(i, 34) + `<span class="count">${n}</span>`
+    b.addEventListener('click', () => selectBanner(g, i))
+    strip.appendChild(b)
+  }
+  el('army-all').classList.toggle('active', g.activeBanner === KINGS_BANNER)
 }
 
 export function syncUI(g: Game): void {
@@ -878,9 +1005,12 @@ export function syncUI(g: Game): void {
   const first = sel[0]
   const sameKind = sel.length > 0 && sel.every(e => e.kind === first.kind)
   const selKey = g.selection.join(',')
-  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null; agePick = false }
+  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null; agePick = false; bannerPick = false }
 
-  if (g.placing) {
+  const HALLS = ['barracks', 'kingsbarracks', 'archeryrange', 'stable', 'cavalryschool', 'siegeworkshop']
+  if (bannerPick && first && HALLS.includes(first.kind) && first.team === 0 && first.complete) {
+    recruitBannerDock(g, dock, first)
+  } else if (g.placing) {
     const cross = document.createElement('button')
     cross.className = 'cmd ghost'
     cross.dataset.cmd = 'cancel-place'
@@ -960,6 +1090,7 @@ export function syncUI(g: Game): void {
         cost: SCHOOL_KNIGHT_COST, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
+    recruitBannerDock(g, dock, first)
   } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
@@ -975,6 +1106,7 @@ export function syncUI(g: Game): void {
         cost: UNITS.swordsman.cost, locked: g.age[0] < (UNITS.swordsman.age ?? 1) },
       () => tryTrain(g, first, 'swordsman')))
     champDock(g, dock, first)
+    recruitBannerDock(g, dock, first)
   } else if (first && first.kind === 'siegeworkshop' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-mangonel', label: 'Build mangonel — lobs a splash boulder at clumps',
@@ -984,11 +1116,13 @@ export function syncUI(g: Game): void {
       { cmd: 'train-trebuchet', label: 'Build trebuchet — outranges every fortress, once planted',
         icon: spriteIcon('trebuchet'), cost: UNITS.trebuchet.cost },
       () => tryTrain(g, first, 'trebuchet')))
+    recruitBannerDock(g, dock, first)
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-archer', label: 'Train longbowman', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
       () => tryTrain(g, first, 'archer')))
     champDock(g, dock, first)
+    recruitBannerDock(g, dock, first)
   } else if (first && first.kind === 'stable' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
@@ -998,6 +1132,7 @@ export function syncUI(g: Game): void {
         cost: UNITS.knight.cost, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
+    recruitBannerDock(g, dock, first)
   } else if (sameKind && first.kind === 'villager') {
     if (buildCat === null) {
       // two clear doors: what kind of building?
@@ -1042,6 +1177,8 @@ export function syncUI(g: Game): void {
           }))
       }
     }
+  } else if (sel.some(e => canBanner(e) && e.team === 0)) {
+    bannerDock(g, dock, sel)
   }
 
   el('dock').classList.toggle('hidden', dock.children.length === 0)

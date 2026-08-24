@@ -555,7 +555,7 @@ const stableDock = await page3.evaluate(() => ({
   locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
 }))
 console.log('stable dock:', stableDock)
-if (stableDock.buttons.join(',') !== 'train-scout,train-knight,champ-cavalry')
+if (stableDock.buttons.join(',') !== 'train-scout,train-knight,champ-cavalry,recruit-banner')
   throw new Error('stable dock wrong: ' + stableDock.buttons.join(','))
 if (!stableDock.locked.includes('train-knight')) throw new Error('knight should be locked until the Castle Age')
 if (!stableDock.locked.includes('champ-cavalry')) throw new Error('champions should be locked until the Castle Age')
@@ -734,6 +734,165 @@ await page3.waitForTimeout(400)
 await page3.screenshot({ path: 'shots/17-knight.png' })
 if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + knightBorn.hp)
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
+await waitSim(page3, 1)
+
+// 4.6652) banners: the King's Army by default, split off a company, and let a
+// hall route its recruits into it
+const bannerStage = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const mk = (k, i) => window.__game.spawn(k, 0, tc.x - 190 + i * 38, tc.y + 250)
+  const spears = [mk('spearman', 0), mk('spearman', 1), mk('spearman', 2)]
+  const knights = [mk('knight', 3), mk('knight', 4)]
+  const monkId = mk('monk', 5)
+  g.selection = []
+  g.uiDirty = true
+  return {
+    spears, knights, monkId,
+    spearBanner: g.byId.get(spears[0]).banner,
+    monkBanner: g.byId.get(monkId).banner ?? null,
+    banners: g.banners,
+  }
+})
+console.log('banner defaults:', {
+  spearBanner: bannerStage.spearBanner, monkBanner: bannerStage.monkBanner, banners: bannerStage.banners,
+})
+if (bannerStage.spearBanner !== 0) throw new Error('soldiers should muster under the King\u2019s Army')
+if (bannerStage.monkBanner !== null) throw new Error('a monk should swear to no banner unless asked')
+if (bannerStage.banners !== 1) throw new Error('only the King\u2019s Army should fly at the start')
+await page3.waitForTimeout(250)
+// the shield musters the King's Army — soldiers and engines, never the monk
+await page3.tap('#army-all')
+await page3.waitForTimeout(250)
+const kingsMuster = await page3.evaluate(({ monkId }) => {
+  const g = window.__game.state
+  return { sel: g.selection.length, hasMonk: g.selection.includes(monkId) }
+}, bannerStage)
+console.log('kings muster:', kingsMuster)
+if (kingsMuster.sel !== 5) throw new Error(`the King\u2019s Army should hold 5, got ${kingsMuster.sel}`)
+if (kingsMuster.hasMonk) throw new Error('an unsworn monk should not answer the King\u2019s muster')
+// select the knights and raise a banner of their own
+await page3.evaluate(({ knights }) => {
+  const g = window.__game.state
+  g.selection = knights.slice()
+  g.uiDirty = true
+}, bannerStage)
+await page3.waitForTimeout(250)
+const unitDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+console.log('soldier dock:', unitDock)
+if (!unitDock.includes('banner-raise')) throw new Error('soldiers should be offered a new banner in the dock')
+if (unitDock.includes('banner-join-0')) throw new Error('no need to offer the banner they already ride under')
+await page3.tap('[data-cmd="banner-raise"]')
+await page3.waitForTimeout(300)
+const raised = await page3.evaluate(({ knights }) => {
+  const g = window.__game.state
+  return {
+    banners: g.banners, active: g.activeBanner,
+    knightBanner: g.byId.get(knights[0]).banner,
+    pennants: document.querySelectorAll('#banner-strip .banner-chip').length,
+  }
+}, bannerStage)
+console.log('banner raised:', raised)
+if (raised.banners !== 2 || raised.knightBanner !== 1) throw new Error('the knights did not take the new banner')
+if (raised.pennants !== 1) throw new Error('the raised banner should fly in the strip')
+// the King's Army no longer counts them; the new banner musters on its own
+await page3.tap('#army-all')
+await page3.waitForTimeout(250)
+const afterSplit = await page3.evaluate(() => window.__game.state.selection.length)
+await page3.tap('[data-cmd="banner-select-1"]')
+await page3.waitForTimeout(250)
+const roseMuster = await page3.evaluate(() => ({
+  sel: window.__game.state.selection.length,
+  active: window.__game.state.activeBanner,
+  chips: [...document.querySelectorAll('#army-chips .army-chip')].map(c => c.dataset.cmd),
+}))
+console.log('after split:', { kings: afterSplit, rose: roseMuster })
+if (afterSplit !== 3) throw new Error(`the King\u2019s Army should be down to 3, got ${afterSplit}`)
+if (roseMuster.sel !== 2 || roseMuster.active !== 1) throw new Error('the new banner did not muster its own')
+if (roseMuster.chips.join(',') !== 'army-knight') throw new Error('the bucklers should show only the active banner: ' + roseMuster.chips.join(','))
+// a monk may be invited to a banner, and released again — soldiers may not
+await page3.evaluate(({ monkId }) => {
+  const g = window.__game.state
+  g.selection = [monkId]
+  g.uiDirty = true
+}, bannerStage)
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="banner-join-1"]')
+await page3.waitForTimeout(250)
+const monkJoined = await page3.evaluate(({ monkId }) => window.__game.state.byId.get(monkId).banner, bannerStage)
+if (monkJoined !== 1) throw new Error('the monk would not join the banner')
+const monkDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+if (!monkDock.includes('banner-leave')) throw new Error('a monk should be releasable from his banner')
+await page3.tap('[data-cmd="banner-leave"]')
+await page3.waitForTimeout(250)
+const monkFree = await page3.evaluate(({ monkId, spears }) => {
+  const g = window.__game.state
+  g.selection = [spears[0]]
+  g.uiDirty = true
+  return g.byId.get(monkId).banner ?? null
+}, bannerStage)
+await page3.waitForTimeout(250)
+const soldierDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+console.log('monk released:', { monkBanner: monkFree, soldierDock })
+if (monkFree !== null) throw new Error('the monk was not released')
+if (soldierDock.includes('banner-leave')) throw new Error('a soldier must always ride under some banner')
+// a hall routes its recruits: it flies the banner, and the next man out joins it
+const raxBanner = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spot = window.__findSpot(44, tc.x + 240, tc.y + 200)
+  const id = window.__game.spawn('barracks', 0, spot.x, spot.y)
+  g.selection = [id]
+  g.uiDirty = true
+  return id
+})
+await page3.waitForTimeout(250)
+const hallDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+if (!hallDock.includes('recruit-banner')) throw new Error('a military hall should choose where its recruits ride')
+await page3.tap('[data-cmd="recruit-banner"]')
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="recruit-to-1"]')
+await page3.waitForTimeout(300)
+await page3.evaluate((raxId) => {
+  const g = window.__game.state
+  g.byId.get(raxId).queue.push({ kind: 'spearman', t: 0.1, total: 8 })
+  window.__game.setSpeed(5)
+}, raxBanner)
+await waitSim(page3, 2)
+const routed = await page3.evaluate(({ raxId, spears }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const rax = g.byId.get(raxId)
+  const fresh = g.ents.filter(e =>
+    e.team === 0 && e.kind === 'spearman' && !spears.includes(e.id))
+  const out = {
+    recruitBanner: rax.recruitBanner,
+    freshBanners: fresh.map(e => e.banner),
+    oldBanners: spears.map(id => g.byId.get(id)).filter(Boolean).map(e => e.banner),
+  }
+  // tidy the practice host away
+  for (const e of [...fresh, ...spears.map(i => g.byId.get(i))]) if (e) e.hp = 0
+  rax.hp = 0
+  g.selection = []
+  g.uiDirty = true
+  return out
+}, { raxId: raxBanner, spears: bannerStage.spears })
+console.log('recruit routing:', routed)
+if (routed.recruitBanner !== 1) throw new Error('the barracks did not take the new banner')
+if (!routed.freshBanners.length || routed.freshBanners.some(b => b !== 1))
+  throw new Error('a recruit from a routed hall should ride under its banner: ' + routed.freshBanners.join(','))
+if (routed.oldBanners.some(b => b !== 0))
+  throw new Error('soldiers already mustered should keep the King\u2019s Army')
+await page3.evaluate(({ knights, monkId }) => {
+  const g = window.__game.state
+  for (const id of [...knights, monkId]) { const e = g.byId.get(id); if (e) e.hp = 0 }
+  g.activeBanner = 0
+  g.uiDirty = true
+}, bannerStage)
 await waitSim(page3, 1)
 
 // 4.6653) the two HUD tools: the deselect frame and info mode

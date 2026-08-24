@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource } from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -392,8 +392,9 @@ export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
 
 // army-panel chip: grab every soldier of one type and bring the camera along
 // selection never yanks the camera — the minimap is the way to travel
-export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanvasElement): void {
-  const troop = g.ents.filter(e => e.team === 0 && e.kind === kind && !e.hidden)
+export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanvasElement, banner?: number): void {
+  const troop = g.ents.filter(e => e.team === 0 && e.kind === kind && !e.hidden &&
+    (banner === undefined || e.banner === banner))
   if (!troop.length) return
   g.placing = null
   g.placePos = null
@@ -402,15 +403,51 @@ export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanva
   g.uiDirty = true
 }
 
-export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
-  // every fighting unit you own (scouts and monks stay out of the battle line)
-  const army = g.ents.filter(e =>
-    e.team === 0 && isUnit(e) && e.kind !== 'villager' && e.kind !== 'scout' && e.kind !== 'monk' && !e.hidden)
-  if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
+// muster one banner: everyone sworn to it answers. A monk with a reliquary in
+// his arms keeps his errand — the relic matters more than the parade.
+export function selectBanner(g: Game, banner: number, canvas?: HTMLCanvasElement): void {
+  g.activeBanner = banner
+  const host = g.ents.filter(e =>
+    e.team === 0 && isUnit(e) && !e.hidden && e.banner === banner && e.relicId === undefined)
   g.placing = null // selection is changing hands; drop any pending placement
   g.placePos = null
   g.placeEnd = null
-  g.selection = army.map(e => e.id)
+  g.selection = host.map(e => e.id)
+  g.uiDirty = true
+  if (!host.length) {
+    toast(g, banner === KINGS_BANNER && g.banners === 1
+      ? 'No soldiers yet — build a Barracks and train some!'
+      : `${BANNERS[banner].name} has no one under it yet.`)
+  }
+}
+
+export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
+  selectBanner(g, KINGS_BANNER, canvas)
+}
+
+// swear a selection to a banner (or, for monks alone, release them from one)
+export function assignBanner(g: Game, units: Ent[], banner: number | null): void {
+  let n = 0
+  for (const u of units) {
+    if (!canBanner(u) || u.team !== 0) continue
+    if (banner === null && mustBanner(u)) continue // a soldier always rides under something
+    u.banner = banner === null ? undefined : banner
+    n++
+  }
+  if (!n) { toast(g, 'Only soldiers, engines and monks ride under a banner.'); return }
+  toast(g, banner === null
+    ? `${n} released from the banner.`
+    : `${n} now ride${n === 1 ? 's' : ''} under ${BANNERS[banner].name}.`)
+  g.uiDirty = true
+}
+
+// raise the next banner in the roll and hand it whatever is selected
+export function raiseBanner(g: Game, units: Ent[]): void {
+  if (g.banners >= BANNER_MAX) { toast(g, 'Every banner is already flying.'); return }
+  const banner = g.banners++
+  if (units.length) assignBanner(g, units, banner) // a hall may raise one with nobody yet
+  g.activeBanner = banner
+  toast(g, `${BANNERS[banner].name} rides out — the King's Army no longer counts them.`)
   g.uiDirty = true
 }
 

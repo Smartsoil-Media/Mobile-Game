@@ -11,7 +11,7 @@ import {
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
   TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
-  dist, isUnit, isBuilding, isResource, isSiege,
+  dist, isUnit, isBuilding, isResource, isSiege, mustBanner,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { lineClear, findPath, inWater, streamDist } from './nav'
@@ -748,6 +748,8 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     const a = Math.random() * Math.PI * 2
     const d = e.r + 18
     const u = spawn(g, q.kind, e.team, e.x + Math.cos(a) * d, e.y + Math.abs(Math.sin(a)) * d + 6)
+    // recruits ride under whatever banner this hall flies (monks still swear to none)
+    if (e.team === 0 && e.recruitBanner !== undefined && mustBanner(u)) u.banner = e.recruitBanner
     puff(g, u.x, u.y, '#FBF3E4', 6)
     if (e.team === 0) g.uiDirty = true
   }
