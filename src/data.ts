@@ -4,13 +4,15 @@ export type Team = 0 | 1
 export const NEUTRAL = -1
 
 export type Kind =
-  | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'
+  | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
+  | 'church' | 'ministry'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
   | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
-  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag' | 'croc'
+  | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag' | 'croc' | 'relic'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
+  | 'church' | 'ministry'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
   | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
 
@@ -40,7 +42,7 @@ export interface Ent {
   maxHp: number
   seed: number
   // units
-  state?: 'idle' | 'move' | 'attackmove' | 'attack' | 'gather' | 'return' | 'build' | 'garrison'
+  state?: 'idle' | 'move' | 'attackmove' | 'attack' | 'gather' | 'return' | 'build' | 'garrison' | 'fetchrelic' | 'enshrine'
   hidden?: boolean // garrisoned inside a building; still alive and counted in pop
   tx?: number
   ty?: number
@@ -67,6 +69,10 @@ export interface Ent {
   lastX?: number
   lastY?: number
   phase?: number
+  relicId?: number // the relic a monk is carrying
+  // relics
+  heldBy?: number // the monk carrying this relic
+  shrineId?: number // the church or ministry this relic is enshrined in
   // buildings
   complete?: boolean
   progress?: number
@@ -156,6 +162,7 @@ export const UNITS: Record<string, {
   archer: { hp: 40, dmg: 6, range: 110, cd: 1.6, speed: 35, aggro: 150, cost: cost({ food: 30, gold: 35 }), time: 10, r: 10, los: 200, age: 2, name: 'Longbowman' },
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
   knight: { hp: 110, dmg: 11, range: 16, cd: 0.9, speed: 50, aggro: 140, cost: cost({ food: 60, gold: 75 }), time: 12, r: 13, los: 220, age: 3, name: 'Knight' },
+  monk: { hp: 45, dmg: 0, range: 14, cd: 1.0, speed: 34, aggro: 0, cost: cost({ gold: 100 }), time: 16, r: 10, los: 190, age: 3, name: 'Monk' },
 }
 
 export const BUILDINGS: Record<string, {
@@ -172,6 +179,8 @@ export const BUILDINGS: Record<string, {
   lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
+  church: { hp: 320, r: 30, foot: 34, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
+  ministry: { hp: 350, r: 32, foot: 36, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
   wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
   gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
   // Landmarks — building one IS the age-up; it dawns when the walls rise
@@ -251,13 +260,27 @@ export const RESOURCES: Record<string, { r: number; amount: number; gives: ResKi
 }
 
 // ---- economy techs: researched the honest way at their home buildings ----
-export type TechId = 'steelaxes' | 'wheelbarrow' | 'minerspicks'
+export type TechId = 'steelaxes' | 'wheelbarrow' | 'minerspicks' | 'tithebarns' | 'sanctuary'
 export const TECHS: Record<TechId, { name: string; blurb: string; at: Kind; cost: Cost; time: number }> = {
   steelaxes: { name: 'Steel Axes', blurb: 'Villagers chop wood 20% faster', at: 'lumbercamp', cost: cost({ food: 100, wood: 75 }), time: 30 },
   wheelbarrow: { name: 'Wheelbarrow', blurb: 'Villagers gather food 20% faster', at: 'mill', cost: cost({ food: 100, wood: 75 }), time: 30 },
   minerspicks: { name: "Miner's Picks", blurb: 'Villagers mine gold and stone 20% faster', at: 'miningcamp', cost: cost({ food: 100, wood: 75 }), time: 30 },
+  // the ministry's faith techs — the quiet arts of the Castle Age
+  tithebarns: { name: 'Tithe Barns', blurb: 'Enshrined relics also trickle food', at: 'ministry', cost: cost({ food: 150, gold: 100 }), time: 30 },
+  sanctuary: { name: 'Sanctuary', blurb: 'Monks heal twice as fast, twice as far', at: 'ministry', cost: cost({ food: 100, gold: 100 }), time: 30 },
 }
-export const NO_TECHS: Record<TechId, boolean> = { steelaxes: false, wheelbarrow: false, minerspicks: false }
+export const NO_TECHS: Record<TechId, boolean> = { steelaxes: false, wheelbarrow: false, minerspicks: false, tithebarns: false, sanctuary: false }
+
+// ---- relics and the monks who carry them (Castle Age) ----
+// A relic enshrined in a church or ministry tithes gold on its own;
+// Tithe Barns adds a food tithe beside it.
+export const RELIC_GOLD_RATE = 0.5
+export const RELIC_FOOD_RATE = 0.25
+export const MONK_HEAL_RATE = 1 // hp per tick to wounded friends nearby
+export const MONK_HEAL_RADIUS = 70
+export const MONK_HEAL_TICK = 1
+export const SANCTUARY_HEAL_RATE = 2
+export const SANCTUARY_HEAL_RADIUS = 110
 
 // deer: shy little herds — hunt one down and its meat hauls home as food
 export const DEER_HP = 24
@@ -324,13 +347,14 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 
 export function isUnit(e: Ent): boolean {
   return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
-    e.kind === 'archer' || e.kind === 'scout' || e.kind === 'knight'
+    e.kind === 'archer' || e.kind === 'scout' || e.kind === 'knight' || e.kind === 'monk'
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
     e.kind === 'miningcamp' || e.kind === 'mill' ||
     e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate' ||
+    e.kind === 'church' || e.kind === 'ministry' ||
     e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep' ||
     e.kind === 'chamberofcommerce' || e.kind === 'cavalryschool' || e.kind === 'royalvineyard' || e.kind === 'redpalace'
 }

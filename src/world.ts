@@ -28,6 +28,9 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
   if (kind === 'crag') {
     // bare rock: pure terrain, sized by whoever raises it
     e.r = 40; e.hp = e.maxHp = 1
+  } else if (kind === 'relic') {
+    // a holy relic on its wayside plinth — only a monk may lift it
+    e.r = 10; e.hp = e.maxHp = 1
   } else if (isUnit(e)) {
     const s = UNITS[kind]
     e.r = s.r; e.hp = e.maxHp = s.hp
@@ -170,6 +173,11 @@ export function createGame(opts?: { seed?: number }): Game {
     for (const herd of [
       { x: 800, y: 300, n: 3 }, { x: 620, y: 180, n: 3 }, { x: 1420, y: 1100, n: 3 },
     ]) patchAt(herd.x, herd.y, 'deer', herd.n, 55, 12)
+    // Holy relics rest on wayside plinths in the contested middle — fixed
+    // spots, spawned last so the classic map's dice fall exactly as always
+    for (const rl of [{ x: 860, y: 460 }, { x: 1140, y: 760 }, { x: 700, y: 950 }]) {
+      spawn(g, 'relic', NEUTRAL, rl.x, rl.y); mark(rl.x, rl.y, 14)
+    }
   } else {
     // ---- a fresh meadow: homes in opposite corners, kit guaranteed closish ----
     const jig = () => (rnd() - 0.5) * 0.06
@@ -296,6 +304,19 @@ export function createGame(opts?: { seed?: number }): Game {
     for (let i = 0; i < 7; i++) {
       const s = anySpot(300, 14)
       if (s) patchAt(s.x, s.y, 'deer', 3, 55, 12)
+    }
+    // holy relics rest in the wilds, well away from either home — worth a
+    // monk's pilgrimage once the Castle Age dawns
+    for (let i = 0; i < 5; i++) {
+      for (let tries = 0; tries < 60; tries++) {
+        const x = 300 + rnd() * (W - 600)
+        const y = 260 + rnd() * (H - 520)
+        if (dist(x, y, pTC.x, pTC.y) < 600 || dist(x, y, eTC.x, eTC.y) < 600) continue
+        if (!clear(x, y, 16)) continue
+        spawn(g, 'relic', NEUTRAL, x, y)
+        mark(x, y, 16)
+        break
+      }
     }
   }
 
@@ -468,6 +489,8 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
     if (e.kind === 'crag') continue // terrain, not a thing to select
     if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
     if ((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // wildlife slips out of sight
+    if (e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined ||
+      g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)) continue // a relic must be found, and free, to tap
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }
@@ -546,6 +569,8 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
       const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -6 : 6
       if (Math.abs(x - e.x) < f + of + gap && Math.abs(y - e.y) < f + of + gap) return false
     } else {
+      // a carried or enshrined relic travels with its keeper — no ground claim
+      if (e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined)) continue
       // square vs round resource: nearest point on the square to the circle
       const px = Math.max(x - f, Math.min(x + f, e.x))
       const py = Math.max(y - f, Math.min(y + f, e.y))

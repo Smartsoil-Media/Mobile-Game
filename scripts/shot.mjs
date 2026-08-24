@@ -100,15 +100,15 @@ const ecoDock = await page.evaluate(() => ({
   disabled: [...document.querySelectorAll('#dock-buttons button.disabled')].map(b => b.dataset.cmd),
 }))
 console.log('economy menu:', ecoDock)
-if (ecoDock.buttons.join(',') !== 'back,build-house,build-farm,build-mill,build-lumbercamp,build-miningcamp,build-towncenter')
+if (ecoDock.buttons.join(',') !== 'back,build-house,build-farm,build-mill,build-lumbercamp,build-miningcamp,build-towncenter,build-church,build-ministry')
   throw new Error('economy menu wrong: ' + ecoDock.buttons.join(','))
-if (ecoDock.canvases !== 6) throw new Error('economy menu should use 6 sprite icons')
+if (ecoDock.canvases !== 8) throw new Error('economy menu should use 8 sprite icons')
 if (!ecoDock.disabled.includes('build-towncenter')) throw new Error('unaffordable town hall not greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 0 })
 await page.waitForTimeout(150)
 const allDisabled = await page.evaluate(() =>
   document.querySelectorAll('#dock-buttons button.disabled').length)
-if (allDisabled !== 6) throw new Error('with 0 wood all economy buildings should be greyed out')
+if (allDisabled !== 8) throw new Error('with 0 wood all economy buildings should be greyed out')
 await page.evaluate(() => { window.__game.state.res[0].wood = 100 })
 await page.waitForTimeout(150)
 await page.tap('[data-cmd="back"]')
@@ -763,6 +763,175 @@ console.log('white keep defense:', keepFight)
 if (keepFight.fired < 5) throw new Error('the White Keep barely fired')
 if (!keepFight.raiderDead) throw new Error('the White Keep failed to stop a lone raider')
 if (!keepFight.keepAlive) throw new Error('the White Keep fell to a lone raider?!')
+await waitSim(page3, 1)
+
+// 4.67) the faith: relics rest in the wilds; a church ordains a monk; the monk
+// fetches a relic, enshrines it, and its tithes flow; the ministry researches;
+// and a monk quietly heals the hurt standing near him
+const faithSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const relics = g.ents.filter(e => e.kind === 'relic')
+  const reachable = relics.filter(r => !!window.__game.findPath(0, tc.x, tc.y, r.x, r.y)).length
+  const spot = window.__findSpot(34, tc.x, tc.y)
+  const churchId = window.__game.spawn('church', 0, spot.x, spot.y)
+  // room and board for the ordination: gold for the fee, a house for the cot
+  g.res[0].gold = Math.max(g.res[0].gold, 200)
+  const hs = window.__findSpot(28, tc.x, tc.y)
+  const houseId = window.__game.spawn('house', 0, hs.x, hs.y)
+  window.__game.select(churchId)
+  return { relics: relics.length, reachable, churchId, houseId }
+})
+console.log('faith setup:', faithSetup)
+if (faithSetup.relics !== 3) throw new Error('the classic meadow should hold 3 relics, found ' + faithSetup.relics)
+if (faithSetup.reachable !== 3) throw new Error('a classic relic is unreachable: ' + faithSetup.reachable + '/3')
+await page3.waitForTimeout(250)
+if (!(await page3.isVisible('[data-cmd="train-monk"]'))) throw new Error('church dock missing the monk button')
+await page3.tap('[data-cmd="train-monk"]')
+await page3.waitForTimeout(250)
+const ordination = await page3.evaluate(({ churchId }) => {
+  const g = window.__game.state
+  const church = g.byId.get(churchId)
+  window.__game.setSpeed(20)
+  return {
+    queued: church.queue.length,
+    loader: !!document.querySelector('#prod-panel .prod-chip[data-key^="q"]'),
+  }
+}, faithSetup)
+console.log('ordination:', ordination)
+if (ordination.queued !== 1) throw new Error('the monk never joined the church queue')
+if (!ordination.loader) throw new Error('monk training should show a top-left loader')
+await waitSim(page3, 18)
+const pilgrimage = await page3.evaluate(({ churchId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const monk = g.ents.find(e => e.team === 0 && e.kind === 'monk')
+  if (!monk) return { monk: false }
+  // walk the errand from beside the relic (the long march is pathfinding's test)
+  const relic = g.ents.find(e => e.kind === 'relic')
+  monk.x = relic.x + 34; monk.y = relic.y + 12
+  monk.state = 'fetchrelic'; monk.targetId = relic.id
+  window.__game.setSpeed(10)
+  return { monk: true, monkId: monk.id, relicId: relic.id, churchId }
+}, faithSetup)
+if (!pilgrimage.monk) throw new Error('the church never produced its monk')
+await waitSim(page3, 4)
+const lifted = await page3.evaluate(({ monkId, relicId }) => {
+  const g = window.__game.state
+  const monk = g.byId.get(monkId)
+  const relic = g.byId.get(relicId)
+  return { heldBy: relic.heldBy, carried: monk.relicId === relicId }
+}, pilgrimage)
+console.log('relic lifted:', lifted)
+if (lifted.heldBy !== pilgrimage.monkId || !lifted.carried) throw new Error('the monk failed to lift the relic')
+// baseline gold flow first, so the relic's own tithe shows as the difference
+const baselineStart = await page3.evaluate(() => {
+  const g = window.__game.state
+  return { gold: g.res[0].gold, t: g.t }
+})
+await waitSim(page3, 12)
+const goldBefore = await page3.evaluate(({ monkId, churchId, base }) => {
+  const g = window.__game.state
+  const baseRate = (g.res[0].gold - base.gold) / (g.t - base.t)
+  const monk = g.byId.get(monkId)
+  const church = g.byId.get(churchId)
+  monk.x = church.x + 70; monk.y = church.y + 40
+  monk.state = 'enshrine'; monk.targetId = churchId
+  return { gold: g.res[0].gold, t: g.t, baseRate }
+}, { ...pilgrimage, base: baselineStart })
+await waitSim(page3, 20)
+const enshrined = await page3.evaluate(({ p, before }) => {
+  const g = window.__game.state
+  const relic = g.byId.get(p.relicId)
+  const rate = (g.res[0].gold - before.gold) / (g.t - before.t)
+  return {
+    shrineId: relic.shrineId,
+    baseRate: Math.round(before.baseRate * 100) / 100,
+    rate: Math.round(rate * 100) / 100,
+  }
+}, { p: pilgrimage, before: goldBefore })
+console.log('enshrined:', enshrined)
+if (enshrined.shrineId !== faithSetup.churchId) throw new Error('the relic was never enshrined')
+// the shrine adds ~0.5 gold/s over whatever already trickled (walk time and
+// chunky miner drop-offs blur the edges, hence the generous margin)
+if (enshrined.rate - enshrined.baseRate < 0.25)
+  throw new Error(`the relic tithe barely flowed: ${enshrined.baseRate} -> ${enshrined.rate}`)
+// the ministry: both faith techs on offer, research one to completion
+const ministrySetup = await page3.evaluate(({ churchId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const church = g.byId.get(churchId)
+  const spot = window.__findSpot(36, church.x, church.y)
+  const minId = window.__game.spawn('ministry', 0, spot.x, spot.y)
+  g.res[0].food = Math.max(g.res[0].food, 300)
+  g.res[0].gold = Math.max(g.res[0].gold, 300)
+  window.__game.select(minId)
+  return { minId }
+}, faithSetup)
+await page3.waitForTimeout(250)
+const faithTechs = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button[data-cmd^="research-"]')].map(b => b.dataset.cmd))
+console.log('ministry dock:', faithTechs)
+if (faithTechs.join(',') !== 'research-tithebarns,research-sanctuary')
+  throw new Error('ministry should offer its two faith techs, got: ' + faithTechs.join(','))
+await page3.tap('[data-cmd="research-sanctuary"]')
+await page3.waitForTimeout(250)
+const sanctStart = await page3.evaluate(({ minId }) => {
+  const g = window.__game.state
+  const min = g.byId.get(minId)
+  window.__game.setSpeed(20)
+  return { research: min.research?.id, loader: !!document.querySelector('#prod-panel .prod-chip[data-key^="r"]') }
+}, ministrySetup)
+console.log('sanctuary research:', sanctStart)
+if (sanctStart.research !== 'sanctuary') throw new Error('sanctuary research never began')
+if (!sanctStart.loader) throw new Error('faith research should show a top-left loader')
+await waitSim(page3, 32)
+const sanctDone = await page3.evaluate(() => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  return { sanctuary: g.techs[0].sanctuary }
+})
+console.log('sanctuary done:', sanctDone)
+if (!sanctDone.sanctuary) throw new Error('sanctuary research never finished')
+// healing hands: a battered villager mends beside the monk (sanctuary: 2/s).
+// A villager patient never auto-engages passers-by, so the pair stays put.
+const healSetup = await page3.evaluate(({ monkId }) => {
+  const g = window.__game.state
+  const monk = g.byId.get(monkId)
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const quiet = window.__findSpot(26, tc.x, tc.y)
+  monk.x = quiet.x; monk.y = quiet.y
+  monk.state = 'idle'; monk.targetId = undefined
+  const sid = window.__game.spawn('villager', 0, quiet.x + 22, quiet.y)
+  g.byId.get(sid).hp = 12
+  window.__game.setSpeed(10)
+  return { sid }
+}, pilgrimage)
+await waitSim(page3, 8)
+const healCheck = await page3.evaluate(({ sid, monkId, minId, churchId, houseId }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const s = g.byId.get(sid)
+  const hp = s ? s.hp : null
+  // tidy the practice quarter away: units and shrines stand down, the freed
+  // relic rests where the church stood (harmless to every later test)
+  if (s) s.hp = 0
+  const monk = g.byId.get(monkId)
+  if (monk) monk.hp = 0
+  const min = g.byId.get(minId)
+  if (min) min.hp = 0
+  const church = g.byId.get(churchId)
+  if (church) church.hp = 0
+  const house = g.byId.get(houseId)
+  if (house) house.hp = 0
+  g.selection = []
+  g.uiDirty = true
+  return { hp: hp === null ? null : Math.round(hp) }
+}, { ...pilgrimage, sid: healSetup.sid, minId: ministrySetup.minId,
+  churchId: faithSetup.churchId, houseId: faithSetup.houseId })
+console.log('monk healing (from 12):', healCheck)
+if (healCheck.hp === null) throw new Error('the healing patient vanished mid-test')
+if (healCheck.hp < 20) throw new Error('the monk barely healed: ' + healCheck.hp)
 await waitSim(page3, 1)
 
 // 4.67) palisades: drag a fence line, posts chain-build, gates let friends through
@@ -2361,6 +2530,9 @@ for (const seed of [7, 13, 2026]) {
       // and nothing spawned in the drink (except the crocodiles, who live there)
       reachable: !!window.__game.findPath(0, tcs[0].x, tcs[0].y, tcs[1].x, tcs[1].y),
       wetSpawns: g.ents.filter(e => e.kind !== 'croc' && window.__game.inWater(e.x, e.y)).length,
+      relics: g.ents.filter(e => e.kind === 'relic').length,
+      relicNearTC: Math.round(Math.min(...g.ents.filter(e => e.kind === 'relic')
+        .flatMap(r => tcs.map(tc => Math.hypot(r.x - tc.x, r.y - tc.y))))),
     }
   })
   console.log(`random map (seed ${seed}):`, JSON.stringify(inv))
@@ -2403,6 +2575,8 @@ for (const seed of [7, 13, 2026]) {
   if (inv.crocs < 3) throw new Error('the water is short of crocodiles: ' + inv.crocs)
   if (!inv.reachable) throw new Error('the stream strands the two villages — no path home to home')
   if (inv.wetSpawns > 0) throw new Error('entities spawned in the water: ' + inv.wetSpawns)
+  if (inv.relics < 4) throw new Error('the wilds are short of relics: ' + inv.relics)
+  if (inv.relicNearTC < 550) throw new Error('a relic spawned on someone\'s doorstep: ' + inv.relicNearTC)
   await pg.close()
 }
 // two different seeds must not deal the same map

@@ -116,6 +116,29 @@ chase at its edge.
   **Wheelbarrow** at the Mill (+20% food, farms included), **Miner's Picks**
   at the Mining Camp (+20% gold & stone). The enemy researches them too.
 
+## Relics, monks, churches & ministries (Castle Age)
+
+**Holy relics** rest on wayside plinths in the contested wilds — golden
+reliquaries that gleam on the minimap once found (three on the classic
+meadow, five on every rolled map, always well away from both homes).
+Only a **monk** may lift one.
+
+- The **Church** (150 wood + 50 gold, Castle Age, economy menu) ordains
+  **monks** (100 gold): unarmed wanderers who quietly **heal** nearby
+  friendly units (1 hp/s) and answer taps on relics — the monk walks
+  over, hoists the reliquary overhead, and carries it home
+- Tap a church or **Ministry** with a laden monk selected and the relic
+  is **enshrined** there: each relic tithes a steady **+0.5 gold/s**
+  forever (little gold caskets line the shrine's front). Fell the shrine
+  and the relics spill out for anyone's monk to claim anew; fell a
+  carrying monk and the relic drops where he stood
+- The **Ministry** (175 wood + 75 gold, Castle Age) also researches the
+  faith techs: **Tithe Barns** (150f + 100g — relics also trickle
+  +0.25 food/s) and **Sanctuary** (100f + 100g — monks heal twice as
+  fast, twice as far)
+- The rival village keeps the faith too: at Castle it raises a church,
+  ordains monks, and **races you for every unclaimed relic**
+
 ## The menu, the banners, the rivalry
 
 The game opens on a **main menu**: **Solo** leads to the banner screen —

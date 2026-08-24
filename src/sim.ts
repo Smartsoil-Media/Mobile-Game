@@ -5,6 +5,8 @@ import {
   KEEP_RANGE, KEEP_VOLLEY, KEEP_DMG, KEEP_BASE_ARROWS,
   DEER_STRIKE, DEER_AMBLE, DEER_FLEE,
   CROC_DMG, CROC_CD, CROC_AGGRO, CROC_LEASH, CROC_SPEED,
+  RELIC_GOLD_RATE, RELIC_FOOD_RATE, MONK_HEAL_RATE, MONK_HEAL_RADIUS, MONK_HEAL_TICK,
+  SANCTUARY_HEAL_RATE, SANCTUARY_HEAL_RADIUS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   dist, isUnit, isBuilding, isResource,
@@ -435,7 +437,7 @@ function updateCroc(g: Game, e: Ent, dt: number): void {
       t.hp -= CROC_DMG
       puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 3, 'hit')
       if (t.team === 0) alertPing(g, t.x, t.y)
-      if ((t.kind === 'villager' || t.kind === 'scout') && t.targetId !== e.id) {
+      if ((t.kind === 'villager' || t.kind === 'scout' || t.kind === 'monk') && t.targetId !== e.id) {
         // the bitten bolt for safety (hunters committed to the fight stay in it)
         const dx = t.x - e.x, dy = t.y - e.y
         const dl = Math.hypot(dx, dy) || 1
@@ -538,6 +540,74 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
         }
       }
       break
+    }
+  }
+}
+
+// Monks carry no weapon: they fetch relics, enshrine them, and quietly mend
+// the hurts of anyone standing near.
+function updateMonk(g: Game, e: Ent, dt: number): void {
+  const carrying = e.relicId !== undefined ? g.byId.get(e.relicId) : undefined
+  if (carrying) { carrying.x = e.x; carrying.y = e.y - 2 } // the relic travels in his arms
+  switch (e.state) {
+    case 'move': {
+      if (moveToward(g, e, e.tx!, e.ty!, unitSpeed(g, e), dt)) e.state = 'idle'
+      break
+    }
+    case 'garrison': garrisonWalk(g, e, dt); break
+    case 'fetchrelic': {
+      const relic = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+      if (!relic || relic.kind !== 'relic' || relic.heldBy !== undefined || relic.shrineId !== undefined ||
+        e.relicId !== undefined) {
+        e.state = 'idle' // gone, claimed, or his arms are already full
+        break
+      }
+      if (inRange(e, relic, 8)) {
+        relic.heldBy = e.id
+        e.relicId = relic.id
+        puff(g, e.x, e.y - 14, '#E9B44C', 5, 'spark')
+        if (e.team === 0) toast(g, 'A holy relic! Carry it to a church or ministry.')
+        e.state = 'idle'
+      } else {
+        moveToward(g, e, relic.x, relic.y, unitSpeed(g, e), dt)
+      }
+      break
+    }
+    case 'enshrine': {
+      const b = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
+      if (!b || !carrying || !b.complete || (b.kind !== 'church' && b.kind !== 'ministry') || b.team !== e.team) {
+        e.state = 'idle'
+        break
+      }
+      if (inRange(e, b, 10)) {
+        carrying.shrineId = b.id
+        carrying.heldBy = undefined
+        carrying.x = b.x
+        carrying.y = b.y
+        e.relicId = undefined
+        puff(g, b.x, b.y - b.r, '#E9B44C', 8, 'spark')
+        if (e.team === 0) toast(g, 'The relic is enshrined — its tithes flow in gold.')
+        g.uiDirty = true
+        e.state = 'idle'
+      } else {
+        moveToward(g, e, b.x, b.y, unitSpeed(g, e), dt)
+      }
+      break
+    }
+    default: break // idle: stand, sway, mend
+  }
+  e.gatherT = (e.gatherT ?? 0) - dt
+  if (e.gatherT <= 0) {
+    e.gatherT = MONK_HEAL_TICK
+    const blessed = g.techs[e.team]?.sanctuary
+    const radius = blessed ? SANCTUARY_HEAL_RADIUS : MONK_HEAL_RADIUS
+    const rate = blessed ? SANCTUARY_HEAL_RATE : MONK_HEAL_RATE
+    for (const u of g.ents) {
+      if (u.team !== e.team || u === e || !isUnit(u) || u.hidden) continue
+      if (u.hp <= 0 || u.hp >= u.maxHp) continue
+      if (dist(e.x, e.y, u.x, u.y) > radius) continue
+      u.hp = Math.min(u.maxHp, u.hp + rate)
+      if (Math.random() < 0.35) puff(g, u.x, u.y - u.r - 6, '#F5E6A8', 1, 'spark')
     }
   }
 }
@@ -664,6 +734,18 @@ function killEnt(g: Game, e: Ent): void {
       }
     }
   }
+  // a fallen monk drops his burden where he stands; a fallen shrine spills its
+  // relics onto the grass for anyone's monk to claim anew
+  for (const rl of g.ents) {
+    if (rl.kind !== 'relic') continue
+    if (rl.heldBy === e.id) { rl.heldBy = undefined; rl.x = e.x; rl.y = e.y }
+    if (rl.shrineId === e.id) {
+      rl.shrineId = undefined
+      const a = Math.random() * Math.PI * 2
+      rl.x = e.x + Math.cos(a) * (e.r + 16)
+      rl.y = e.y + Math.sin(a) * (e.r * 0.6) + 14
+    }
+  }
   if (e.kind === 'tree' || isBuilding(e)) g.navDirty = true // terrain changed
   const i = g.ents.indexOf(e)
   if (i >= 0) g.ents.splice(i, 1)
@@ -699,6 +781,9 @@ function separation(g: Game): void {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'deer') continue // soft little things — they step around us
       if (o.kind === 'croc' && o.hp <= 0) continue // a bundle doesn't block the bank
+      // a relic in a monk's arms (or on a shrine) rides along — only a free
+      // wayside plinth stands its little ground
+      if (o.kind === 'relic' && (o.heldBy !== undefined || o.shrineId !== undefined)) continue
       if (o.kind === 'tree' && (o.amount ?? 0) <= 0) continue // chopped through — a path!
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
@@ -753,6 +838,7 @@ export function update(g: Game, dt: number): void {
       e.stepped = false // set again by moveToward if the unit walks this tick
       e.cd = Math.max(0, (e.cd ?? 0) - dt)
       if (e.kind === 'villager') updateVillager(g, e, dt)
+      else if (e.kind === 'monk') updateMonk(g, e, dt)
       else updateSoldier(g, e, dt)
     } else if (e.kind === 'deer') {
       updateDeer(g, e, dt)
@@ -761,6 +847,15 @@ export function update(g: Game, dt: number): void {
     } else if (isBuilding(e)) {
       updateBuilding(g, e, dt)
     }
+  }
+
+  // enshrined relics tithe gold (and food, once the Tithe Barns are raised)
+  for (const rl of g.ents) {
+    if (rl.kind !== 'relic' || rl.shrineId === undefined) continue
+    const shrine = g.byId.get(rl.shrineId)
+    if (!shrine) { rl.shrineId = undefined; continue }
+    g.res[shrine.team].gold += RELIC_GOLD_RATE * dt
+    if (g.techs[shrine.team]?.tithebarns) g.res[shrine.team].food += RELIC_FOOD_RATE * dt
   }
 
   // arrows in flight

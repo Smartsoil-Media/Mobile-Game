@@ -244,6 +244,18 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     }
   }
 
+  // a monk with a relic taps your church or ministry: enshrine it there
+  if (hit && hit.team === 0 && (hit.kind === 'church' || hit.kind === 'ministry') && hit.complete) {
+    const carriers = myUnits.filter(m => m.kind === 'monk' && m.relicId !== undefined)
+    if (carriers.length) {
+      for (const m of carriers) {
+        m.state = 'enshrine'
+        m.targetId = hit.id
+      }
+      return
+    }
+  }
+
   // units tap one of your watchtowers (or a fortress landmark): climb inside
   if (hit && hit.team === 0 && (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') && hit.complete && myUnits.length) {
     for (const u of myUnits) {
@@ -264,9 +276,26 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   if (myUnits.length) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
-    const soldiers = myUnits.filter(e => e.kind !== 'villager')
+    const monks = myUnits.filter(e => e.kind === 'monk')
+    const soldiers = myUnits.filter(e => e.kind !== 'villager' && e.kind !== 'monk')
     if (hit && hit.team === 1) {
-      commandAttack(g, myUnits, hit)
+      // monks carry no weapon — they walk along while the others fight
+      commandAttack(g, myUnits.filter(e => e.kind !== 'monk'), hit)
+      if (monks.length) commandMove(g, monks, x, y)
+      return
+    }
+    // a wayside relic: only a monk may lift it
+    if (hit && hit.kind === 'relic') {
+      const freeHands = monks.filter(m => m.relicId === undefined)
+      if (freeHands.length) {
+        for (const m of freeHands) {
+          m.state = 'fetchrelic'
+          m.targetId = hit.id
+        }
+      } else {
+        if (!monks.length) toast(g, 'Only a monk may carry a relic — train one at a Church.')
+        commandMove(g, myUnits, x, y)
+      }
       return
     }
     // a live crocodile: soldiers put it to the sword, villagers hunt it
@@ -366,9 +395,9 @@ export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanva
 }
 
 export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
-  // every fighting unit you own (scouts stay out of the battle line)
+  // every fighting unit you own (scouts and monks stay out of the battle line)
   const army = g.ents.filter(e =>
-    e.team === 0 && isUnit(e) && e.kind !== 'villager' && e.kind !== 'scout' && !e.hidden)
+    e.team === 0 && isUnit(e) && e.kind !== 'villager' && e.kind !== 'scout' && e.kind !== 'monk' && !e.hidden)
   if (!army.length) { toast(g, 'No soldiers yet — build a Barracks and train some!'); return }
   g.placing = null // selection is changing hands; drop any pending placement
   g.placePos = null

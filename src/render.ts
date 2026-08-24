@@ -9,6 +9,7 @@ import {
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
   drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
+  drawRelic, drawChurch, drawMinistry, drawMonk,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -495,9 +496,19 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
 
   // entities, painter's order (garrisoned units inside, enemy units in fog
   // unseen; deer, like anything that moves, only exist in live sight)
+  // enshrined relics show as gold pips on their shrine (carried ones ride
+  // with the monk), so count them per building before the paint
+  const shrined = new Map<number, number>()
+  for (const rl of g.ents) {
+    if (rl.kind === 'relic' && rl.shrineId !== undefined) {
+      shrined.set(rl.shrineId, (shrined.get(rl.shrineId) ?? 0) + 1)
+    }
+  }
   const sorted = g.ents
     .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
-      !((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1))
+      !((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) &&
+      !(e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined ||
+        g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)))
     .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     switch (e.kind) {
@@ -508,6 +519,9 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'goldmine': drawMine(ctx, e); break
       case 'berrybush': drawBush(ctx, e, time); break
       case 'stonequarry': drawQuarry(ctx, e); break
+      case 'relic': drawRelic(ctx, e, time); break
+      case 'church': e.complete ? drawChurch(ctx, e, time, shrined.get(e.id) ?? 0) : drawSite(ctx, e); break
+      case 'ministry': e.complete ? drawMinistry(ctx, e, time, shrined.get(e.id) ?? 0) : drawSite(ctx, e); break
       case 'farm': e.complete ? drawFarm(ctx, e, time) : drawSite(ctx, e); break
       case 'towncenter': e.complete ? drawTC(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'house': e.complete ? drawHouse(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
@@ -533,6 +547,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
         : drawSite(ctx, e)
         break
       case 'villager': drawVillager(ctx, e, time); break
+      case 'monk': drawMonk(ctx, e, time, e.relicId !== undefined); break
       case 'swordsman': drawSwordsman(ctx, e, time, g.champs[e.team]?.infantry); break
       case 'spearman': drawSpearman(ctx, e, time, g.champs[e.team]?.infantry); break
       case 'archer': drawArcher(ctx, e, time, g.champs[e.team]?.ranged); break
@@ -685,6 +700,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'miningcamp': drawMiningCamp(ctx, ghost); break
       case 'mill': drawMill(ctx, ghost, time, g.age[0]); break
       case 'stable': drawStable(ctx, ghost, time); break
+      case 'church': drawChurch(ctx, ghost, time); break
+      case 'ministry': drawMinistry(ctx, ghost, time); break
       case 'gate': drawGate(ctx, ghost, time, false); break
       case 'abbeymill': drawAbbeyMill(ctx, ghost, time); break
       case 'kingsbarracks': drawKingsBarracks(ctx, ghost, time); break

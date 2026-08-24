@@ -38,7 +38,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-type AIPlaceable = 'house' | 'barracks' | 'farm' | 'mill' | 'stable' | 'archeryrange' | LandmarkKind
+type AIPlaceable = 'house' | 'barracks' | 'farm' | 'mill' | 'stable' | 'archeryrange' | 'church' | LandmarkKind
 
 function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
@@ -182,6 +182,10 @@ export function updateEnemyAI(g: Game, dt: number): void {
     } else if (g.age[1] >= 2 && g.res[1].wood > 250 &&
       !g.ents.some(e => e.team === 1 && (e.kind === 'stable' || e.kind === 'cavalryschool'))) {
       tryPlace(g, 'stable', tc) // a stable, so a fallen scout can be replaced
+    } else if (g.age[1] >= 3 && g.res[1].wood > 260 && g.res[1].gold > 120 &&
+      g.ents.some(e => e.kind === 'relic' && e.heldBy === undefined && e.shrineId === undefined) &&
+      !g.ents.some(e => e.team === 1 && (e.kind === 'church' || e.kind === 'ministry'))) {
+      tryPlace(g, 'church', tc) // a church, while relics still rest unclaimed
     }
   }
 
@@ -210,6 +214,31 @@ export function updateEnemyAI(g: Game, dt: number): void {
       pay(g, 1, spec.cost)
       host.research = { id, t: spec.time, total: spec.time }
       break // one indulgence per think
+    }
+  }
+
+  // -- the faith road: ordain a monk, and race for any relic left unclaimed --
+  const church = g.ents.find(e => e.team === 1 && (e.kind === 'church' || e.kind === 'ministry') && e.complete)
+  if (church) {
+    const monks = g.ents.filter(e => e.team === 1 && e.kind === 'monk')
+    const freeRelics = g.ents.filter(e =>
+      e.kind === 'relic' && e.heldBy === undefined && e.shrineId === undefined)
+    if ((church.queue?.length ?? 0) === 0 && monks.length < Math.min(2, freeRelics.length) &&
+      p.used + queuedUnits(g) < p.cap && canSpend(UNITS.monk.cost)) {
+      pay(g, 1, UNITS.monk.cost)
+      church.queue!.push({ kind: 'monk', t: UNITS.monk.time, total: UNITS.monk.time })
+    }
+    for (const m of monks) {
+      if (m.relicId !== undefined) {
+        if (m.state !== 'enshrine') { m.state = 'enshrine'; m.targetId = church.id }
+      } else if (m.state === 'idle' && freeRelics.length) {
+        let best = freeRelics[0]
+        for (const rl of freeRelics) {
+          if (dist(m.x, m.y, rl.x, rl.y) < dist(m.x, m.y, best.x, best.y)) best = rl
+        }
+        m.state = 'fetchrelic'
+        m.targetId = best.id
+      }
     }
   }
 

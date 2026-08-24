@@ -7,7 +7,7 @@ import {
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
 import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -32,6 +32,8 @@ const ICON = {
 
 const TECH_ICON: Record<TechId, string> = {
   steelaxes: ICON.axe, wheelbarrow: ICON.barrow, minerspicks: ICON.pick,
+  tithebarns: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M5 11 12 5.5 19 11v7.5H5z" fill="#8B6A4A"/><path d="M5 11 12 5.5 19 11l-1.3 1.3L12 7.4l-5.7 4.9z" fill="#6F5238"/><path d="M9.5 18.5v-5.2a2.5 2.5 0 0 1 5 0v5.2z" fill="#5A4632"/><ellipse cx="12" cy="14.6" rx="1.5" ry="2.4" fill="#E9B44C"/><path d="M12 12.4v4.4M10.9 13.4l2.2 2.2M13.1 13.4l-2.2 2.2" stroke="#B8842E" stroke-width="0.7"/></svg>`,
+  sanctuary: `<svg viewBox="0 0 24 24" width="34" height="34"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 19s-6-3.8-6-8a3.4 3.4 0 0 1 6-2.2A3.4 3.4 0 0 1 18 11c0 4.2-6 8-6 8z" fill="#C9525E"/><ellipse cx="12" cy="5.4" rx="4.4" ry="1.5" fill="none" stroke="#E9B44C" stroke-width="1.6"/></svg>`,
 }
 
 function el<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T }
@@ -70,7 +72,10 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     cavalryschool: { scale: 0.6, cx: 0, cy: -9 },
     royalvineyard: { scale: 0.58, cx: 0, cy: -10 },
     redpalace: { scale: 0.46, cx: 0, cy: -24 },
+    church: { scale: 0.6, cx: 0, cy: -14 },
+    ministry: { scale: 0.58, cx: 0, cy: -10 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
+    monk: { scale: 1.55, cx: 0, cy: -7 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
     spearman: { scale: 1.4, cx: 0, cy: -8 },
     archer: { scale: 1.45, cx: 0, cy: -7 },
@@ -103,7 +108,10 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'cavalryschool': drawCavalrySchool(ctx, fake, 0.8); break
     case 'royalvineyard': drawRoyalVineyard(ctx, fake, 0.8); break
     case 'redpalace': drawRedPalace(ctx, fake, 0.8); break
+    case 'church': drawChurch(ctx, fake, 0.8); break
+    case 'ministry': drawMinistry(ctx, fake, 0.8); break
     case 'villager': drawVillager(ctx, fake, 0); break
+    case 'monk': drawMonk(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
     case 'spearman': drawSpearman(ctx, fake, 0); break
     case 'archer': drawArcher(ctx, fake, 0); break
@@ -199,7 +207,7 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight'): void {
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk'): void {
   const s = UNITS[kind]
   const ageReq = unitAgeReq(g, 0, kind)
   if (ageReq > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
@@ -480,6 +488,14 @@ function drawMinimap(g: Game): void {
       if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#BDB8AA'; ctx.fillRect(mx - 1.5, my - 1.5, 3, 3) }
     } else if (e.kind === 'berrybush') {
       if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#C9525E'; ctx.fillRect(mx - 1, my - 1, 2, 2) }
+    } else if (e.kind === 'relic') {
+      // a found, unclaimed relic gleams on the map — worth a pilgrimage
+      if (seen && e.heldBy === undefined && e.shrineId === undefined) {
+        ctx.fillStyle = '#F5D584'
+        ctx.beginPath()
+        ctx.moveTo(mx, my - 2.6); ctx.lineTo(mx + 2.2, my); ctx.lineTo(mx, my + 2.6); ctx.lineTo(mx - 2.2, my)
+        ctx.closePath(); ctx.fill()
+      }
     } else if (isBuilding(e)) {
       if (e.team === 0 || seen) {
         ctx.fillStyle = e.team === 0 ? '#6D9DC5' : '#C4746B'
@@ -682,9 +698,14 @@ export function syncUI(g: Game): void {
           () => ringBell(g, first)))
       }
       }
-  } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill') &&
-    first.complete && first.team === 0) {
+  } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill' ||
+    first.kind === 'ministry') && first.complete && first.team === 0) {
     researchDock(g, dock, first)
+  } else if (first && first.kind === 'church' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-monk', label: 'Ordain a monk — he heals the hurt and carries relics home',
+        icon: spriteIcon('monk'), cost: UNITS.monk.cost, locked: g.age[0] < unitAgeReq(g, 0, 'monk') },
+      () => tryTrain(g, first, 'monk')))
   } else if (first && first.kind === 'cavalryschool' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
@@ -743,7 +764,7 @@ export function syncUI(g: Game): void {
       back.addEventListener('click', () => { buildCat = null; g.uiDirty = true })
       dock.appendChild(back)
       const lists: Record<'economy' | 'military', Buildable[]> = {
-        economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter'],
+        economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter', 'church', 'ministry'],
         military: ['barracks', 'archeryrange', 'stable', 'watchtower', 'wall', 'gate'],
       }
       // symbolic icons where a miniature would be muddy

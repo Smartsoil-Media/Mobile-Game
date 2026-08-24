@@ -1591,6 +1591,169 @@ export function drawSite(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.arc(x, y - e.r - 14, 10, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); ctx.stroke()
 }
 
+// ---------- The faith: relics, churches, ministries ----------
+
+export function drawRelic(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  const glow = 0.5 + Math.sin(t * 2 + e.seed) * 0.25
+  shadow(ctx, x, y + 6, 11, 4)
+  // a soft holy shimmer around the wayside plinth
+  ctx.save()
+  ctx.globalAlpha = 0.16 + glow * 0.1
+  ctx.fillStyle = '#F5D584'
+  ctx.beginPath(); ctx.arc(x, y - 4, 16 + glow * 3, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+  // mossy stone plinth
+  ctx.fillStyle = STONE_FOOT
+  rr(ctx, x - 8, y - 1, 16, 7, 2.5); ctx.fill()
+  ctx.strokeStyle = STONE_FOOT_DOT; ctx.lineWidth = 1.2
+  rr(ctx, x - 8, y - 1, 16, 7, 2.5); ctx.stroke()
+  ctx.fillStyle = '#88A65E'
+  ctx.beginPath(); ctx.ellipse(x - 6, y + 5.5, 3.4, 1.4, 0, 0, Math.PI * 2); ctx.fill()
+  // the golden reliquary: a little gabled chest
+  ctx.fillStyle = '#E9B44C'
+  rr(ctx, x - 6.5, y - 9, 13, 8.5, 1.6); ctx.fill()
+  ctx.fillStyle = '#C98F2B'
+  ctx.beginPath()
+  ctx.moveTo(x - 7.5, y - 8.5)
+  ctx.lineTo(x, y - 14)
+  ctx.lineTo(x + 7.5, y - 8.5)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#F5D584'
+  rr(ctx, x - 1.1, y - 8.2, 2.2, 6.6, 1); ctx.fill()
+  rr(ctx, x - 4.4, y - 6.4, 8.8, 2, 1); ctx.fill()
+  // a spark drifting heavenward now and then
+  const sp = (t * 0.6 + e.seed * 0.13) % 1
+  ctx.globalAlpha = (1 - sp) * 0.8
+  ctx.fillStyle = '#FBF3E4'
+  ctx.beginPath(); ctx.arc(x + Math.sin(e.seed + t) * 4, y - 14 - sp * 12, 1.2, 0, Math.PI * 2); ctx.fill()
+  ctx.globalAlpha = 1
+}
+
+// tiny gold caskets along a shrine's front — one per enshrined relic
+function relicPips(ctx: CanvasRenderingContext2D, x: number, y: number, n: number): void {
+  for (let i = 0; i < Math.min(n, 5); i++) {
+    const px = x + (i - (Math.min(n, 5) - 1) / 2) * 10
+    ctx.fillStyle = '#E9B44C'
+    rr(ctx, px - 3.2, y - 3, 6.4, 4.6, 1); ctx.fill()
+    ctx.fillStyle = '#C98F2B'
+    ctx.beginPath()
+    ctx.moveTo(px - 3.8, y - 2.6); ctx.lineTo(px, y - 5.4); ctx.lineTo(px + 3.8, y - 2.6)
+    ctx.closePath(); ctx.fill()
+  }
+}
+
+export function drawChurch(ctx: CanvasRenderingContext2D, e: Ent, t: number, relics = 0): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 19, 32, 10)
+  // stone nave with a cream upper
+  ctx.fillStyle = STONE_FOOT
+  rr(ctx, x - 22, y - 2, 44, 22, 4); ctx.fill()
+  ctx.fillStyle = WALL
+  rr(ctx, x - 22, y - 18, 44, 20, 5); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 22, y - 18, 44, 20, 5); ctx.stroke()
+  // honey gable roof
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 27, y - 15)
+  ctx.lineTo(x, y - 31)
+  ctx.lineTo(x + 27, y - 15)
+  ctx.quadraticCurveTo(x, y - 21, x - 27, y - 15)
+  ctx.closePath(); ctx.fill()
+  // the little bell tower, cross atop
+  ctx.fillStyle = WALL
+  rr(ctx, x - 5.5, y - 44, 11, 18, 2.5); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.6
+  rr(ctx, x - 5.5, y - 44, 11, 18, 2.5); ctx.stroke()
+  ctx.fillStyle = ROOF_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 8, y - 43); ctx.lineTo(x, y - 52); ctx.lineTo(x + 8, y - 43)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#5A4632'
+  ctx.beginPath(); ctx.arc(x, y - 37, 2.4, 0, Math.PI * 2); ctx.fill() // the bell in its arch
+  ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x, y - 60); ctx.lineTo(x, y - 53)
+  ctx.moveTo(x - 3, y - 57.5); ctx.lineTo(x + 3, y - 57.5)
+  ctx.stroke()
+  // rose window + arched door
+  ctx.fillStyle = '#E8C97A'
+  ctx.beginPath(); ctx.arc(x - 13, y - 9, 3.6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = c.main
+  ctx.beginPath(); ctx.arc(x + 13, y - 9, 3.6, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 6, y + 20); ctx.lineTo(x - 6, y + 6)
+  ctx.quadraticCurveTo(x, y, x + 6, y + 6); ctx.lineTo(x + 6, y + 20)
+  ctx.closePath(); ctx.fill()
+  relicPips(ctx, x, y + 3, relics)
+}
+
+export function drawMinistry(ctx: CanvasRenderingContext2D, e: Ent, t: number, relics = 0): void {
+  const x = e.x, y = e.y
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 20, 35, 11)
+  // a stately dressed-stone hall
+  ctx.fillStyle = '#E4DFCE'
+  rr(ctx, x - 26, y - 20, 52, 41, 5); ctx.fill()
+  ctx.strokeStyle = '#C2BCA8'; ctx.lineWidth = 2
+  rr(ctx, x - 26, y - 20, 52, 41, 5); ctx.stroke()
+  ctx.strokeStyle = 'rgba(140, 133, 112, 0.3)'; ctx.lineWidth = 1.1
+  ctx.beginPath()
+  for (let sy = y - 12; sy < y + 18; sy += 8) { ctx.moveTo(x - 24, sy); ctx.lineTo(x + 24, sy) }
+  ctx.stroke()
+  // low hipped roof with a lantern gable
+  ctx.fillStyle = ROOF_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 31, y - 17)
+  ctx.lineTo(x - 20, y - 30)
+  ctx.lineTo(x + 20, y - 30)
+  ctx.lineTo(x + 31, y - 17)
+  ctx.quadraticCurveTo(x, y - 23, x - 31, y - 17)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = WALL
+  rr(ctx, x - 7, y - 40, 14, 12, 2.5); ctx.fill()
+  ctx.strokeStyle = WALL_EDGE; ctx.lineWidth = 1.6
+  rr(ctx, x - 7, y - 40, 14, 12, 2.5); ctx.stroke()
+  ctx.fillStyle = ROOF
+  ctx.beginPath()
+  ctx.moveTo(x - 9.5, y - 39); ctx.lineTo(x, y - 47); ctx.lineTo(x + 9.5, y - 39)
+  ctx.closePath(); ctx.fill()
+  // the open golden book of records on the lantern
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath()
+  ctx.moveTo(x - 4.5, y - 35.5)
+  ctx.quadraticCurveTo(x, y - 37.5, x, y - 36)
+  ctx.quadraticCurveTo(x, y - 37.5, x + 4.5, y - 35.5)
+  ctx.lineTo(x + 4.5, y - 32)
+  ctx.quadraticCurveTo(x, y - 33.5, x, y - 32.5)
+  ctx.quadraticCurveTo(x, y - 33.5, x - 4.5, y - 32)
+  ctx.closePath(); ctx.fill()
+  // columned porch and tall door
+  ctx.fillStyle = '#D3CEC1'
+  rr(ctx, x - 13, y + 2, 4, 18, 1.6); ctx.fill()
+  rr(ctx, x + 9, y + 2, 4, 18, 1.6); ctx.fill()
+  ctx.fillStyle = WOOD_DARK
+  rr(ctx, x - 6, y + 4, 12, 17, 3); ctx.fill()
+  // tall windows either side
+  ctx.fillStyle = '#E8C97A'
+  rr(ctx, x - 21, y - 14, 5.5, 9, 2); ctx.fill()
+  rr(ctx, x + 15.5, y - 14, 5.5, 9, 2); ctx.fill()
+  // the banner of whoever keeps the ledgers
+  ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 2.2
+  ctx.beginPath(); ctx.moveTo(x + 20, y - 30); ctx.lineTo(x + 20, y - 44); ctx.stroke()
+  const wave = Math.sin(t * 3 + e.seed) * 1.6
+  ctx.fillStyle = c.main
+  ctx.beginPath()
+  ctx.moveTo(x + 20, y - 44)
+  ctx.quadraticCurveTo(x + 28, y - 45 + wave, x + 34, y - 41 + wave)
+  ctx.quadraticCurveTo(x + 28, y - 38 + wave, x + 20, y - 36)
+  ctx.closePath(); ctx.fill()
+  relicPips(ctx, x, y + 0, relics)
+}
+
 // ---------- Units ----------
 
 function unitBase(ctx: CanvasRenderingContext2D, e: Ent, t: number): { bx: number; by: number; walk: number } {
@@ -1662,6 +1825,73 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
     ctx.fillStyle = '#C7CCD4'
     rr(ctx, -1, -10, f * 5.5, 3.6, 1.6); ctx.fill()
     ctx.restore()
+  }
+  ctx.restore()
+}
+
+export function drawMonk(ctx: CanvasRenderingContext2D, e: Ent, t: number, carrying = false): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const { bx, by, walk } = unitBase(ctx, e, t)
+  const f = e.face ?? 1
+  ctx.save()
+  lean(ctx, e, 0.2, 0.25)
+  // sandalled feet
+  ctx.fillStyle = WOOD_DARK
+  ctx.beginPath(); ctx.ellipse(bx - 3.2, e.y + 4 + walk * 1.2, 2.5, 1.7, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(bx + 3.2, e.y + 4 - walk * 1.2, 2.5, 1.7, 0, 0, Math.PI * 2); ctx.fill()
+  // the long brown habit, hem swaying
+  ctx.fillStyle = '#8A6B4E'
+  ctx.beginPath()
+  ctx.moveTo(bx - 7, by + 5)
+  ctx.quadraticCurveTo(bx - 7.5, by - 7, bx, by - 8)
+  ctx.quadraticCurveTo(bx + 7.5, by - 7, bx + 7, by + 5)
+  ctx.quadraticCurveTo(bx, by + 7.5, bx - 7, by + 5)
+  ctx.closePath(); ctx.fill()
+  // rope belt in the team's color
+  ctx.strokeStyle = c.main; ctx.lineWidth = 1.8
+  ctx.beginPath(); ctx.moveTo(bx - 6.2, by); ctx.lineTo(bx + 6.2, by); ctx.stroke()
+  // cowl draped at the shoulders
+  ctx.fillStyle = '#75593F'
+  ctx.beginPath(); ctx.ellipse(bx, by - 7, 6.4, 3, 0, 0, Math.PI * 2); ctx.fill()
+  // head with a tidy tonsure
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(bx, by - 12, 5.6, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = '#75593F'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.arc(bx, by - 12, 5.2, Math.PI * 1.15, Math.PI * 1.85, true); ctx.stroke()
+  // gentle eyes
+  ctx.fillStyle = '#5A4632'
+  ctx.beginPath(); ctx.arc(bx + f * 1.8, by - 11.5, 0.9, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(bx + f * 4.2, by - 11.5, 0.9, 0, Math.PI * 2); ctx.fill()
+  if (carrying) {
+    // the reliquary rides high in both hands, shining all the way home
+    const lift = Math.sin(t * 2 + (e.phase ?? 0)) * 0.8
+    const ry = by - 24 + lift
+    ctx.globalAlpha = 0.25
+    ctx.fillStyle = '#F5D584'
+    ctx.beginPath(); ctx.arc(bx, ry, 10, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = SKIN; ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(bx - 4.5, by - 6); ctx.lineTo(bx - 4, ry + 4)
+    ctx.moveTo(bx + 4.5, by - 6); ctx.lineTo(bx + 4, ry + 4)
+    ctx.stroke()
+    ctx.fillStyle = '#E9B44C'
+    rr(ctx, bx - 5.5, ry - 1, 11, 6.5, 1.4); ctx.fill()
+    ctx.fillStyle = '#C98F2B'
+    ctx.beginPath()
+    ctx.moveTo(bx - 6.2, ry - 0.6); ctx.lineTo(bx, ry - 5); ctx.lineTo(bx + 6.2, ry - 0.6)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#F5D584'
+    rr(ctx, bx - 0.9, ry - 0.4, 1.8, 5, 0.8); ctx.fill()
+  } else {
+    // a plain walking staff, crooked just so
+    ctx.strokeStyle = WOOD; ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(bx + f * 7, e.y + 4)
+    ctx.lineTo(bx + f * 7.5, by - 14)
+    ctx.stroke()
+    ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 1.8
+    ctx.beginPath(); ctx.arc(bx + f * 7.5, by - 15.5, 2, Math.PI * 0.8, Math.PI * 2.25); ctx.stroke()
   }
   ctx.restore()
 }
