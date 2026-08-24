@@ -7,7 +7,7 @@ import {
 } from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
 import { selectArmy, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
-import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk } from './sprites'
+import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet } from './sprites'
 
 const ICON = {
   wood: `<svg viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="9" width="15" height="7" rx="3.5" fill="#8B6A4A"/><circle cx="18" cy="12.5" r="3.5" fill="#C89B6E"/><circle cx="18" cy="12.5" r="1.6" fill="#8B6A4A"/><path d="M6 11.5h7M6 14h5" stroke="#6F5238" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -74,6 +74,9 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     redpalace: { scale: 0.46, cx: 0, cy: -24 },
     church: { scale: 0.6, cx: 0, cy: -14 },
     ministry: { scale: 0.58, cx: 0, cy: -10 },
+    siegeworkshop: { scale: 0.66, cx: 0, cy: -7 },
+    mangonel: { scale: 1.1, cx: 0, cy: -6 },
+    trebuchet: { scale: 0.8, cx: 0, cy: -14 },
     villager: { scale: 1.6, cx: 0, cy: -6.5 },
     monk: { scale: 1.55, cx: 0, cy: -7 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
@@ -110,6 +113,9 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'redpalace': drawRedPalace(ctx, fake, 0.8); break
     case 'church': drawChurch(ctx, fake, 0.8); break
     case 'ministry': drawMinistry(ctx, fake, 0.8); break
+    case 'siegeworkshop': drawSiegeWorkshop(ctx, fake, 0.8); break
+    case 'mangonel': drawMangonel(ctx, fake, 0); break
+    case 'trebuchet': drawTrebuchet(ctx, fake, 0); break
     case 'villager': drawVillager(ctx, fake, 0); break
     case 'monk': drawMonk(ctx, fake, 0); break
     case 'swordsman': drawSwordsman(ctx, fake, 0); break
@@ -207,7 +213,7 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk'): void {
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk' | 'mangonel' | 'trebuchet'): void {
   const s = UNITS[kind]
   const ageReq = unitAgeReq(g, 0, kind)
   if (ageReq > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
@@ -540,7 +546,7 @@ function drawMinimap(g: Game): void {
 
 // one chip per unit type the player fields, count badges live; rebuilt only
 // when the tally actually changes
-const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight'] as const
+const ARMY_TYPES = ['spearman', 'swordsman', 'archer', 'knight', 'mangonel', 'trebuchet'] as const
 let armySig = ''
 function syncArmyPanel(g: Game): void {
   const counts = ARMY_TYPES.map(k =>
@@ -730,6 +736,15 @@ export function syncUI(g: Game): void {
         cost: UNITS.swordsman.cost, locked: g.age[0] < (UNITS.swordsman.age ?? 1) },
       () => tryTrain(g, first, 'swordsman')))
     champDock(g, dock, first)
+  } else if (first && first.kind === 'siegeworkshop' && first.complete && first.team === 0) {
+    dock.appendChild(iconButton(
+      { cmd: 'train-mangonel', label: 'Build mangonel — lobs a splash boulder at clumps',
+        icon: spriteIcon('mangonel'), cost: UNITS.mangonel.cost },
+      () => tryTrain(g, first, 'mangonel')))
+    dock.appendChild(iconButton(
+      { cmd: 'train-trebuchet', label: 'Build trebuchet — outranges every fortress, once planted',
+        icon: spriteIcon('trebuchet'), cost: UNITS.trebuchet.cost },
+      () => tryTrain(g, first, 'trebuchet')))
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-archer', label: 'Train longbowman', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
@@ -765,7 +780,7 @@ export function syncUI(g: Game): void {
       dock.appendChild(back)
       const lists: Record<'economy' | 'military', Buildable[]> = {
         economy: ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'towncenter', 'church', 'ministry'],
-        military: ['barracks', 'archeryrange', 'stable', 'watchtower', 'wall', 'gate'],
+        military: ['barracks', 'archeryrange', 'stable', 'siegeworkshop', 'watchtower', 'wall', 'gate'],
       }
       // symbolic icons where a miniature would be muddy
       const symbolIcons: Partial<Record<Buildable, string>> = {

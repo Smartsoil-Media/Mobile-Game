@@ -5,14 +5,15 @@ export const NEUTRAL = -1
 
 export type Kind =
   | 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk'
+  | 'mangonel' | 'trebuchet'
   | 'towncenter' | 'house' | 'barracks' | 'archeryrange' | 'stable' | 'lumbercamp' | 'miningcamp' | 'mill' | 'farm' | 'watchtower' | 'wall' | 'gate'
-  | 'church' | 'ministry'
+  | 'church' | 'ministry' | 'siegeworkshop'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
   | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
   | 'tree' | 'goldmine' | 'berrybush' | 'stonequarry' | 'deer' | 'crag' | 'croc' | 'relic'
 
 export type Buildable = 'house' | 'farm' | 'mill' | 'barracks' | 'archeryrange' | 'stable' | 'watchtower' | 'wall' | 'gate' | 'lumbercamp' | 'miningcamp' | 'towncenter'
-  | 'church' | 'ministry'
+  | 'church' | 'ministry' | 'siegeworkshop'
   | 'abbeymill' | 'kingsbarracks' | 'guildhall' | 'whitekeep'
   | 'chamberofcommerce' | 'cavalryschool' | 'royalvineyard' | 'redpalace'
 
@@ -70,6 +71,7 @@ export interface Ent {
   lastY?: number
   phase?: number
   relicId?: number // the relic a monk is carrying
+  setup?: number // a trebuchet plants its frame before it can loose (resets on the move)
   // relics
   heldBy?: number // the monk carrying this relic
   shrineId?: number // the church or ministry this relic is enshrined in
@@ -99,6 +101,11 @@ export interface Projectile {
   speed: number
   dmg: number
   team: number
+  // siege boulders: lobbed at a FIXED point (no homing), land with a splash
+  kind?: 'boulder'
+  sx?: number; sy?: number // launch point, for the flight arc
+  arcH?: number // how high the lob rises
+  splash?: number // everything hostile within this radius of impact is hit
 }
 
 export interface Fog {
@@ -163,6 +170,11 @@ export const UNITS: Record<string, {
   scout: { hp: 45, dmg: 2, range: 14, cd: 1.0, speed: 58, aggro: 0, cost: cost({ food: 30, gold: 15 }), time: 8, r: 12, los: 280, name: 'Scout' },
   knight: { hp: 110, dmg: 11, range: 16, cd: 0.9, speed: 50, aggro: 140, cost: cost({ food: 60, gold: 75 }), time: 12, r: 13, los: 220, age: 3, name: 'Knight' },
   monk: { hp: 45, dmg: 0, range: 14, cd: 1.0, speed: 34, aggro: 0, cost: cost({ gold: 100 }), time: 16, r: 10, los: 190, age: 3, name: 'Monk' },
+  // siege engines: slow wooden machines from the workshop (Castle Age).
+  // The mangonel lobs a splash boulder at clumps; the trebuchet outranges
+  // every fortress but must plant its frame before it can loose.
+  mangonel: { hp: 90, dmg: 14, range: 200, cd: 4.0, speed: 22, aggro: 180, cost: cost({ wood: 140, gold: 80 }), time: 18, r: 14, los: 230, age: 3, name: 'Mangonel' },
+  trebuchet: { hp: 110, dmg: 55, range: 330, cd: 7.0, speed: 14, aggro: 0, cost: cost({ wood: 200, gold: 120 }), time: 24, r: 15, los: 280, age: 3, name: 'Trebuchet' },
 }
 
 export const BUILDINGS: Record<string, {
@@ -181,6 +193,7 @@ export const BUILDINGS: Record<string, {
   mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
   church: { hp: 320, r: 30, foot: 34, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
   ministry: { hp: 350, r: 32, foot: 36, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
+  siegeworkshop: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 200 }), time: 22, pop: 0, los: 140, garrisonCap: 0, age: 3, name: 'Siege Workshop' },
   wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
   gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
   // Landmarks — building one IS the age-up; it dawns when the walls rise
@@ -303,7 +316,18 @@ export const FARM_CREW = 1
 export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
   spearman: { scout: 12, knight: 12 },
   archer: { spearman: 4 },
+  knight: { mangonel: 12, trebuchet: 12 }, // cavalry rides down the war machines
 }
+
+// ---- siege engines (Castle Age) ----
+export const MANGONEL_SPLASH = 42 // the boulder shatters — everything close is hit
+export const MANGONEL_MIN_RANGE = 60 // can't drop a shot on its own toes: get close and it's helpless
+export const MANGONEL_ARC = 46
+export const MANGONEL_BOULDER_SPEED = 190
+export const TREB_SETUP = 3 // seconds standing still before the frame is planted
+export const TREB_SPLASH = 30
+export const TREB_ARC = 95
+export const TREB_BOULDER_SPEED = 150
 
 // where each carried resource may be dropped off
 export const DROPOFFS: Record<ResKind, Kind[]> = {
@@ -347,14 +371,18 @@ export function dist(ax: number, ay: number, bx: number, by: number): number {
 
 export function isUnit(e: Ent): boolean {
   return e.kind === 'villager' || e.kind === 'swordsman' || e.kind === 'spearman' ||
-    e.kind === 'archer' || e.kind === 'scout' || e.kind === 'knight' || e.kind === 'monk'
+    e.kind === 'archer' || e.kind === 'scout' || e.kind === 'knight' || e.kind === 'monk' ||
+    e.kind === 'mangonel' || e.kind === 'trebuchet'
+}
+export function isSiege(e: Ent): boolean {
+  return e.kind === 'mangonel' || e.kind === 'trebuchet'
 }
 export function isBuilding(e: Ent): boolean {
   return e.kind === 'towncenter' || e.kind === 'house' || e.kind === 'barracks' ||
     e.kind === 'archeryrange' || e.kind === 'stable' || e.kind === 'lumbercamp' ||
     e.kind === 'miningcamp' || e.kind === 'mill' ||
     e.kind === 'farm' || e.kind === 'watchtower' || e.kind === 'wall' || e.kind === 'gate' ||
-    e.kind === 'church' || e.kind === 'ministry' ||
+    e.kind === 'church' || e.kind === 'ministry' || e.kind === 'siegeworkshop' ||
     e.kind === 'abbeymill' || e.kind === 'kingsbarracks' || e.kind === 'guildhall' || e.kind === 'whitekeep' ||
     e.kind === 'chamberofcommerce' || e.kind === 'cavalryschool' || e.kind === 'royalvineyard' || e.kind === 'redpalace'
 }

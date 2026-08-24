@@ -2273,3 +2273,172 @@ export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.restore()
   ctx.restore()
 }
+
+// ---- siege engines: slow wooden machines from the workshop ----
+
+// a wheeled catapult with a throwing spoon; the arm rocks back as it reloads
+export function drawMangonel(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const f = e.face ?? 1
+  // the arm sits thrown forward just after a shot, hauled back as cd runs out
+  const cdFrac = Math.min(1, Math.max(0, (e.cd ?? 0) / 4))
+  const armA = -0.9 + cdFrac * 1.5 // radians from upright: back when loaded, forward when loosed
+  const roll = e.stepped ? Math.sin(t * 9 + (e.phase ?? 0)) * 0.8 : 0
+  shadow(ctx, e.x, e.y + 7, 16, 5)
+  ctx.save()
+  ctx.translate(e.x, e.y + roll * 0.4)
+  ctx.scale(f, 1)
+  // wheels
+  for (const wx of [-9, 9]) {
+    ctx.fillStyle = '#6F5238'
+    ctx.beginPath(); ctx.arc(wx, 4, 5.2, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#A8875F'
+    ctx.beginPath(); ctx.arc(wx, 4, 2.2, 0, Math.PI * 2); ctx.fill()
+  }
+  // carriage bed
+  ctx.fillStyle = TIMBER
+  rr(ctx, -14, -4, 28, 7, 2.5); ctx.fill()
+  ctx.strokeStyle = TIMBER_EDGE; ctx.lineWidth = 1.6
+  rr(ctx, -14, -4, 28, 7, 2.5); ctx.stroke()
+  // team-painted crossbar
+  ctx.fillStyle = c.main
+  rr(ctx, -14, -6.5, 28, 3, 1.5); ctx.fill()
+  // upright frame
+  ctx.strokeStyle = '#8B6A4A'; ctx.lineWidth = 3
+  ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(0, -13); ctx.lineTo(6, -4); ctx.stroke()
+  // throwing arm with its spoon
+  ctx.save()
+  ctx.translate(0, -12)
+  ctx.rotate(armA)
+  ctx.strokeStyle = '#6F5238'; ctx.lineWidth = 3.4
+  ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -14); ctx.stroke()
+  ctx.fillStyle = '#8B6A4A'
+  ctx.beginPath(); ctx.arc(0, -15, 3.4, 0, Math.PI * 2); ctx.fill()
+  if (cdFrac < 0.25) { // loaded and ready: a boulder rests in the spoon
+    ctx.fillStyle = '#A8A395'
+    ctx.beginPath(); ctx.arc(0, -15, 2.4, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
+  // a little pile of ammunition
+  ctx.fillStyle = '#A8A395'
+  ctx.beginPath(); ctx.arc(-11, -6.5, 2.2, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(-8, -7.5, 1.9, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
+}
+
+// the great counterweight engine: an A-frame, a long beam, a hanging weight.
+// planted = frame down and ready; on the move the beam rides low.
+export function drawTrebuchet(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const f = e.face ?? 1
+  const planted = (e.setup ?? 0) >= 3
+  const cdFrac = Math.min(1, Math.max(0, (e.cd ?? 0) / 7))
+  // beam angle: travelling it lies flat; planted it cocks back, whips forward on release
+  const beamA = !planted ? 0.12 : cdFrac > 0.85 ? -1.15 : -0.35 - (1 - cdFrac) * 0.55
+  shadow(ctx, e.x, e.y + 8, 18, 5.5)
+  ctx.save()
+  ctx.translate(e.x, e.y)
+  ctx.scale(f, 1)
+  // ground sled / wheels
+  ctx.fillStyle = '#6F5238'
+  rr(ctx, -15, 4, 30, 4, 2); ctx.fill()
+  for (const wx of [-10, 10]) {
+    ctx.fillStyle = '#6F5238'
+    ctx.beginPath(); ctx.arc(wx, 7, 3.6, 0, Math.PI * 2); ctx.fill()
+  }
+  // A-frame uprights
+  ctx.strokeStyle = '#8B6A4A'; ctx.lineWidth = 3.4
+  ctx.beginPath()
+  ctx.moveTo(-9, 5); ctx.lineTo(0, -16); ctx.lineTo(9, 5)
+  ctx.moveTo(-5, -4); ctx.lineTo(5, -4)
+  ctx.stroke()
+  // planted stakes when set up
+  if (planted) {
+    ctx.strokeStyle = '#5A4632'; ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(-13, 3); ctx.lineTo(-16, 8)
+    ctx.moveTo(13, 3); ctx.lineTo(16, 8)
+    ctx.stroke()
+  }
+  // the long beam on its axle
+  ctx.save()
+  ctx.translate(0, -16)
+  ctx.rotate(beamA)
+  ctx.strokeStyle = '#6F5238'; ctx.lineWidth = 3.2
+  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(20, 0); ctx.stroke()
+  // counterweight box swings from the short end
+  ctx.fillStyle = '#5A4632'
+  rr(ctx, -13.5, 0.5, 8, 8, 1.8); ctx.fill()
+  ctx.strokeStyle = '#4A3A28'; ctx.lineWidth = 1.2
+  rr(ctx, -13.5, 0.5, 8, 8, 1.8); ctx.stroke()
+  // sling trailing from the long end
+  ctx.strokeStyle = '#C4A867'; ctx.lineWidth = 1.6
+  ctx.beginPath(); ctx.moveTo(20, 0); ctx.quadraticCurveTo(23, 4, 20.5, 7); ctx.stroke()
+  if (planted && cdFrac < 0.2) { // a boulder waits in the sling
+    ctx.fillStyle = '#A8A395'
+    ctx.beginPath(); ctx.arc(20.5, 8.5, 2.6, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
+  // a team pennant at the peak
+  ctx.strokeStyle = '#5A4632'; ctx.lineWidth = 1.4
+  ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(0, -23); ctx.stroke()
+  ctx.fillStyle = c.main
+  const wave = Math.sin(t * 3 + (e.phase ?? 0)) * 1.2
+  ctx.beginPath()
+  ctx.moveTo(0, -23); ctx.lineTo(7, -21.5 + wave * 0.4); ctx.lineTo(0, -19.5)
+  ctx.closePath(); ctx.fill()
+  ctx.restore()
+}
+
+// an open-sided timber hall where the engines are wrought
+export function drawSiegeWorkshop(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const x = e.x, y = e.y
+  shadow(ctx, x, y + 21, 38, 12)
+  // open hall: heavy corner posts under a deep roof
+  ctx.fillStyle = '#CDAF83'
+  rr(ctx, x - 29, y - 8, 58, 30, 6); ctx.fill()
+  ctx.strokeStyle = TIMBER_EDGE; ctx.lineWidth = 2
+  rr(ctx, x - 29, y - 8, 58, 30, 6); ctx.stroke()
+  // the dark open workfloor
+  ctx.fillStyle = '#5F5343'
+  rr(ctx, x - 22, y - 2, 44, 24, 4); ctx.fill()
+  // a half-built engine inside: wheels and a beam on trestles
+  ctx.fillStyle = '#8B6A4A'
+  ctx.beginPath(); ctx.arc(x - 10, y + 12, 5, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#A8875F'
+  ctx.beginPath(); ctx.arc(x - 10, y + 12, 2, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = '#A8875F'; ctx.lineWidth = 2.6
+  ctx.beginPath(); ctx.moveTo(x - 2, y + 14); ctx.lineTo(x + 17, y + 3); ctx.stroke()
+  // big spoked wheel leaning on the outside wall
+  ctx.fillStyle = '#6F5238'
+  ctx.beginPath(); ctx.arc(x + 24, y + 14, 6.5, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#CDAF83'
+  ctx.beginPath(); ctx.arc(x + 24, y + 14, 4.4, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = '#6F5238'; ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(x + 19.6, y + 14); ctx.lineTo(x + 28.4, y + 14)
+  ctx.moveTo(x + 24, y + 9.6); ctx.lineTo(x + 24, y + 18.4)
+  ctx.stroke()
+  ctx.fillStyle = '#6F5238'
+  ctx.beginPath(); ctx.arc(x + 24, y + 14, 1.6, 0, Math.PI * 2); ctx.fill()
+  // deep plank roof with a smoke-hole
+  ctx.fillStyle = ROOF_DARK
+  ctx.beginPath()
+  ctx.moveTo(x - 36, y - 4)
+  ctx.lineTo(x - 4, y - 28)
+  ctx.quadraticCurveTo(x, y - 30.5, x + 4, y - 28)
+  ctx.lineTo(x + 36, y - 4)
+  ctx.quadraticCurveTo(x, y - 10, x - 36, y - 4)
+  ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = 'rgba(90, 70, 50, 0.35)'; ctx.lineWidth = 1.2
+  ctx.beginPath()
+  ctx.moveTo(x - 20, y - 8.5); ctx.lineTo(x - 10, y - 23)
+  ctx.moveTo(x + 20, y - 8.5); ctx.lineTo(x + 10, y - 23)
+  ctx.stroke()
+  // boulder pile by the door
+  ctx.fillStyle = '#A8A395'
+  ctx.beginPath(); ctx.arc(x - 24, y + 17, 3.4, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(x - 19, y + 18.5, 2.8, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(x - 21.5, y + 13.5, 2.5, 0, Math.PI * 2); ctx.fill()
+  flag(ctx, x + 30, y - 10, e.team, t + e.seed)
+}

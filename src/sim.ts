@@ -9,7 +9,9 @@ import {
   SANCTUARY_HEAL_RATE, SANCTUARY_HEAL_RADIUS,
   CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
-  dist, isUnit, isBuilding, isResource,
+  MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
+  TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
+  dist, isUnit, isBuilding, isResource, isSiege,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { lineClear, findPath, inWater, streamDist } from './nav'
@@ -146,7 +148,31 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
   }
   if (!inRange(e, t, s.range)) {
     e.chaseT = 0.25 // once caught up, dig in a little past the range line
+    e.setup = 0 // a trebuchet on the roll must plant its frame again
     moveToward(g, e, t.x, t.y, unitSpeed(g, e), dt)
+    return
+  }
+  // siege engines lob boulders at a FIXED point — clumps beware, walkers dodge
+  if (isSiege(e)) {
+    if (Math.abs(t.x - e.x) > 6) e.face = t.x > e.x ? 1 : -1
+    if (e.kind === 'mangonel' && inRange(e, t, MANGONEL_MIN_RANGE)) return // too close to drop a shot
+    if (e.kind === 'trebuchet') {
+      e.setup = (e.setup ?? 0) + dt
+      if (e.setup < TREB_SETUP) return // still planting the frame
+    }
+    if ((e.cd ?? 0) <= 0) {
+      e.cd = s.cd
+      const mang = e.kind === 'mangonel'
+      g.projectiles.push({
+        x: e.x, y: e.y - 16, targetId: -1, tx: t.x, ty: t.y,
+        speed: mang ? MANGONEL_BOULDER_SPEED : TREB_BOULDER_SPEED,
+        dmg: s.dmg, team: e.team, kind: 'boulder',
+        sx: e.x, sy: e.y - 16,
+        arcH: mang ? MANGONEL_ARC : TREB_ARC,
+        splash: mang ? MANGONEL_SPLASH : TREB_SPLASH,
+      })
+      puff(g, e.x, e.y - 18, '#C9B896', 3)
+    }
     return
   }
   if ((e.chaseT ?? 0) > 0 && !inRange(e, t, Math.max(2, s.range - 10))) {
@@ -464,7 +490,7 @@ function updateCroc(g: Game, e: Ent, dt: number): void {
   e.scanT = (e.scanT ?? 0) - dt
   if (e.scanT <= 0) {
     e.scanT = 0.4
-    const prey = nearest(g, e.x, e.y, o => isUnit(o) && !o.hidden, CROC_AGGRO)
+    const prey = nearest(g, e.x, e.y, o => isUnit(o) && !isSiege(o) && !o.hidden, CROC_AGGRO) // timber isn't food
     if (prey) { e.targetId = prey.id; return }
     if (e.tx === undefined && Math.random() < 0.25) {
       // a lazy drift about the lair
@@ -529,6 +555,12 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
           e.scanT = 0.3
           const foe = nearestEnemyUnit(g, e, s.aggro)
           if (foe) { e.state = 'attack'; e.targetId = foe.id; e.resume = null }
+        } else if (e.kind === 'trebuchet') {
+          // a planted trebuchet batters any fortress in reach on its own
+          e.scanT = 0.5
+          const wall = nearest(g, e.x, e.y,
+            o => isBuilding(o) && o.team >= 0 && o.team !== e.team, s.range + e.r)
+          if (wall) { e.state = 'attack'; e.targetId = wall.id; e.resume = null }
         } else if (e.kind === 'scout' && e.team === 1) {
           // the enemy scout roams the meadow
           e.scanT = 2 + Math.random() * 3
@@ -604,6 +636,7 @@ function updateMonk(g: Game, e: Ent, dt: number): void {
     const rate = blessed ? SANCTUARY_HEAL_RATE : MONK_HEAL_RATE
     for (const u of g.ents) {
       if (u.team !== e.team || u === e || !isUnit(u) || u.hidden) continue
+      if (isSiege(u)) continue // prayer mends flesh, not timber
       if (u.hp <= 0 || u.hp >= u.maxHp) continue
       if (dist(e.x, e.y, u.x, u.y) > radius) continue
       u.hp = Math.min(u.maxHp, u.hp + rate)
@@ -840,6 +873,7 @@ export function update(g: Game, dt: number): void {
       if (e.kind === 'villager') updateVillager(g, e, dt)
       else if (e.kind === 'monk') updateMonk(g, e, dt)
       else updateSoldier(g, e, dt)
+      if (e.kind === 'trebuchet' && e.stepped) e.setup = 0 // rolling again: the frame comes down
     } else if (e.kind === 'deer') {
       updateDeer(g, e, dt)
     } else if (e.kind === 'croc') {
@@ -858,16 +892,28 @@ export function update(g: Game, dt: number): void {
     if (g.techs[shrine.team]?.tithebarns) g.res[shrine.team].food += RELIC_FOOD_RATE * dt
   }
 
-  // arrows in flight
+  // arrows and boulders in flight
   for (const p of [...g.projectiles]) {
-    const t = g.byId.get(p.targetId)
-    if (t && !t.hidden) { p.tx = t.x; p.ty = t.y - 6 }
+    const t = p.kind === 'boulder' ? undefined : g.byId.get(p.targetId)
+    if (t && !t.hidden) { p.tx = t.x; p.ty = t.y - 6 } // arrows home; boulders fall where they were aimed
     const dx = p.tx - p.x, dy = p.ty - p.y
     const d = Math.hypot(dx, dy)
     const step = p.speed * dt
     if (d <= step + 4) {
       g.projectiles.splice(g.projectiles.indexOf(p), 1)
-      if (t && !t.hidden && dist(p.tx, p.ty, t.x, t.y - 6) < t.r + 12) {
+      if (p.kind === 'boulder') {
+        // the boulder lands: everything hostile near the point of impact is hit
+        puff(g, p.tx, p.ty, '#C9B896', 8)
+        puff(g, p.tx, p.ty - 4, '#FFF3D6', 4, 'hit')
+        for (const o of g.ents) {
+          if (o.team < 0 || o.team === p.team || o.hidden) continue
+          if (!isUnit(o) && !isBuilding(o)) continue
+          if (dist(p.tx, p.ty, o.x, o.y) > (p.splash ?? 0) + o.r) continue
+          o.hp -= p.dmg
+          puff(g, o.x, o.y - o.r * 0.4, '#FFF3D6', 2, 'hit')
+          if (o.team === 0) alertPing(g, o.x, o.y)
+        }
+      } else if (t && !t.hidden && dist(p.tx, p.ty, t.x, t.y - 6) < t.r + 12) {
         t.hp -= p.dmg
         puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 2, 'hit')
         if (t.team === 0) alertPing(g, t.x, t.y)

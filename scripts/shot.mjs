@@ -119,9 +119,9 @@ const milDock = await page.evaluate(() => ({
   canvases: document.querySelectorAll('#dock-buttons canvas.sprite-icon').length,
 }))
 console.log('military menu:', milDock)
-if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-stable,build-watchtower,build-wall,build-gate')
+if (milDock.buttons.join(',') !== 'back,build-barracks,build-archeryrange,build-stable,build-siegeworkshop,build-watchtower,build-wall,build-gate')
   throw new Error('military menu wrong: ' + milDock.buttons.join(','))
-if (milDock.canvases !== 4) throw new Error('stable/watchtower/wall/gate should use sprite icons')
+if (milDock.canvases !== 5) throw new Error('stable/siegeworkshop/watchtower/wall/gate should use sprite icons')
 await page.tap('[data-cmd="back"]')
 await page.waitForTimeout(200)
 await page.evaluate(() => {
@@ -391,8 +391,8 @@ console.log('dark age locks:', darkLocks)
 if (darkLocks.age !== 1) throw new Error('should start in the Dark Age')
 if (darkLocks.agePill) throw new Error('the age pill should be gone from the HUD')
 if (!darkLocks.locked.includes('build-watchtower') || !darkLocks.locked.includes('build-archeryrange') ||
-  !darkLocks.locked.includes('build-stable'))
-  throw new Error('feudal buildings not locked in the Dark Age')
+  !darkLocks.locked.includes('build-stable') || !darkLocks.locked.includes('build-siegeworkshop'))
+  throw new Error('feudal/castle buildings not locked in the Dark Age')
 if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks should be available in the Dark Age')
 // a clear-ground finder for the landmark placements below, mirroring the
 // game's square-footprint clearance rule with a safety margin
@@ -497,7 +497,9 @@ await openCat(page3, 'military')
 const feudalLocks = await page3.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd))
 console.log('feudal locks:', feudalLocks)
-if (feudalLocks.length) throw new Error('locks should lift in the Feudal Age')
+// only the Castle-Age siege workshop stays barred once Feudal dawns
+if (feudalLocks.join(',') !== 'build-siegeworkshop')
+  throw new Error('feudal locks wrong: ' + feudalLocks.join(','))
 await openCat(page3, 'economy')
 if (!(await page3.isVisible('[data-cmd="build-mill"]'))) throw new Error('mill missing from the economy menu')
 await page3.tap('[data-cmd="back"]')
@@ -732,6 +734,94 @@ await page3.waitForTimeout(400)
 await page3.screenshot({ path: 'shots/17-knight.png' })
 if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + knightBorn.hp)
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
+await waitSim(page3, 1)
+
+// 4.6655) siege engines: the workshop trains, the mangonel splashes a clump,
+// the trebuchet plants its frame and cracks a tower from beyond its arrows
+const siegeSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 800; g.res[0].gold = 600
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const spot = window.__findSpot(44, tc.x - 260, tc.y + 220)
+  const shopId = window.__game.spawn('siegeworkshop', 0, spot.x, spot.y)
+  window.__game.select(shopId)
+  return { shopId }
+})
+await page3.waitForTimeout(250)
+const shopDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+console.log('siege workshop dock:', shopDock)
+if (!shopDock.includes('train-mangonel') || !shopDock.includes('train-trebuchet'))
+  throw new Error('siege workshop should offer mangonel and trebuchet')
+// mangonel vs a clump: one boulder, several bruises
+const mangSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const open = window.__findSpot(40, tc.x, tc.y - 300) // clear ground for the firing range
+  const mangId = window.__game.spawn('mangonel', 0, open.x, open.y)
+  const foes = [
+    window.__game.spawn('spearman', 1, open.x + 150, open.y),
+    window.__game.spawn('spearman', 1, open.x + 168, open.y + 14),
+    window.__game.spawn('spearman', 1, open.x + 152, open.y + 26),
+  ]
+  for (const id of foes) { const s = g.byId.get(id); s.scanT = 999 } // stand for the drill
+  const m = g.byId.get(mangId)
+  m.state = 'attack'; m.targetId = foes[1]
+  return { mangId, foes }
+})
+await page3.evaluate(() => window.__game.setSpeed(5))
+await waitSim(page3, 6)
+const mangHits = await page3.evaluate(({ mangId, foes }) => {
+  const g = window.__game.state
+  const hurt = foes.map(id => g.byId.get(id)).filter(s => s && s.hp < s.maxHp).length
+  const chip = !!document.querySelector('#army-panel .army-chip[data-cmd="army-mangonel"]')
+  for (const id of foes) { const s = g.byId.get(id); if (s) s.hp = 0 }
+  const m = g.byId.get(mangId); if (m) m.hp = 0
+  return { hurt, chip }
+}, mangSetup)
+console.log('mangonel splash:', mangHits)
+if (!mangHits.chip) throw new Error('mangonel missing from the army panel')
+if (mangHits.hurt < 2) throw new Error(`one boulder should bruise the clump (hurt ${mangHits.hurt}/3)`)
+// trebuchet vs a tower: out of the tower's reach, deadly once planted
+const trebSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const open = window.__findSpot(40, tc.x + 40, tc.y - 340)
+  const towerId = window.__game.spawn('watchtower', 1, open.x + 300, open.y)
+  const trebId = window.__game.spawn('trebuchet', 0, open.x, open.y)
+  const t = g.byId.get(trebId)
+  t.state = 'attack'; t.targetId = towerId
+  return { trebId, towerId, tx: t.x, ty: t.y }
+})
+await waitSim(page3, 2)
+const early = await page3.evaluate(({ towerId }) => {
+  const t = window.__game.state.byId.get(towerId)
+  return { hp: t.hp, maxHp: t.maxHp }
+}, trebSetup)
+if (early.hp < early.maxHp) throw new Error('the trebuchet fired before its frame was planted')
+await waitSim(page3, 22)
+const trebHits = await page3.evaluate(({ trebId, towerId, tx, ty }) => {
+  const g = window.__game.state
+  window.__game.setSpeed(1)
+  const tower = g.byId.get(towerId)
+  const t = g.byId.get(trebId)
+  const out = {
+    towerHp: tower ? tower.hp : 0, towerMax: tower ? tower.maxHp : 280,
+    trebAlive: !!t, moved: t ? Math.hypot(t.x - tx, t.y - ty) : 99,
+  }
+  if (tower) tower.hp = 0
+  if (t) t.hp = 0
+  return out
+}, trebSetup)
+console.log('trebuchet vs tower:', trebHits)
+if (!trebHits.trebAlive) throw new Error('the tower should never reach the trebuchet')
+if (trebHits.moved > 6) throw new Error('the trebuchet should bombard from where it stood')
+if (trebHits.towerMax - trebHits.towerHp < 55) throw new Error('the trebuchet never cracked the tower')
+await page3.evaluate(({ shopId }) => {
+  const g = window.__game.state
+  const shop = g.byId.get(shopId); if (shop) shop.hp = 0 // tidy the practice workshop away
+  g.selection = []; g.uiDirty = true
+}, siegeSetup)
 await waitSim(page3, 1)
 
 // 4.665) the White Keep stands guard: its own arrows cut a raider down

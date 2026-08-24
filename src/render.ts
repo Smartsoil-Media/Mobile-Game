@@ -10,6 +10,7 @@ import {
   drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
   drawRelic, drawChurch, drawMinistry, drawMonk,
+  drawSiegeWorkshop, drawMangonel, drawTrebuchet,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -553,6 +554,9 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'archer': drawArcher(ctx, e, time, g.champs[e.team]?.ranged); break
       case 'scout': drawScout(ctx, e, time); break
       case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry); break
+      case 'mangonel': drawMangonel(ctx, e, time); break
+      case 'trebuchet': drawTrebuchet(ctx, e, time); break
+      case 'siegeworkshop': e.complete ? drawSiegeWorkshop(ctx, e, time) : drawSite(ctx, e); break
     }
     // health bar when hurt (hunted wildlife shows its last strength too)
     if ((isUnit(e) || isBuilding(e) || e.kind === 'deer' || e.kind === 'croc') && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {
@@ -565,8 +569,21 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     }
   }
 
-  // arrows
+  // arrows and boulders
   for (const p of g.projectiles) {
+    if (p.kind === 'boulder') {
+      // a lobbed boulder: it rides an arc above the straight line of its flight
+      const total = dist(p.sx ?? p.x, p.sy ?? p.y, p.tx, p.ty) || 1
+      const u = Math.min(1, Math.max(0, 1 - dist(p.x, p.y, p.tx, p.ty) / total))
+      const lift = (p.arcH ?? 50) * 4 * u * (1 - u)
+      ctx.fillStyle = 'rgba(60, 46, 30, 0.18)' // its shadow tracks the ground
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 4.5, 2.2, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#A8A395'
+      ctx.beginPath(); ctx.arc(p.x, p.y - lift, 4, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#C5C0B2'
+      ctx.beginPath(); ctx.arc(p.x - 1.2, p.y - lift - 1.2, 1.6, 0, Math.PI * 2); ctx.fill()
+      continue
+    }
     const dx = p.tx - p.x, dy = p.ty - p.y
     const d = Math.hypot(dx, dy) || 1
     const nx = dx / d, ny = dy / d
@@ -711,6 +728,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'cavalryschool': drawCavalrySchool(ctx, ghost, time); break
       case 'royalvineyard': drawRoyalVineyard(ctx, ghost, time); break
       case 'redpalace': drawRedPalace(ctx, ghost, time); break
+      case 'siegeworkshop': drawSiegeWorkshop(ctx, ghost, time); break
     }
     ctx.globalAlpha = 1
   }

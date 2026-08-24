@@ -38,7 +38,7 @@ function queuedUnits(g: Game): number {
   return n
 }
 
-type AIPlaceable = 'house' | 'barracks' | 'farm' | 'mill' | 'stable' | 'archeryrange' | 'church' | LandmarkKind
+type AIPlaceable = 'house' | 'barracks' | 'farm' | 'mill' | 'stable' | 'archeryrange' | 'church' | 'siegeworkshop' | LandmarkKind
 
 function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
@@ -80,7 +80,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
   if (!tc) return
   const vills = g.ents.filter(e => e.team === 1 && e.kind === 'villager' && !e.hidden)
   const soldiers = g.ents.filter(e =>
-    e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer' || e.kind === 'knight'))
+    e.team === 1 && (e.kind === 'swordsman' || e.kind === 'spearman' || e.kind === 'archer' || e.kind === 'knight' ||
+      e.kind === 'mangonel' || e.kind === 'trebuchet'))
   const p = pop(g, 1)
   const rax = g.ents.find(e =>
     e.team === 1 && (e.kind === 'barracks' || e.kind === 'kingsbarracks') && e.complete)
@@ -186,6 +187,9 @@ export function updateEnemyAI(g: Game, dt: number): void {
       g.ents.some(e => e.kind === 'relic' && e.heldBy === undefined && e.shrineId === undefined) &&
       !g.ents.some(e => e.team === 1 && (e.kind === 'church' || e.kind === 'ministry'))) {
       tryPlace(g, 'church', tc) // a church, while relics still rest unclaimed
+    } else if (g.age[1] >= 3 && g.res[1].wood > 330 &&
+      !g.ents.some(e => e.team === 1 && e.kind === 'siegeworkshop')) {
+      tryPlace(g, 'siegeworkshop', tc) // engines, for cracking walls and keeps
     }
   }
 
@@ -249,6 +253,16 @@ export function updateEnemyAI(g: Game, dt: number): void {
     p.used + queuedUnits(g) < p.cap && canAfford(g, 1, UNITS.villager.cost)) {
     pay(g, 1, UNITS.villager.cost)
     tc.queue!.push({ kind: 'villager', t: UNITS.villager.time, total: UNITS.villager.time })
+  }
+  // the engines of war: a mangonel for the field, then a trebuchet for the walls
+  const workshop = g.ents.find(e => e.team === 1 && e.kind === 'siegeworkshop' && e.complete)
+  if (workshop && (workshop.queue?.length ?? 0) === 0) {
+    const engines = soldiers.filter(s => s.kind === 'mangonel' || s.kind === 'trebuchet')
+    const next = engines.some(s => s.kind === 'mangonel') ? 'trebuchet' as const : 'mangonel' as const
+    if (engines.length < 2 && p.used + queuedUnits(g) < p.cap && canSpend(UNITS[next].cost)) {
+      pay(g, 1, UNITS[next].cost)
+      workshop.queue!.push({ kind: next, t: UNITS[next].time, total: UNITS[next].time })
+    }
   }
   // a village without eyes rides again: replace a fallen scout from the stable
   if (stable && (stable.queue?.length ?? 0) === 0 &&

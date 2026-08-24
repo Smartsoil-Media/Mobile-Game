@@ -95,6 +95,16 @@ chase at its edge.
   eyes on the meadow can be replaced; **Knights** (60 food + 75 gold) ride
   out once the Castle Age dawns — fast, armoured lancers (spearmen carry a
   +12 bonus against cavalry, knights included)
+- **Siege Workshop** (200 wood, Castle Age) builds the engines of war.
+  The **Mangonel** (140w + 80g) lobs a boulder that shatters on impact —
+  everything near where it lands is hit, so clumped defenders scatter or
+  suffer — but it can't drop a shot at its own feet: knights that close
+  the gap shred it (cavalry carries a bonus against siege). The
+  **Trebuchet** (200w + 120g) outranges every tower and keep on the
+  meadow, but must stand still ~3 seconds to plant its frame before it
+  can loose, and packs up the moment it rolls. Boulders fly to where the
+  target *was* — buildings can't dodge; soldiers sometimes do. A planted
+  trebuchet batters any enemy building in reach on its own
 - **Palisade walls** (3 wood a post, Dark Age) place as a dragged line —
   grab either end of the fence and stretch it; the ✓ shows a live post
   count and price, and your villager builds along the row without being
