@@ -203,9 +203,6 @@ export function initUI(g: Game): void {
   all.id = 'army-all'
   all.innerHTML = ICON.armyShield
   all.addEventListener('click', () => selectArmy(g, canvas))
-  const strip = document.createElement('div')
-  strip.id = 'banner-strip'
-  el('army-panel').appendChild(strip)
   const chipWrap = document.createElement('div')
   chipWrap.id = 'army-chips'
   el('army-panel').appendChild(chipWrap)
