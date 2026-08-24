@@ -29,6 +29,33 @@ const ICON = {
   lock: `<svg class="lockb" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="10" width="12" height="9" rx="2.5" fill="#5A4632"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" stroke="#5A4632" stroke-width="2.2" fill="none"/><circle cx="12" cy="14.5" r="1.6" fill="#FBF3E4"/></svg>`,
   info: `<svg viewBox="0 0 24 24" width="21" height="21"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="7.6" r="1.5" fill="currentColor"/><path d="M12 11v6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
   deselect: `<svg viewBox="0 0 24 24" width="21" height="21"><path d="M4.5 8V5.5A1 1 0 0 1 5.5 4.5H8M16 4.5h2.5a1 1 0 0 1 1 1V8M19.5 16v2.5a1 1 0 0 1-1 1H16M8 19.5H5.5a1 1 0 0 1-1-1V16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  // the Army banner: a heater shield under crossed swords, ribbon draped across
+  armyShield: `<svg viewBox="0 0 64 72" width="60" height="68" aria-hidden="true">
+    <path d="M5 5 H59 V30 C59 50 46 63.5 32 69.5 C18 63.5 5 50 5 30 Z" fill="#C98F2B"/>
+    <path d="M8.4 8.4 H55.6 V29.6 C55.6 47.6 44.4 59.8 32 65.4 C19.6 59.8 8.4 47.6 8.4 29.6 Z" fill="#6D9DC5"/>
+    <path d="M8.4 8.4 H55.6 V19 H8.4 Z" fill="#84B0D2"/>
+    <circle cx="15" cy="12.6" r="1.5" fill="#E9B44C"/>
+    <circle cx="32" cy="12.6" r="1.5" fill="#E9B44C"/>
+    <circle cx="49" cy="12.6" r="1.5" fill="#E9B44C"/>
+    <g transform="rotate(45 32 32)">
+      <rect x="30" y="12" width="4" height="26" fill="#E4E7EC"/>
+      <path d="M30 12 L32 6.5 L34 12 Z" fill="#F4F6F9"/>
+      <rect x="31.9" y="12" width="2.1" height="26" fill="#C7CCD4"/>
+      <rect x="24.5" y="38" width="15" height="3.6" rx="1.8" fill="#E9B44C"/>
+      <rect x="30.7" y="41.2" width="2.6" height="7" fill="#8B6A4A"/>
+      <circle cx="32" cy="49.4" r="2.5" fill="#E9B44C"/>
+    </g>
+    <g transform="rotate(-45 32 32)">
+      <rect x="30" y="12" width="4" height="26" fill="#E4E7EC"/>
+      <path d="M30 12 L32 6.5 L34 12 Z" fill="#F4F6F9"/>
+      <rect x="31.9" y="12" width="2.1" height="26" fill="#C7CCD4"/>
+      <rect x="24.5" y="38" width="15" height="3.6" rx="1.8" fill="#E9B44C"/>
+      <rect x="30.7" y="41.2" width="2.6" height="7" fill="#8B6A4A"/>
+      <circle cx="32" cy="49.4" r="2.5" fill="#E9B44C"/>
+    </g>
+    <path d="M3 50.5 L61 50.5 L56.5 57 L61 63.5 L3 63.5 L7.5 57 Z" fill="#F5D584" stroke="#C98F2B" stroke-width="1.6" stroke-linejoin="round"/>
+    <text x="32" y="60.3" text-anchor="middle" font-size="9.5" font-weight="700" letter-spacing="0.6" fill="#5A4632" font-family="Fredoka, Nunito, system-ui, sans-serif">ARMY</text>
+  </svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
@@ -157,8 +184,11 @@ export function initUI(g: Game): void {
   // per-type chips grow above it as the army musters (see syncUI)
   const all = document.createElement('button')
   all.id = 'army-all'
-  all.innerHTML = ICON.sword + '<span>Army</span>'
+  all.innerHTML = ICON.armyShield
   all.addEventListener('click', () => selectArmy(g, canvas))
+  const chipWrap = document.createElement('div')
+  chipWrap.id = 'army-chips'
+  el('army-panel').appendChild(chipWrap)
   el('army-panel').appendChild(all)
   el('t-wood').insertAdjacentHTML('afterbegin', ICON.wood)
   el('t-food').insertAdjacentHTML('afterbegin', ICON.food)
@@ -603,10 +633,11 @@ function syncArmyPanel(g: Game): void {
   const sig = counts.join(',')
   if (sig === armySig) return
   armySig = sig
-  const panel = el('army-panel')
+  const panel = el('army-chips')
   panel.querySelectorAll('.army-chip').forEach(c => c.remove())
   const canvas = document.getElementById('game') as HTMLCanvasElement
-  const allBtn = el('army-all')
+  // a tall host would run off the top of a landscape phone: pair the bucklers up
+  panel.classList.toggle('two-col', counts.filter(n => n > 0).length > 3)
   ARMY_TYPES.forEach((kind, i) => {
     if (!counts[i]) return
     const chip = document.createElement('button')
@@ -616,7 +647,7 @@ function syncArmyPanel(g: Game): void {
     chip.appendChild(spriteIcon(kind))
     chip.insertAdjacentHTML('beforeend', `<span class="count">${counts[i]}</span>`)
     chip.addEventListener('click', () => selectUnitsOfKind(g, kind, canvas))
-    panel.insertBefore(chip, allBtn)
+    panel.appendChild(chip)
   })
 }
 
