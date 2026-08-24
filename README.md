@@ -89,9 +89,11 @@ chase at its edge.
   under **the King's Army** by default — the shield *is* that banner, so
   if you never split your host, nothing changes. Select any soldiers and
   the dock offers *ride under a banner* or *raise a new one* (the Rose,
-  the Star, the Oak); the new banner runs up as a pennant in the **row
-  at the top right**, and the bucklers then show **that banner's
-  roster** rather than the whole village. A **military hall can send its recruits to a
+  the Star, the Oak); the banners then fly as pennants in the **row at
+  the top right** — tap one to switch companies. The bucklers below
+  show **that banner's roster**, and the **shield musters all of it**,
+  wearing that banner's colours so the whole right edge belongs to the
+  company you're looking at. A **military hall can send its recruits to a
   banner** — tap the pennant on its dock — and it then *flies that
   banner's colours on its roof*, so you can read your whole muster off
   the rooftops. One banner per unit; an emptied banner keeps flying,
@@ -110,8 +112,8 @@ chase at its edge.
 - **Army panel** (right edge): a **buckler** per unit type in the active
   banner, with a live count — tap one to grab all its spearmen /
   swordsmen / knights at once. Below them the **heater shield** musters
-  the King's Army; the pennants of any other banners you have raised fly
-  in a row across the top right
+  every soldier in the active banner; the banners themselves fly in a row
+  across the top right
 - **Archery Range** (175 wood) trains **longbowmen** — ranged units that
   shoot arrows from a distance (30 food + 35 gold each)
 - **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your

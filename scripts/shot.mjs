@@ -795,11 +795,24 @@ const raised = await page3.evaluate(({ knights }) => {
 }, bannerStage)
 console.log('banner raised:', raised)
 if (raised.banners !== 2 || raised.knightBanner !== 1) throw new Error('the knights did not take the new banner')
-if (raised.pennants !== 1) throw new Error('the raised banner should fly in the strip')
+if (raised.pennants !== 2) throw new Error('both banners should fly in the top-right row')
 // the King's Army no longer counts them; the new banner musters on its own
-await page3.tap('#army-all')
+await page3.tap('[data-cmd="banner-select-0"]')
 await page3.waitForTimeout(250)
 const afterSplit = await page3.evaluate(() => window.__game.state.selection.length)
+await page3.tap('[data-cmd="banner-select-1"]')
+await page3.waitForTimeout(250)
+// the shield answers for whichever banner is active, not the King's alone
+await page3.evaluate(() => { window.__game.state.selection = []; window.__game.state.uiDirty = true })
+await page3.waitForTimeout(200)
+await page3.tap('#army-all')
+await page3.waitForTimeout(250)
+const shieldMuster = await page3.evaluate(() => ({
+  sel: window.__game.state.selection.length, active: window.__game.state.activeBanner,
+}))
+console.log('shield musters the active banner:', shieldMuster)
+if (shieldMuster.active !== 1 || shieldMuster.sel !== 2)
+  throw new Error('the shield should muster the active banner, got ' + JSON.stringify(shieldMuster))
 await page3.tap('[data-cmd="banner-select-1"]')
 await page3.waitForTimeout(250)
 const roseMuster = await page3.evaluate(() => ({

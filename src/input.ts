@@ -421,8 +421,9 @@ export function selectBanner(g: Game, banner: number, canvas?: HTMLCanvasElement
   }
 }
 
+// the army shield: muster the whole of whichever banner is currently active
 export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
-  selectBanner(g, KINGS_BANNER, canvas)
+  selectBanner(g, g.activeBanner, canvas)
 }
 
 // swear a selection to a banner (or, for monks alone, release them from one)
