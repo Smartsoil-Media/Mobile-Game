@@ -1,6 +1,6 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
 import { Game, Kind } from './data'
-import { createGame, spawn } from './world'
+import { createGame, spawn, canPlaceAt, placementCells } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
 import { render } from './render'
@@ -70,4 +70,6 @@ requestAnimationFrame(frame)
   allowPortrait() { document.body.classList.add('allow-portrait') }, // headless tests run portrait
   findPath(team: number, x0: number, y0: number, x1: number, y1: number) { return findPath(g, team, x0, y0, x1, y1) },
   inWater(x: number, y: number) { return inWater(g, x, y) },
+  canPlaceAt(kind: Kind, x: number, y: number) { return canPlaceAt(g, kind, x, y) },
+  placementCells(kind: Kind, x: number, y: number, r: number) { return placementCells(g, kind, x, y, r) },
 }

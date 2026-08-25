@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
 import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
-import { entAt, spawn, nearest, canAfford, canPlaceAt, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -108,6 +108,7 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
   }
   if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
   pay(g, 0, b.cost)
+  clearSpent(g, kind, x, y) // sweep away the stumps and rubble underneath
   const site = spawn(g, kind, 0, x, y, false)
   commandBuild(g, villagers, site)
   g.placing = null
@@ -130,6 +131,7 @@ function tryPlaceWall(g: Game): boolean {
     if (!canAfford(g, 0, b.cost)) break
     if (!canPlaceAt(g, 'wall', p.x, p.y)) continue // earlier posts may crowd a later spot
     pay(g, 0, b.cost)
+    clearSpent(g, 'wall', p.x, p.y)
     const site = spawn(g, 'wall', 0, p.x, p.y, false)
     if (!first) first = site
     placed++

@@ -556,13 +556,38 @@ export function openDoors(g: Game, b: Ent): void {
 
 // is this spot open ground for a building of this kind? Buildings occupy
 // square footprints so villages can be packed in tidy rows.
-export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
+// A worked-out resource is just litter on the grass: a stump, a picked bush,
+// a heap of rubble, a carcass. None of it should keep you from building there.
+export function isSpent(e: Ent): boolean {
+  if (e.kind === 'tree' || e.kind === 'berrybush' || e.kind === 'goldmine' || e.kind === 'stonequarry') {
+    return (e.amount ?? 0) <= 0
+  }
+  if (e.kind === 'deer' || e.kind === 'croc') return e.hp <= 0
+  return false
+}
+
+// clear the litter under a new building's footprint, so nothing pokes through
+export function clearSpent(g: Game, kind: Kind, x: number, y: number): void {
+  const f = BUILDINGS[kind].foot
+  for (const e of [...g.ents]) {
+    if (!isSpent(e)) continue
+    const px = Math.max(x - f, Math.min(x + f, e.x))
+    const py = Math.max(y - f, Math.min(y + f, e.y))
+    if (dist(px, py, e.x, e.y) >= e.r + 4) continue
+    const i = g.ents.indexOf(e)
+    if (i >= 0) g.ents.splice(i, 1)
+    g.byId.delete(e.id)
+  }
+}
+
+export function canPlaceAt(g: Game, kind: Kind, x: number, y: number, ents: Ent[] = g.ents): boolean {
   const f = BUILDINGS[kind].foot
   if (x - f < 40 || x + f > g.world.w - 40 || y - f < 40 || y + f > g.world.h - 40) return false
   if (inWater(g, x, y, f + 6, true)) return false // no building in the water — or damming a ford
   const isPal = kind === 'wall' || kind === 'gate'
-  for (const e of g.ents) {
+  for (const e of ents) {
     if (isUnit(e)) continue
+    if (isSpent(e)) continue // stumps, picked bushes, rubble and carcasses yield the ground
     if (isBuilding(e)) {
       // square vs square, snug 6px seam — but palisade pieces overlap freely
       // so a dragged line reads as one solid fence, diagonals included
@@ -579,6 +604,27 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number): boolean {
     }
   }
   return true
+}
+
+// The cells around a spot, each flagged buildable — this is what the build
+// grid shades in. The entity list is filtered down to the neighbourhood once
+// rather than per cell, so a 13x13 block costs almost nothing.
+export function placementCells(
+  g: Game, kind: Kind, cx: number, cy: number, radius: number,
+): { x: number; y: number; ok: boolean }[] {
+  const f = BUILDINGS[kind].foot
+  const reach = radius * PLACE_SNAP + f + 90
+  const near = g.ents.filter(e =>
+    !isUnit(e) && Math.abs(e.x - cx) < reach && Math.abs(e.y - cy) < reach)
+  const out: { x: number; y: number; ok: boolean }[] = []
+  for (let iy = -radius; iy <= radius; iy++) {
+    for (let ix = -radius; ix <= radius; ix++) {
+      const x = cx + ix * PLACE_SNAP
+      const y = cy + iy * PLACE_SNAP
+      out.push({ x, y, ok: canPlaceAt(g, kind, x, y, near) })
+    }
+  }
+  return out
 }
 
 // the run of posts a dragged wall line would place, flagged buildable or not.

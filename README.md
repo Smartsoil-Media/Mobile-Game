@@ -60,7 +60,8 @@ chase at its edge.
 - **Farms** (60 wood) give a steady food trickle — but each field wants
   exactly **one farmer**; extra hands are waved off to a free farm (or told
   to plant another). **Berry bushes** forage out, **mines and quarries**
-  shrink to rubble, **trees** leave stumps
+  shrink to rubble, **trees** leave stumps — and once they're spent you
+  can build straight over them
 - **Deer** graze in shy little herds. Send a villager at one to **hunt**:
   the deer bolts in short hops, three pokes bring it down, and the venison
   (90 food) hauls to any food drop-off. Herds amble, keep their distance,
@@ -101,6 +102,16 @@ chase at its edge.
   they swear to no banner unless invited, can be released again, and a
   monk carrying a relic ignores the muster entirely — the reliquary
   matters more than the parade
+- **The build grid**: pick up a building and the meadow rules itself into
+  the snap lattice — a fine grid with a heavier line every fourth, so
+  rows of houses and fences line up properly. The squares the building
+  *won't* fit are washed red around the ghost (fading out at the edge of
+  what's checked, so it reads as a hint near your thumb rather than a
+  hard border), and the ghost itself is green or red for the exact spot
+- **Worked-out ground is buildable**: a foraged-out berry bush, a mine or
+  quarry shrunk to rubble, a chopped stump, a picked-clean carcass — none
+  of them hold the ground any more. Build right over the top and the
+  litter is swept away underneath
 - **Deselect** (the empty frame beside the stone pill): one tap drops the
   whole selection — far easier than picking villagers off one by one
 - **Info mode** (the ⓘ to the left of the resources): tap it to light it

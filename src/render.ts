@@ -1,6 +1,6 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, dist, isUnit, isBuilding } from './data'
-import { isVisibleToPlayer, canPlaceAt, wallLinePoints, fogIndex } from './world'
+import { Game, Ent, BUILDINGS, PLACE_SNAP, dist, isUnit, isBuilding } from './data'
+import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawCroc, drawTC, drawHouse, drawBarracks,
@@ -616,6 +616,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
 
   drawButterflies(ctx, g, time)
 
+  drawBuildGrid(ctx, g, view)
+
   drawFog(ctx, g)
   drawEdgeFade(ctx, g)
 
@@ -734,6 +736,49 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   }
 
   ctx.restore()
+}
+
+// AoE-style build grid: while a building is in hand, the meadow rules itself
+// into the snap lattice so rows line up, and the squares you CAN'T build on
+// are washed red around your thumb. Only ever drawn during placement.
+function drawBuildGrid(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
+  if (!g.placing || !g.placePos) return
+  const c = PLACE_SNAP
+  const x0 = Math.floor(view.x0 / c) * c
+  const x1 = Math.ceil(view.x1 / c) * c
+  const y0 = Math.floor(view.y0 / c) * c
+  const y1 = Math.ceil(view.y1 / c) * c
+  // the fine lattice, with a heavier rule every fourth line to count by
+  for (let pass = 0; pass < 2; pass++) {
+    const major = pass === 1
+    ctx.strokeStyle = major ? 'rgba(251, 243, 228, 0.26)' : 'rgba(251, 243, 228, 0.12)'
+    ctx.lineWidth = major ? 1.2 : 0.7
+    ctx.beginPath()
+    for (let x = x0; x <= x1; x += c) {
+      if ((Math.round(x / c) % 4 === 0) !== major) continue
+      ctx.moveTo(x, y0); ctx.lineTo(x, y1)
+    }
+    for (let y = y0; y <= y1; y += c) {
+      if ((Math.round(y / c) % 4 === 0) !== major) continue
+      ctx.moveTo(x0, y); ctx.lineTo(x1, y)
+    }
+    ctx.stroke()
+  }
+  // and the neighbourhood readout: where this building simply will not go.
+  // It fades out toward the edge of what we evaluate, so the wash reads as a
+  // hint around your thumb rather than a hard border with clear ground beyond.
+  if (g.placing === 'wall') return // a dragged fence shows its own per-post marks
+  const R = 9
+  const cells = placementCells(g, g.placing, g.placePos.x, g.placePos.y, R)
+  for (const cell of cells) {
+    if (cell.ok) continue
+    const d = Math.max(
+      Math.abs(cell.x - g.placePos.x), Math.abs(cell.y - g.placePos.y)) / c
+    const a = 0.22 * Math.max(0, 1 - (d / R) ** 2)
+    if (a < 0.012) continue
+    ctx.fillStyle = `rgba(201, 82, 94, ${a.toFixed(3)})`
+    ctx.fillRect(cell.x - c / 2, cell.y - c / 2, c, c)
+  }
 }
 
 function rrFill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

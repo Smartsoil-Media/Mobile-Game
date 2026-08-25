@@ -736,6 +736,71 @@ if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + kn
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
 await waitSim(page3, 1)
 
+// 4.6651) the build grid, and building over worked-out ground
+const spentGround = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 900
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  // plant a bush on known-clear ground, so only its own state decides the answer
+  const spot = window.__findSpot(40, tc.x, tc.y)
+  if (!spot) return null
+  const bush = g.byId.get(window.__game.spawn('berrybush', -1, spot.x, spot.y))
+  const at = { x: Math.round(bush.x / 16) * 16, y: Math.round(bush.y / 16) * 16 }
+  const laden = window.__game.canPlaceAt('house', at.x, at.y)
+  bush.amount = 0 // foraged out
+  const picked = window.__game.canPlaceAt('house', at.x, at.y)
+  return { at, laden, picked, bushId: bush.id, tc: { x: tc.x, y: tc.y } }
+})
+console.log('worked-out ground:', spentGround && { laden: spentGround.laden, picked: spentGround.picked })
+if (!spentGround) throw new Error('no clear berry bush to test worked-out ground')
+if (spentGround.laden) throw new Error('a bush still in fruit should block building')
+if (!spentGround.picked) throw new Error('a foraged-out bush should yield the ground')
+// the same through the real placement path: the litter is swept away underneath
+const builderWas = await page3.evaluate(({ at }) => {
+  const g = window.__game.state
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager' && e.state !== 'build')
+  g.selection = [v.id]
+  g.placing = 'house'
+  g.placePos = { x: at.x, y: at.y }
+  g.uiDirty = true
+  return { id: v.id, x: v.x, y: v.y } // put him back afterwards, or later tests starve
+}, spentGround)
+await page3.waitForTimeout(250)
+// while a building is in hand the meadow rules itself into the snap grid, and
+// the squares it will not fit are washed out around the ghost
+const gridRead = await page3.evaluate(({ tc }) => {
+  const cells = window.__game.placementCells('house', tc.x, tc.y, 9)
+  return { total: cells.length, blocked: cells.filter(c => !c.ok).length }
+}, spentGround)
+console.log('build grid readout at the Town Hall:', gridRead)
+if (gridRead.total !== 19 * 19) throw new Error('the readout should cover the whole neighbourhood')
+if (gridRead.blocked < 40) throw new Error('the Town Hall should block a good block of cells')
+if (gridRead.blocked === gridRead.total) throw new Error('open ground beside the hall should still be free')
+await page3.tap('[data-cmd="confirm"]')
+await page3.waitForTimeout(350)
+const builtOver = await page3.evaluate(({ at, bushId }) => {
+  const g = window.__game.state
+  const house = g.ents.find(e =>
+    e.kind === 'house' && Math.abs(e.x - at.x) < 20 && Math.abs(e.y - at.y) < 20)
+  const out = { housePlaced: !!house, bushCleared: !g.byId.has(bushId) }
+  if (house) house.hp = 0 // tidy the practice house away
+  g.selection = []
+  g.uiDirty = true
+  return out
+}, spentGround)
+// send the practice builder home and stand him down
+await page3.evaluate(({ id, x, y }) => {
+  const g = window.__game.state
+  const v = g.byId.get(id)
+  if (!v) return
+  v.x = x; v.y = y
+  v.state = 'idle'; v.targetId = undefined; v.path = null; v.carry = 0
+}, builderWas)
+console.log('built over the picked bush:', builtOver)
+if (!builtOver.housePlaced) throw new Error('the house would not go up on worked-out ground')
+if (!builtOver.bushCleared) throw new Error('the picked bush should be swept away under the new building')
+await waitSim(page3, 1)
+
 // 4.6652) banners: the King's Army by default, split off a company, and let a
 // hall route its recruits into it
 const bannerStage = await page3.evaluate(() => {
