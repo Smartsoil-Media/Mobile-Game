@@ -62,9 +62,10 @@ chase at its edge.
   Each one wants exactly **one farmer**; extra hands are waved off to a
   free farm (or told to plant another). A worked field **turns through
   the year**: bare furrows and seed, green shoots, tall stalks, heavy
-  gold — then the scythe, a puff of chaff, and back to bare earth. **Berry bushes** forage out, **mines and quarries**
-  shrink to rubble, **trees** leave stumps — and once they're spent you
-  can build straight over them
+  gold — then the scythe, a puff of chaff, and back to bare earth
+- **Berry bushes** forage out, **mines and quarries** shrink to rubble,
+  **trees** leave stumps — and once they're spent you can build straight
+  over them
 - **Deer** graze in shy little herds. Send a villager at one to **hunt**:
   the deer bolts in short hops, three pokes bring it down, and the venison
   (90 food) hauls to any food drop-off. Herds amble, keep their distance,
