@@ -2,15 +2,18 @@
   "name": "bramblewick",
   "version": "0.1.0",
   "private": true,
-  "description": "A cosy mobile RTS in the spirit of Age of Empires — TypeScript + canvas, bundled to a single HTML file.",
+  "description": "A cosy mobile RTS in the spirit of Age of Empires \u2014 TypeScript + canvas, bundled to a single HTML file.",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "synth": "node scripts/synth.mjs",
+    "audio": "node scripts/synth.mjs && node scripts/audio.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "esbuild": "^0.27.3",
+    "ffmpeg-static": "^5.3.0",
     "typescript": "^5.9.3"
   }
 }

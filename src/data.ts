@@ -161,6 +161,18 @@ export interface Game {
   infoId: number | null // what the info card is currently reading out
   started: boolean
   uiDirty: boolean
+  sfxQueue: SfxCue[] // things that just happened and want to be heard
+}
+
+/** A sound the sim asked for. The sim never touches the audio engine itself. */
+export interface SfxCue { name: string; x?: number; y?: number; gain?: number }
+
+const SFX_QUEUE_MAX = 48 // a frame of chaos shouldn't grow the queue without end
+
+/** Ask for a sound at a spot in the world. Cheap, and safe to spam. */
+export function cue(g: Game, name: string, x?: number, y?: number, gain?: number): void {
+  if (g.sfxQueue.length >= SFX_QUEUE_MAX) return
+  g.sfxQueue.push({ name, x, y, gain })
 }
 
 export interface Cost { wood: number; food: number; gold: number; stone: number }

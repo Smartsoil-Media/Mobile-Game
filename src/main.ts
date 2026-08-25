@@ -6,6 +6,7 @@ import { update } from './sim'
 import { render } from './render'
 import { attachInput, clampCamera, selectArmy, snapPlace } from './input'
 import { initUI, syncUI } from './ui'
+import { unlockAudio, listenFrom, drainSfx, sfx, setMuted, setVolume, audioReady, muted, heardSfx, clearHeard, sfxProbe } from './audio'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement
 // ?map=classic pins the handcrafted meadow (the test suite lives there);
@@ -34,6 +35,15 @@ attachInput(g, canvas)
 initUI(g)
 resize()
 
+// Browsers only hand out a live AudioContext from inside a real gesture, so the
+// meadow stays silent until the first touch anywhere on the page.
+document.addEventListener('pointerdown', unlockAudio, { capture: true })
+// One soft tap for every button in the HUD, wired once rather than at each one.
+document.addEventListener('click', ev => {
+  const t = ev.target as HTMLElement | null
+  if (t?.closest('button, .pill, .chip, .card-pick')) sfx('tap')
+}, { capture: true })
+
 const STEP = 1 / 30
 let acc = 0
 let last = performance.now()
@@ -54,6 +64,10 @@ function frame(now: number): void {
     while (acc >= STEP && steps < 240) { update(g, STEP); acc -= STEP; steps++ }
   }
   render(g, canvas, now / 1000)
+  // sound follows the eye: the mixer needs to know what the camera can see
+  listenFrom(g.camera.x, g.camera.y,
+    canvas.clientWidth / g.camera.zoom, canvas.clientHeight / g.camera.zoom)
+  drainSfx(g)
   syncUI(g)
   requestAnimationFrame(frame)
 }
@@ -75,4 +89,14 @@ requestAnimationFrame(frame)
   gateSnap(x: number, y: number) { return gateSnap(g, x, y) },
   wallsUnderGate(x: number, y: number) { return wallsUnderGate(g, x, y) },
   placementCells(kind: Kind, x: number, y: number, r: number) { return placementCells(g, kind, x, y, r) },
+  // audio hooks for headless runs (no speaker attached, so we check the queue)
+  sfxQueue() { return g.sfxQueue.map(c => c.name) },
+  clearSfx() { g.sfxQueue.length = 0 },
+  audio() { return { ready: audioReady(), muted } },
+  heard() { return heardSfx() },
+  clearHeard() { clearHeard() },
+  sfxProbe() { return sfxProbe() },
+  unlockAudio() { unlockAudio() },
+  setMuted(on: boolean) { setMuted(on) },
+  setVolume(v: number) { setVolume(v) },
 }

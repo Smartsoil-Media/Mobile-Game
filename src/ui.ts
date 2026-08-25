@@ -1,3 +1,4 @@
+import { unlockAudio, toggleMuted, muted, sfx } from './audio'
 // DOM HUD: resource pills, icon command dock, toasts, overlays.
 import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
@@ -30,6 +31,8 @@ const ICON = {
   lock: `<svg class="lockb" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="10" width="12" height="9" rx="2.5" fill="#5A4632"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" stroke="#5A4632" stroke-width="2.2" fill="none"/><circle cx="12" cy="14.5" r="1.6" fill="#FBF3E4"/></svg>`,
   info: `<svg viewBox="0 0 24 24" width="21" height="21"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="7.6" r="1.5" fill="currentColor"/><path d="M12 11v6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
   deselect: `<svg viewBox="0 0 24 24" width="21" height="21"><path d="M4.5 8V5.5A1 1 0 0 1 5.5 4.5H8M16 4.5h2.5a1 1 0 0 1 1 1V8M19.5 16v2.5a1 1 0 0 1-1 1H16M8 19.5H5.5a1 1 0 0 1-1-1V16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  soundOn: `<svg viewBox="0 0 24 24" width="21" height="21"><path d="M11.8 4.2a5.6 5.6 0 0 1 5.6 5.6v4.1l1.3 2.2H4.9l1.3-2.2V9.8a5.6 5.6 0 0 1 5.6-5.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.9 19a2 2 0 0 0 3.8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.6 5.4a7 7 0 0 1 0 4.2M2.9 5.4a7 7 0 0 0 0 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity="0.75"/></svg>`,
+  soundOff: `<svg viewBox="0 0 24 24" width="21" height="21"><path d="M11.8 4.2a5.6 5.6 0 0 1 5.6 5.6v4.1l1.3 2.2H4.9l1.3-2.2V9.8a5.6 5.6 0 0 1 5.6-5.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.9 19a2 2 0 0 0 3.8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.6 3.4 20.4 20.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="11.5" fill="#FBF3E4"/><path d="M12 4a6 6 0 0 1 6 6v4l1.5 2.5H4.5L6 14v-4a6 6 0 0 1 6-6z" fill="#B8842E"/><path d="M12 4a6 6 0 0 1 6 6v4H6v-4a6 6 0 0 1 6-6z" fill="#E9B44C"/><circle cx="12" cy="19.5" r="2" fill="#B8842E"/><circle cx="12" cy="3.5" r="1.5" fill="#8B6A4A"/></svg>`,
 }
 
@@ -225,6 +228,22 @@ export function initUI(g: Game): void {
     g.placeEnd = null
     g.uiDirty = true
   })
+  // sound: a handbell that goes quiet when it's struck through
+  const soundBtn = el('p-sound')
+  const paintSound = (): void => {
+    soundBtn.innerHTML = muted ? ICON.soundOff : ICON.soundOn
+    soundBtn.classList.toggle('dim', muted)
+    soundBtn.setAttribute('aria-pressed', String(!muted))
+    soundBtn.setAttribute('aria-label', muted ? 'Sound off' : 'Sound on')
+  }
+  paintSound()
+  soundBtn.addEventListener('click', () => {
+    unlockAudio() // muting is a gesture too, so this is where audio may wake up
+    toggleMuted()
+    paintSound()
+    if (!muted) sfx('tap')
+  })
+
   // info mode: while it's lit, taps read a thing out instead of commanding it
   el('p-info').insertAdjacentHTML('afterbegin', ICON.info)
   el('p-info').addEventListener('click', () => {

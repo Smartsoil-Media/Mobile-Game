@@ -11,7 +11,7 @@ import {
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
   TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
-  dist, isUnit, isBuilding, isResource, isSiege, mustBanner,
+  dist, isUnit, isBuilding, isResource, isSiege, mustBanner, cue,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { lineClear, findPath, inWater, streamDist } from './nav'
@@ -129,12 +129,19 @@ function inRange(a: Ent, b: Ent, range: number): boolean {
 }
 
 // something of yours took a hit: raise a minimap alert (grouped, short-lived)
+// What the tool makes of the thing it's working on.
+const WORK_SOUND: Record<string, string> = {
+  tree: 'chop', goldmine: 'mine', stonequarry: 'mine',
+  berrybush: 'forage', deer: 'forage', croc: 'forage', farm: 'harvest',
+}
+
 function alertPing(g: Game, x: number, y: number): void {
   for (const p of g.pings) {
     if (g.t - p.t < 2.5 && dist(p.x, p.y, x, y) < 150) return // same skirmish
   }
   g.pings.push({ x, y, t: g.t })
   if (g.pings.length > 8) g.pings.shift()
+  cue(g, 'bell') // the town bell, heard wherever you happen to be looking
 }
 
 function attackTarget(g: Game, e: Ent, dt: number): void {
@@ -180,6 +187,7 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
         splash: mang ? MANGONEL_SPLASH : TREB_SPLASH,
       })
       puff(g, e.x, e.y - 18, '#C9B896', 3)
+      cue(g, 'launch', e.x, e.y)
     }
     return
   }
@@ -201,9 +209,11 @@ function attackTarget(g: Game, e: Ent, dt: number): void {
         speed: 260, dmg, team: e.team,
       })
       g.arrowsFired++
+      cue(g, 'bow', e.x, e.y)
     } else {
       t.hp -= dmg
       puff(g, t.x + (Math.random() - 0.5) * t.r, t.y - t.r * 0.4, '#FFF3D6', 3, 'hit')
+      cue(g, 'sword', t.x, t.y)
       if (t.team === 0) alertPing(g, t.x, t.y)
     }
     // defenders fight back: idle victims turn on their attacker
@@ -309,6 +319,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
           : gives === 'food' ? '#E58F8F'
           : gives === 'stone' ? '#C9C2B2' : '#A4C77E'
         puff(g, res.x, res.y - res.r * 0.6, sparkColor, 2, 'spark')
+        cue(g, WORK_SOUND[res.kind] ?? 'chop', res.x, res.y)
         if ((res.kind === 'goldmine' || res.kind === 'stonequarry') && res.amount! > 0) {
           // the mound shrinks as it empties
           const spec = RESOURCES[res.kind]
@@ -344,6 +355,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         g.res[e.team][e.carryRes ?? 'wood'] += e.carry ?? 0
         if (e.team === 0) g.uiDirty = true
       }
+      cue(g, 'drop', home.x, home.y)
       e.carry = 0
       const res = e.targetId !== undefined ? g.byId.get(e.targetId) : undefined
       const farmAlive = res?.kind === 'farm' && res.complete && res.team === e.team
@@ -382,15 +394,21 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       site.progress = Math.min(1, (site.progress ?? 0) + dt / b.time)
       site.hp = Math.min(b.hp, site.hp + (b.hp * 0.9) * (dt / b.time))
       if (Math.random() < dt * 6) puff(g, site.x + (Math.random() - 0.5) * site.r, site.y - site.r * 0.5, '#E8DCC0', 1)
+      if (Math.random() < dt * 3) cue(g, 'hammer', site.x, site.y)
       if (site.progress >= 1) {
         site.complete = true
         site.hp = b.hp
         puff(g, site.x, site.y - site.r * 0.5, '#FBF3E4', 10)
+        // a fence post finishing is a tap, a hall finishing is an occasion
+        cue(g, site.kind === 'wall' ? 'place' : site.kind === 'gate' ? 'gate' : 'built', site.x, site.y)
         // a finished landmark IS the age-up: the new age dawns as the walls rise
         const lm = LANDMARKS[site.kind as LandmarkKind]
         if (lm && g.age[site.team] < lm.toAge) {
           g.age[site.team] = lm.toAge
-          if (site.team === 0) toast(g, `The ${AGE_NAMES[lm.toAge]} dawns — the ${b.name} stands!`)
+          if (site.team === 0) {
+            toast(g, `The ${AGE_NAMES[lm.toAge]} dawns — the ${b.name} stands!`)
+            cue(g, 'ageup')
+          }
           for (const bl of g.ents) {
             if (bl.team === site.team && isBuilding(bl) && bl.complete) {
               puff(g, bl.x, bl.y - bl.r * 0.4, '#FBF3E4', 6)
@@ -549,6 +567,7 @@ function garrisonWalk(g: Game, e: Ent, dt: number): void {
     e.insideId = b.id
     e.carry = 0
     puff(g, b.x, b.y + b.r * 0.4, '#FBF3E4', 3)
+    cue(g, 'gate', b.x, b.y)
     g.uiDirty = true
   }
   e.state = 'idle'
@@ -786,6 +805,7 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     // recruits ride under whatever banner this hall flies (monks still swear to none)
     if (e.team === 0 && e.recruitBanner !== undefined && mustBanner(u)) u.banner = e.recruitBanner
     puff(g, u.x, u.y, '#FBF3E4', 6)
+    cue(g, 'muster', u.x, u.y)
     if (e.team === 0) g.uiDirty = true
   }
 }
@@ -958,6 +978,7 @@ export function update(g: Game, dt: number): void {
         // the boulder lands: everything hostile near the point of impact is hit
         puff(g, p.tx, p.ty, '#C9B896', 8)
         puff(g, p.tx, p.ty - 4, '#FFF3D6', 4, 'hit')
+        cue(g, 'boom', p.tx, p.ty)
         for (const o of g.ents) {
           if (o.team < 0 || o.team === p.team || o.hidden) continue
           if (!isUnit(o) && !isBuilding(o)) continue
@@ -969,6 +990,7 @@ export function update(g: Game, dt: number): void {
       } else if (t && !t.hidden && dist(p.tx, p.ty, t.x, t.y - 6) < t.r + 12) {
         t.hp -= p.dmg
         puff(g, t.x, t.y - t.r * 0.5, '#FFF3D6', 2, 'hit')
+        cue(g, 'arrowhit', t.x, t.y)
         if (t.team === 0) alertPing(g, t.x, t.y)
       }
     } else {
@@ -1013,6 +1035,7 @@ export function update(g: Game, dt: number): void {
   for (const e of [...g.ents]) {
     if ((isUnit(e) || isBuilding(e)) && e.hp <= 0) {
       puff(g, e.x, e.y - e.r * 0.4, isBuilding(e) ? '#C9B896' : '#F4E4C6', isBuilding(e) ? 14 : 7)
+      if (isBuilding(e) && e.kind !== 'wall') cue(g, 'crumble', e.x, e.y)
       killEnt(g, e)
     }
   }
@@ -1038,6 +1061,6 @@ export function update(g: Game, dt: number): void {
   // win / lose
   const playerTC = g.ents.some(e => e.team === 0 && e.kind === 'towncenter')
   const enemyTC = g.ents.some(e => e.team === 1 && e.kind === 'towncenter')
-  if (!enemyTC) { g.over = 'win'; g.uiDirty = true }
-  else if (!playerTC) { g.over = 'lose'; g.uiDirty = true }
+  if (!enemyTC) { g.over = 'win'; g.uiDirty = true; cue(g, 'victory') }
+  else if (!playerTC) { g.over = 'lose'; g.uiDirty = true; cue(g, 'defeat') }
 }

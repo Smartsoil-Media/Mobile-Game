@@ -258,12 +258,50 @@ and every recruit after:
 The enemy village walks the same road: it banks toward its own landmarks,
 counters what you field, and swears in champions when its coffers run deep.
 
+## Sound
+
+The meadow has a voice: axes into trunks, picks on stone, hammers on a
+half-built hall, a bowstring, a boulder landing, the town bell when something
+of yours is being hurt, and a horn for the age turning over.
+
+- Every sample ships **inside** the bundle as a base64 mono MP3, so the game
+  still has audio installed to a home screen with the phone in flight mode, and
+  the Artifact build works under a CSP that forbids fetching anything.
+- Sound follows the eye. A cue carries a world position; the mixer pans it,
+  fades it out toward the edge of the screen, drops it entirely once it's well
+  off-camera, and never plays anything standing in the fog.
+- Repeats are throttled per sound and pitch-drifted a few percent, so twenty
+  villagers chopping in step sound like a village rather than a machine gun.
+- The handbell above the minimap hushes everything, and remembers.
+
+The sim never touches the audio engine — it appends a name and a position to
+`g.sfxQueue` via `cue()`, and `drainSfx()` empties that once a frame. A headless
+run therefore behaves identically with no speaker attached, which is how the
+playtest checks the right sounds fire at the right moments.
+
+### Working on the sound bank
+
+```bash
+npm run audio   # render the bank, then encode it into src/sfx-data.ts
+```
+
+`scripts/synth.mjs` builds the stand-in bank from modal synthesis — a struck
+object is a handful of decaying sine partials, so wood, stone, metal and bells
+all come out of the same small toolkit. It's seeded, so a rebuild that changed
+nothing produces identical files.
+
+To swap in a real recording, drop it in as `audio-src/<name>.src.wav`. The synth
+leaves that name alone and `scripts/audio.mjs` normalises, trims and encodes it
+exactly like the rest. `audio-src/` is deliberately untracked: the synthesised
+files regenerate from source, and licensed samples don't belong in a public repo.
+
 ## Development
 
 ```bash
 npm install
 npm run build   # bundles src/ into dist/index.html + dist/artifact.html
 npm run shot    # headless playtest + screenshots (PW_EXECUTABLE=/path/to/chromium if needed)
+npm run audio   # re-render and re-encode the sound bank (needs ffmpeg-static)
 ```
 
 - `dist/index.html` — complete single-file game, open in any browser
@@ -280,4 +318,6 @@ npm run shot    # headless playtest + screenshots (PW_EXECUTABLE=/path/to/chromi
 | `src/render.ts` | Camera, meadow ground, draw loop |
 | `src/input.ts` | Touch input: tap/drag/pinch, command dispatch |
 | `src/ui.ts` | DOM HUD: resource pills, command dock, hints, overlays |
+| `src/audio.ts` | The mixer: decoding, panning, throttling, mute |
+| `src/sfx-data.ts` | Generated — the sound bank as base64 MP3 |
 | `src/main.ts` | Bootstrap and game loop |

@@ -1,2 +1,5 @@
 node_modules/
 shots/
+
+# sound sources: regenerate with `npm run audio` (licensed samples never go in git)
+audio-src/

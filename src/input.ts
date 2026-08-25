@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue} from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -121,6 +121,7 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
     g.navDirty = true
   }
   commandBuild(g, villagers, site)
+  cue(g, 'place', x, y)
   g.placing = null
   g.placePos = null
   g.placeEnd = null
@@ -149,6 +150,7 @@ function tryPlaceWall(g: Game): boolean {
   if (!placed) { toast(g, 'Not enough wood for the fence.'); return false }
   if (placed < pts.length) toast(g, 'The wood ran out partway along the fence.')
   commandBuild(g, villagers, first!)
+  cue(g, 'place', first!.x, first!.y)
   g.placing = null
   g.placePos = null
   g.placeEnd = null

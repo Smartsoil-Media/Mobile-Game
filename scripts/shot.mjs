@@ -36,9 +36,12 @@ async function openCat(pg, cat) {
   }
 }
 
-const browser = await chromium.launch(
-  process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {},
-)
+const browser = await chromium.launch({
+  // headless has no speaker, but Web Audio still decodes — which is what the
+  // sound test checks, and it needs the gesture requirement lifted to do it
+  args: ['--autoplay-policy=no-user-gesture-required'],
+  ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {}),
+})
 const page = await browser.newPage({
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,
@@ -3335,6 +3338,94 @@ const layoutOf = async seed => {
 }
 if (await layoutOf(7) === await layoutOf(13)) throw new Error('different seeds dealt identical maps')
 console.log('random map invariants hold')
+
+// 20) sound: every sample survives the encoder, and the sim asks for the
+// right one at the right moment. There is no speaker in here, so we check the
+// decoded buffers directly and watch the queue the sim writes into.
+{
+  const pgA = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
+  await pgA.goto('file://' + resolve('dist/index.html') + '?map=classic')
+  await pgA.evaluate(() => window.__game.allowPortrait())
+  await pgA.evaluate(() => window.__game.unlockAudio())
+  await pgA.waitForFunction(() => window.__game.audio().ready, null, { timeout: 30000 })
+
+  const probe = await pgA.evaluate(() => window.__game.sfxProbe())
+  const quiet = probe.filter(p => p.peak < 0.3)
+  const stubs = probe.filter(p => p.dur < 0.08)
+  console.log('sound bank:', { sounds: probe.length, quiet: quiet.map(p => p.name), stubs: stubs.map(p => p.name) })
+  if (probe.length < 20) throw new Error('the sound bank is short: ' + probe.length)
+  // a silent sample means the encoder ate it — exactly how the bell was lost once
+  if (quiet.length) throw new Error('these sounds decoded to near-silence: ' + quiet.map(p => p.name).join(', '))
+  if (stubs.length) throw new Error('these sounds decoded to nothing: ' + stubs.map(p => p.name).join(', '))
+
+  await startGame(pgA)
+  // put a pair of hands on the trees, then listen to them work
+  await pgA.tap('#p-wood')
+  await pgA.evaluate(() => window.__game.clearHeard())
+  await waitSim(pgA, 12)
+  const working = await pgA.evaluate(() => window.__game.heard())
+  const heardWork = [...new Set(working)]
+  console.log('village at work:', heardWork.slice(0, 8))
+  if (!working.includes('chop')) throw new Error('nobody is making a sound felling trees')
+
+  // a soldier mustering, a blow struck, and a boulder coming down
+  const battle = await pgA.evaluate(async () => {
+    const G = window.__game, g = G.state
+    G.clearHeard()
+    const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+    const sw = G.spawn('swordsman', 0, tc.x + 220, tc.y + 220)
+    const foe = G.spawn('spearman', 1, tc.x + 236, tc.y + 220)
+    g.byId.get(sw).state = 'attack'
+    g.byId.get(sw).targetId = foe
+    const treb = G.spawn('trebuchet', 0, tc.x + 200, tc.y - 240)
+    const wall = G.spawn('spearman', 1, tc.x + 380, tc.y - 240)
+    g.byId.get(treb).state = 'attack'
+    g.byId.get(treb).targetId = wall
+    return { sw, foe, treb }
+  })
+  await waitSim(pgA, 14)
+  const fight = [...new Set(await pgA.evaluate(() => window.__game.heard()))]
+  console.log('battle:', fight.filter(n => ['sword', 'launch', 'boom', 'muster', 'bell', 'crumble'].includes(n)))
+  if (!fight.includes('sword')) throw new Error('swords swing in silence')
+  if (!fight.includes('launch')) throw new Error('the trebuchet looses without a sound')
+  if (!fight.includes('boom')) throw new Error('the boulder lands without a sound')
+  void battle
+
+  // the fog keeps its secrets: a fight in the dark is neither seen nor heard
+  const inTheDark = await pgA.evaluate(async () => {
+    const G = window.__game, g = G.state
+    const spot = { x: g.world.w - 200, y: g.world.h - 200 }
+    const lit = g.fog.visible[Math.floor(spot.y / 32) * g.fog.w + Math.floor(spot.x / 32)]
+    const a = G.spawn('swordsman', 1, spot.x, spot.y)
+    const b = G.spawn('spearman', 1, spot.x + 16, spot.y)
+    g.byId.get(a).state = 'attack'
+    g.byId.get(a).targetId = b
+    g.camera.x = spot.x
+    g.camera.y = spot.y
+    G.clearHeard()
+    return { lit }
+  })
+  await waitSim(pgA, 6)
+  const darkHeard = await pgA.evaluate(() => window.__game.heard())
+  console.log('fight in the fog:', { lit: inTheDark.lit, heard: [...new Set(darkHeard)] })
+  if (darkHeard.includes('sword')) throw new Error('a fight in the fog can be heard through it')
+
+  // muting is a setting, not a session: it survives a reload
+  const hush = await pgA.evaluate(() => {
+    window.__game.setMuted(true)
+    return window.__game.audio().muted
+  })
+  await pgA.reload()
+  await pgA.evaluate(() => window.__game.allowPortrait())
+  const stillHushed = await pgA.evaluate(() => window.__game.audio().muted)
+  console.log('hush:', { set: hush, afterReload: stillHushed })
+  if (!hush || !stillHushed) throw new Error('the sound toggle does not remember itself')
+  // and the button reads back as off
+  const btn = await pgA.getAttribute('#p-sound', 'aria-pressed')
+  if (btn !== 'false') throw new Error('the handbell button does not show it is hushed: ' + btn)
+  await pgA.evaluate(() => window.__game.setMuted(false))
+  await pgA.close()
+}
 
 await browser.close()
 console.log('PLAYTEST PASSED')

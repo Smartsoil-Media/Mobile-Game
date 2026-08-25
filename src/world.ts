@@ -104,7 +104,7 @@ export function createGame(opts?: { seed?: number }): Game {
     nav: null, navDirty: true, navWater: null,
     mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
     streams: [], fords: [],
-    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true,
+    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true, sfxQueue: [],
   }
 
   const rnd = mulberry(random ? ((opts!.seed! | 0) || 1) : 20260819)
