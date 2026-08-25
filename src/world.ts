@@ -630,32 +630,53 @@ export function placementCells(
   return out
 }
 
-// A gate belongs IN a fence, whatever slant the fence runs at. Given where the
-// player is pointing, find the local run of palisade and return the point on it
-// nearest that thumb, plus the run's angle — a least-squares fit of the nearby
-// posts, so it works for straight, diagonal and gently curving fences alike.
+// A gate belongs IN a fence, whatever slant the fence runs at. Fitting a line
+// through every post nearby goes wrong the moment two fences meet: at a corner
+// or a T it averages the two arms into a diagonal that matches neither, and two
+// parallel runs pull it into the gap between them. So instead we follow ONE
+// run: take the post nearest the thumb, read the direction to its nearest
+// neighbour (posts sit ~one tile apart along a run, so that IS the run's
+// heading), then keep only the posts lying along that same line. The gate is
+// placed where the thumb points along the run, clamped to the run's own ends so
+// it can never drift off into open grass.
 export const GATE_SNAP_REACH = 70
+const RUN_SPREAD = 13 // how far off the line a post may sit and still count
 export function gateSnap(g: Game, x: number, y: number): { x: number; y: number; angle: number } | null {
-  const posts = g.ents.filter(e =>
-    e.kind === 'wall' && e.team === 0 && dist(e.x, e.y, x, y) < GATE_SNAP_REACH)
-  if (posts.length < 2) return null
-  let mx = 0, my = 0
-  for (const p of posts) { mx += p.x; my += p.y }
-  mx /= posts.length; my /= posts.length
-  let sxx = 0, sxy = 0, syy = 0
+  const posts = g.ents.filter(e => e.kind === 'wall' && e.team === 0)
+  let near: Ent | null = null
   for (const p of posts) {
-    const dx = p.x - mx, dy = p.y - my
-    sxx += dx * dx; sxy += dx * dy; syy += dy * dy
+    if (dist(p.x, p.y, x, y) > GATE_SNAP_REACH) continue
+    if (!near || dist(p.x, p.y, x, y) < dist(near.x, near.y, x, y)) near = p
   }
-  // principal axis of the little cluster of posts
-  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy)
-  const dx = Math.cos(angle), dy = Math.sin(angle)
-  // a blob of posts with no clear run gives no angle worth trusting
-  let spread = 0
-  for (const p of posts) spread = Math.max(spread, Math.abs((p.x - mx) * dx + (p.y - my) * dy))
-  if (spread < 10) return null
-  const t = (x - mx) * dx + (y - my) * dy
-  return { x: mx + dx * t, y: my + dy * t, angle }
+  if (!near) return null
+  // the run's heading: straight at the closest post beside it
+  let mate: Ent | null = null
+  for (const p of posts) {
+    if (p === near) continue
+    if (dist(p.x, p.y, near.x, near.y) > 40) continue
+    if (!mate || dist(p.x, p.y, near.x, near.y) < dist(mate.x, mate.y, near.x, near.y)) mate = p
+  }
+  if (!mate) return null // a lone post is no fence
+  const len = dist(near.x, near.y, mate.x, mate.y) || 1
+  const ux = (mate.x - near.x) / len, uy = (mate.y - near.y) / len
+  // everything on THIS line — a crossing arm or a parallel fence sits too far off it
+  let lo = 0, hi = 0
+  for (const p of posts) {
+    if (dist(p.x, p.y, near.x, near.y) > GATE_SNAP_REACH) continue
+    const dx = p.x - near.x, dy = p.y - near.y
+    if (Math.abs(dx * -uy + dy * ux) > RUN_SPREAD) continue
+    const t = dx * ux + dy * uy
+    lo = Math.min(lo, t); hi = Math.max(hi, t)
+  }
+  // where the thumb points along the run, but never off the end of it
+  const want = (x - near.x) * ux + (y - near.y) * uy
+  const t = Math.max(lo, Math.min(hi, want))
+  // a gate is symmetric, so keep the heading in a half-turn: -90..90 reads
+  // the same on screen and keeps the stored value predictable
+  let angle = Math.atan2(uy, ux)
+  if (angle > Math.PI / 2) angle -= Math.PI
+  if (angle <= -Math.PI / 2) angle += Math.PI
+  return { x: near.x + ux * t, y: near.y + uy * t, angle }
 }
 
 // the posts a gate would swallow as it is set into the fence

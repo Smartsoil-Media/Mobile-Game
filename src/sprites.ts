@@ -1071,50 +1071,68 @@ export function drawWall(ctx: CanvasRenderingContext2D, e: Ent): void {
   ctx.beginPath(); ctx.moveTo(x - 7.4, y - 3); ctx.lineTo(x + 7.4, y - 4.5); ctx.stroke()
 }
 
+// A gate lies along its fence, but its posts still STAND UP: rotating the whole
+// sprite tipped them over on steep runs, which is why angled gates looked so
+// odd. Only the ground plan turns — each upright is drawn vertical at its own
+// spot along the run, nearest last so it overlaps properly.
 export function drawGate(ctx: CanvasRenderingContext2D, e: Ent, t: number, open = false): void {
-  // a gate set into a slanting fence lies along the run: draw it about the
-  // origin and let the transform carry the angle
   const a = e.angle ?? 0
-  if (a) {
-    ctx.save()
-    ctx.translate(e.x, e.y)
-    ctx.rotate(a)
-    ctx.translate(-e.x, -e.y)
+  const ux = Math.cos(a), uy = Math.sin(a)
+  const at = (u: number): [number, number] => [e.x + ux * u, e.y + uy * u]
+  // shadow pooled along the run
+  ctx.save()
+  ctx.fillStyle = 'rgba(70, 92, 48, 0.18)'
+  ctx.beginPath()
+  ctx.ellipse(e.x, e.y + 9, 17, 5.5, a, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+  const [ax, ay] = at(-13), [bx, by] = at(13)
+  // lintel beam bridging the post tops, drawn before the posts it rests on
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 6
+  ctx.lineCap = 'round'
+  ctx.beginPath(); ctx.moveTo(ax, ay - 19); ctx.lineTo(bx, by - 19); ctx.stroke()
+  // the doors, hung between the posts
+  const doors: [number, number][] = open ? [[-11, 4], [11, 4]] : [[-5.5, 9.4], [5.5, 9.4]]
+  for (const [u, w] of doors) {
+    const [dx2, dy2] = at(u)
+    ctx.fillStyle = '#A9855C'
+    rr(ctx, dx2 - w / 2, dy2 - 9, w, 19, 2); ctx.fill()
+    if (!open) {
+      ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 1.4
+      ctx.beginPath()
+      ctx.moveTo(dx2 - w / 2 + 1, dy2 - 7.5); ctx.lineTo(dx2 + w / 2 - 1, dy2 + 8.5)
+      ctx.moveTo(dx2 + w / 2 - 1, dy2 - 7.5); ctx.lineTo(dx2 - w / 2 + 1, dy2 + 8.5)
+      ctx.stroke()
+    }
   }
-  const x = e.x, y = e.y
-  shadow(ctx, x, y + 10, 17, 5)
-  // heavy end posts
-  for (const ox of [-13, 13]) {
+  // The two heavy gateposts, upright wherever the run points, far one first.
+  // They stand taller than fence posts and carry a pennant, so a gateway is
+  // obvious even on a run pointing straight at you, where the doors stack up
+  // and all but disappear.
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  const posts: [number, number][] = ay <= by ? [[ax, ay], [bx, by]] : [[bx, by], [ax, ay]]
+  posts.forEach(([px, py], i) => {
     ctx.fillStyle = WOOD
-    rr(ctx, x + ox - 3.5, y - 15, 7, 26, 2.5); ctx.fill()
+    rr(ctx, px - 4, py - 21, 8, 32, 2.5); ctx.fill()
     ctx.beginPath()
-    ctx.moveTo(x + ox - 3.5, y - 14)
-    ctx.lineTo(x + ox, y - 19.5)
-    ctx.lineTo(x + ox + 3.5, y - 14)
+    ctx.moveTo(px - 4, py - 20)
+    ctx.lineTo(px, py - 26)
+    ctx.lineTo(px + 4, py - 26 + 6)
     ctx.closePath(); ctx.fill()
-  }
-  // lintel beam
-  ctx.fillStyle = WOOD_DARK
-  rr(ctx, x - 16, y - 14.5, 32, 5, 2); ctx.fill()
-  if (open) {
-    // doors swung back against the posts — friends pass freely
-    ctx.fillStyle = '#A9855C'
-    rr(ctx, x - 12.6, y - 8, 4, 18, 1.5); ctx.fill()
-    rr(ctx, x + 8.6, y - 8, 4, 18, 1.5); ctx.fill()
-  } else {
-    // closed planked doors with cross-braces
-    ctx.fillStyle = '#A9855C'
-    rr(ctx, x - 9.6, y - 9, 9.2, 19, 2); ctx.fill()
-    rr(ctx, x + 0.4, y - 9, 9.2, 19, 2); ctx.fill()
-    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 1.4
-    ctx.beginPath()
-    ctx.moveTo(x - 8.6, y - 7.5); ctx.lineTo(x - 1.4, y + 8.5)
-    ctx.moveTo(x - 1.4, y - 7.5); ctx.lineTo(x - 8.6, y + 8.5)
-    ctx.moveTo(x + 1.4, y - 7.5); ctx.lineTo(x + 8.6, y + 8.5)
-    ctx.moveTo(x + 8.6, y - 7.5); ctx.lineTo(x + 1.4, y + 8.5)
-    ctx.stroke()
-  }
-  if (a) ctx.restore()
+    ctx.fillStyle = WOOD_DARK
+    rr(ctx, px - 5, py - 20.5, 10, 3, 1.5); ctx.fill() // capping band
+    if (i === 1) { // one pennant, on the near post
+      ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 1.6
+      ctx.beginPath(); ctx.moveTo(px, py - 25); ctx.lineTo(px, py - 34); ctx.stroke()
+      ctx.fillStyle = c.main
+      ctx.beginPath()
+      ctx.moveTo(px, py - 34)
+      ctx.lineTo(px + 8, py - 31.5)
+      ctx.lineTo(px, py - 29)
+      ctx.closePath(); ctx.fill()
+    }
+  })
 }
 
 // ---------- Landmarks ----------

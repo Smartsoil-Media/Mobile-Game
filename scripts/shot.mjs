@@ -787,6 +787,58 @@ for (const f of gateFit) {
   if (diff > 0.06) throw new Error(`gate angle ${f.got} does not match the fence ${f.wanted}`)
   if (f.offLine > 3) throw new Error(`the gate landed ${f.offLine}px off its fence line`)
 }
+// where fences MEET, the gate must follow the one run you point at — fitting a
+// line through everything nearby used to average two arms into a diagonal that
+// matched neither, and pull the gate off into open grass
+const gateTricky = await page3.evaluate(() => {
+  const g = window.__game.state
+  const deg = (r) => +(r * 180 / Math.PI).toFixed(1)
+  // only ever clear the practice fences THIS check puts up — the earlier gate
+  // test's runs are still standing and still needed
+  let mine = []
+  const post = (x, y) => { mine.push(window.__game.spawn('wall', 0, x, y)) }
+  const wipe = () => {
+    for (const id of mine) {
+      const e = g.byId.get(id)
+      if (e) { g.ents.splice(g.ents.indexOf(e), 1); g.byId.delete(id) }
+    }
+    mine = []
+  }
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const O = { x: tc.x + 420, y: tc.y - 380 }
+  const out = {}
+  // an L: point along each arm, and right at the elbow
+  wipe()
+  for (let k = 0; k <= 6; k++) post(O.x + k * 16, O.y)
+  for (let k = 1; k <= 6; k++) post(O.x, O.y + k * 16)
+  let f = window.__game.gateSnap(O.x + 50, O.y + 6)
+  out.eastArm = { deg: deg(f.angle), offRun: Math.round(Math.abs(f.y - O.y)) }
+  f = window.__game.gateSnap(O.x + 6, O.y + 50)
+  out.southArm = { deg: deg(f.angle), offRun: Math.round(Math.abs(f.x - O.x)) }
+  // two parallel runs: it must sit ON the nearer one, not between them
+  wipe()
+  for (let k = 0; k <= 6; k++) post(O.x + k * 16, O.y)
+  for (let k = 0; k <= 6; k++) post(O.x + k * 16, O.y + 50)
+  f = window.__game.gateSnap(O.x + 40, O.y + 8)
+  out.parallel = { deg: deg(f.angle), offNearRun: Math.round(Math.abs(f.y - O.y)) }
+  // a thumb past the end of a short run stays ON the fence, not out in the grass
+  wipe()
+  for (let k = 0; k <= 4; k++) post(O.x + k * 16, O.y)
+  f = window.__game.gateSnap(O.x + 120, O.y + 5)
+  out.pastEnd = f ? { along: Math.round(f.x - O.x), runEnds: 64 } : null
+  wipe()
+  return out
+})
+console.log('gates where fences meet:', gateTricky)
+if (Math.abs(gateTricky.eastArm.deg) > 2 || gateTricky.eastArm.offRun > 2)
+  throw new Error('a gate on the east arm should lie flat along it: ' + JSON.stringify(gateTricky.eastArm))
+if (Math.abs(Math.abs(gateTricky.southArm.deg) - 90) > 2 || gateTricky.southArm.offRun > 2)
+  throw new Error('a gate on the south arm should stand along it: ' + JSON.stringify(gateTricky.southArm))
+if (Math.abs(gateTricky.parallel.deg) > 2 || gateTricky.parallel.offNearRun > 2)
+  throw new Error('a gate between parallel fences should take the nearer one: ' + JSON.stringify(gateTricky.parallel))
+if (gateTricky.pastEnd && gateTricky.pastEnd.along > gateTricky.pastEnd.runEnds + 2)
+  throw new Error('a gate must not drift off the end of its fence: ' + JSON.stringify(gateTricky.pastEnd))
+
 // and through the real placement path: it takes the angle, swallows the posts
 // it covers, and their timber goes back in the pile
 const diag = gateFit[1]
