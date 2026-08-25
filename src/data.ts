@@ -183,34 +183,37 @@ export const UNITS: Record<string, {
   trebuchet: { hp: 110, dmg: 55, range: 330, cd: 7.0, speed: 14, aggro: 0, cost: cost({ wood: 200, gold: 120 }), time: 24, r: 15, los: 280, age: 3, name: 'Trebuchet' },
 }
 
+// Buildings occupy a whole number of TILES, and `foot` is just half that span
+// in pixels — so every footprint edge lands on a grid line and buildings pack
+// against each other cleanly.
 export const BUILDINGS: Record<string, {
-  hp: number; r: number; foot: number; cost: Cost; time: number; pop: number; los: number
+  hp: number; r: number; tiles: number; foot: number; cost: Cost; time: number; pop: number; los: number
   garrisonCap: number; age?: number; name: string
 }> = {
-  towncenter: { hp: 800, r: 52, foot: 58, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
-  house: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
-  farm: { hp: 120, r: 24, foot: 30, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
-  barracks: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
-  archeryrange: { hp: 300, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
-  stable: { hp: 350, r: 38, foot: 44, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
-  watchtower: { hp: 280, r: 22, foot: 22, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
-  lumbercamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
-  miningcamp: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
-  mill: { hp: 200, r: 26, foot: 28, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
-  church: { hp: 320, r: 30, foot: 34, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
-  ministry: { hp: 350, r: 32, foot: 36, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
-  siegeworkshop: { hp: 350, r: 40, foot: 44, cost: cost({ wood: 200 }), time: 22, pop: 0, los: 140, garrisonCap: 0, age: 3, name: 'Siege Workshop' },
-  wall: { hp: 220, r: 8, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
-  gate: { hp: 300, r: 15, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
+  towncenter: { hp: 800, r: 52, tiles: 7, foot: 56, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
+  house: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
+  farm: { hp: 120, r: 24, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
+  barracks: { hp: 350, r: 40, tiles: 6, foot: 48, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
+  archeryrange: { hp: 300, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
+  stable: { hp: 350, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
+  watchtower: { hp: 280, r: 22, tiles: 3, foot: 24, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
+  lumbercamp: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
+  miningcamp: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
+  mill: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
+  church: { hp: 320, r: 30, tiles: 4, foot: 32, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
+  ministry: { hp: 350, r: 32, tiles: 5, foot: 40, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
+  siegeworkshop: { hp: 350, r: 40, tiles: 6, foot: 48, cost: cost({ wood: 200 }), time: 22, pop: 0, los: 140, garrisonCap: 0, age: 3, name: 'Siege Workshop' },
+  wall: { hp: 220, r: 8, tiles: 1, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
+  gate: { hp: 300, r: 15, tiles: 2, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
   // Landmarks — building one IS the age-up; it dawns when the walls rise
-  abbeymill: { hp: 400, r: 30, foot: 34, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
-  kingsbarracks: { hp: 500, r: 40, foot: 44, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
-  guildhall: { hp: 500, r: 34, foot: 38, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
-  whitekeep: { hp: 900, r: 30, foot: 34, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
-  chamberofcommerce: { hp: 400, r: 32, foot: 36, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Chamber of Commerce' },
-  cavalryschool: { hp: 500, r: 40, foot: 44, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'School of Cavalry' },
-  royalvineyard: { hp: 500, r: 34, foot: 38, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Royal Vineyard' },
-  redpalace: { hp: 900, r: 30, foot: 34, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The Red Palace' },
+  abbeymill: { hp: 400, r: 30, tiles: 4, foot: 32, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
+  kingsbarracks: { hp: 500, r: 40, tiles: 6, foot: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
+  guildhall: { hp: 500, r: 34, tiles: 5, foot: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
+  whitekeep: { hp: 900, r: 30, tiles: 4, foot: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
+  chamberofcommerce: { hp: 400, r: 32, tiles: 5, foot: 40, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Chamber of Commerce' },
+  cavalryschool: { hp: 500, r: 40, tiles: 6, foot: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'School of Cavalry' },
+  royalvineyard: { hp: 500, r: 34, tiles: 5, foot: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Royal Vineyard' },
+  redpalace: { hp: 900, r: 30, tiles: 4, foot: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The Red Palace' },
 }
 
 // ---- landmarks: the age-up IS a building, eco path or military path ----
@@ -370,7 +373,17 @@ export const SOURCE_OF: Record<ResKind, Kind> = {
 }
 
 export const FOG_CELL = 32
-export const PLACE_SNAP = 16 // buildings snap to this grid so rows line up
+export const TILE = 16 // the build grid: buildings cover whole tiles of this size
+export const PLACE_SNAP = TILE // (kept as the old name; walls step along it too)
+// where a building of this many tiles may sit, so its edges land on grid lines:
+// even footprints centre on a line, odd ones on a cell's middle
+export function snapTiles(x: number, y: number, tiles: number): { x: number; y: number } {
+  const off = (tiles % 2) * TILE / 2
+  return {
+    x: Math.round((x - off) / TILE) * TILE + off,
+    y: Math.round((y - off) / TILE) * TILE + off,
+  }
+}
 export const AGE_NAMES = ['', 'Dark Age', 'Feudal Age', 'Castle Age']
 export const CARRY_CAP = 8
 export const GATHER_TICK = 0.7

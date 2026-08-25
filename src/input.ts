@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -37,11 +37,9 @@ function selectedEnts(g: Game): Ent[] {
   return g.selection.map(id => g.byId.get(id)).filter((e): e is Ent => !!e)
 }
 
-export function snapPlace(x: number, y: number): { x: number; y: number } {
-  return {
-    x: Math.round(x / PLACE_SNAP) * PLACE_SNAP,
-    y: Math.round(y / PLACE_SNAP) * PLACE_SNAP,
-  }
+// snap a building's centre so its tile footprint sits square on the grid
+export function snapPlace(x: number, y: number, kind?: Buildable | null): { x: number; y: number } {
+  return snapTiles(x, y, kind ? BUILDINGS[kind].tiles : 2)
 }
 
 // ---- Commands ----
@@ -160,7 +158,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (g.placing) {
     // while placing, taps just move the ghost (snapped); the tick/cross decide.
     // Wall lines: the tap moves whichever end of the fence is closer.
-    const p = snapPlace(x, y)
+    const p = snapPlace(x, y, g.placing)
     if (g.placing === 'wall' && g.placePos && g.placeEnd) {
       const da = dist(x, y, g.placePos.x, g.placePos.y)
       const db = dist(x, y, g.placeEnd.x, g.placeEnd.y)

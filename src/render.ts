@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, PLACE_SNAP, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, BUILDINGS, PLACE_SNAP, TILE, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
@@ -685,21 +685,20 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     const b = BUILDINGS[g.placing]
     const { x, y } = g.placePos
     const ok = canPlaceAt(g, g.placing, x, y)
-    // square footprint, squashed to sit on the ground plane
+    // the true footprint: exactly b.tiles square, edges on the grid lines, with
+    // each tile it covers picked out so the size is countable at a glance
     const f = b.foot
-    const fh = f * 0.72
-    ctx.fillStyle = ok ? 'rgba(143, 191, 106, 0.28)' : 'rgba(201, 82, 94, 0.32)'
-    rrFill(ctx, x - f, y - fh + b.r * 0.2, f * 2, fh * 2, 8)
+    ctx.fillStyle = ok ? 'rgba(143, 191, 106, 0.26)' : 'rgba(201, 82, 94, 0.30)'
+    for (let ty = 0; ty < b.tiles; ty++) {
+      for (let tx = 0; tx < b.tiles; tx++) {
+        ctx.fillRect(x - f + tx * TILE + 0.6, y - f + ty * TILE + 0.6, TILE - 1.2, TILE - 1.2)
+      }
+    }
     ctx.strokeStyle = ok ? 'rgba(251, 243, 228, 0.95)' : 'rgba(201, 82, 94, 0.95)'
     ctx.lineWidth = 2.4
     ctx.setLineDash([7, 6])
     ctx.beginPath()
-    ctx.moveTo(x - f + 8, y - fh + b.r * 0.2)
-    ctx.arcTo(x + f, y - fh + b.r * 0.2, x + f, y - fh + b.r * 0.2 + fh * 2, 8)
-    ctx.arcTo(x + f, y - fh + b.r * 0.2 + fh * 2, x - f, y - fh + b.r * 0.2 + fh * 2, 8)
-    ctx.arcTo(x - f, y - fh + b.r * 0.2 + fh * 2, x - f, y - fh + b.r * 0.2, 8)
-    ctx.arcTo(x - f, y - fh + b.r * 0.2, x + f, y - fh + b.r * 0.2, 8)
-    ctx.closePath()
+    ctx.rect(x - f, y - f, f * 2, f * 2)
     ctx.stroke()
     ctx.setLineDash([])
     // half-opacity preview of the building itself

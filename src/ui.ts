@@ -1044,7 +1044,7 @@ export function syncUI(g: Game): void {
           () => {
             agePick = false
             g.placing = kind
-            g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
+            g.placePos = snapPlace(g.camera.x, g.camera.y, kind) // ghost starts under your thumb
             g.placeEnd = null
             g.uiDirty = true
           }))
@@ -1165,7 +1165,7 @@ export function syncUI(g: Game): void {
           () => {
             if (g.age[0] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
             g.placing = kind
-            g.placePos = snapPlace(g.camera.x, g.camera.y) // ghost starts under your thumb
+            g.placePos = snapPlace(g.camera.x, g.camera.y, kind) // ghost starts under your thumb
             g.placeEnd = kind === 'wall'
               ? snapPlace(g.camera.x + 96, g.camera.y) // a fence starts as a short run; drag the ends
               : null

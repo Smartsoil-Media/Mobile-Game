@@ -5,7 +5,7 @@ import {
   Game, Ent, Cost, ResKind, ChampId, TechId, LandmarkKind, UNITS, BUILDINGS, CHAMPS, TECHS, LANDMARKS,
   SOURCE_OF, POP_MAX, NO_COST, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME,
-  dist, isUnit, isBuilding,
+  dist, isUnit, isBuilding, snapTiles,
 } from './data'
 import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken, unitAgeReq } from './world'
 
@@ -46,8 +46,8 @@ function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   for (let tries = 0; tries < 40; tries++) {
     const a = Math.random() * Math.PI * 2
     const d = tc.r + b.foot + 30 + Math.random() * 130
-    const x = tc.x + Math.cos(a) * d
-    const y = tc.y + Math.sin(a) * d
+    // the rival village builds on the same lattice, so its streets line up too
+    const { x, y } = snapTiles(tc.x + Math.cos(a) * d, tc.y + Math.sin(a) * d, b.tiles)
     if (!canPlaceAt(g, kind, x, y)) continue
     pay(g, 1, b.cost)
     return spawn(g, kind, 1, x, y, false)

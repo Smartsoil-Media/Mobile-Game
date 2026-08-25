@@ -102,12 +102,16 @@ chase at its edge.
   they swear to no banner unless invited, can be released again, and a
   monk carrying a relic ignores the muster entirely — the reliquary
   matters more than the parade
-- **The build grid**: pick up a building and the meadow rules itself into
-  the snap lattice — a fine grid with a heavier line every fourth, so
-  rows of houses and fences line up properly. The squares the building
-  *won't* fit are washed red around the ghost (fading out at the edge of
-  what's checked, so it reads as a hint near your thumb rather than a
-  hard border), and the ghost itself is green or red for the exact spot
+- **The build grid**: every building covers a whole number of **16px
+  tiles** — a house is 4×4, a barracks 6×6, the Town Hall 7×7, a fence
+  post 1×1 — and pick one up and the meadow rules itself into that
+  lattice, with a heavier line every fourth. The ghost shows the true
+  footprint, tile by tile, and **snaps so its edges land on the grid
+  lines**, so buildings pack flush against each other and rows come out
+  straight. The squares it *won't* fit are washed red around the ghost
+  (fading at the edge of what's checked, so it reads as a hint near your
+  thumb rather than a hard border). The rival village builds on the same
+  lattice, so its streets line up too
 - **Worked-out ground is buildable**: a foraged-out berry bush, a mine or
   quarry shrunk to rubble, a chopped stump, a picked-clean carcass — none
   of them hold the ground any more. Build right over the top and the

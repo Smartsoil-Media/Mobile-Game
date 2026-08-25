@@ -592,7 +592,9 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number, ents: Ent[
       // square vs square, snug 6px seam — but palisade pieces overlap freely
       // so a dragged line reads as one solid fence, diagonals included
       const of = BUILDINGS[e.kind].foot
-      const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -6 : 6
+      // tile-aligned footprints may touch exactly; palisade pieces still overlap
+      // so a dragged line reads as one solid fence
+      const gap = isPal && (e.kind === 'wall' || e.kind === 'gate') ? -6 : 0
       if (Math.abs(x - e.x) < f + of + gap && Math.abs(y - e.y) < f + of + gap) return false
     } else {
       // a carried or enshrined relic travels with its keeper — no ground claim

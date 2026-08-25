@@ -1,10 +1,10 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
-import { Game, Kind } from './data'
+import { Game, Kind, Buildable } from './data'
 import { createGame, spawn, canPlaceAt, placementCells } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
 import { render } from './render'
-import { attachInput, clampCamera, selectArmy } from './input'
+import { attachInput, clampCamera, selectArmy, snapPlace } from './input'
 import { initUI, syncUI } from './ui'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -71,5 +71,6 @@ requestAnimationFrame(frame)
   findPath(team: number, x0: number, y0: number, x1: number, y1: number) { return findPath(g, team, x0, y0, x1, y1) },
   inWater(x: number, y: number) { return inWater(g, x, y) },
   canPlaceAt(kind: Kind, x: number, y: number) { return canPlaceAt(g, kind, x, y) },
+  snapFor(kind: Buildable, x: number, y: number) { return snapPlace(x, y, kind) },
   placementCells(kind: Kind, x: number, y: number, r: number) { return placementCells(g, kind, x, y, r) },
 }
