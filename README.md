@@ -295,6 +295,40 @@ leaves that name alone and `scripts/audio.mjs` normalises, trims and encodes it
 exactly like the rest. `audio-src/` is deliberately untracked: the synthesised
 files regenerate from source, and licensed samples don't belong in a public repo.
 
+### The twenty-one slots
+
+The bank is meant to end up as real foley — dry, close-mic'd, one hit per file,
+no reverb of its own (the mixer supplies distance). Sources are searched by
+physical description rather than by mood; abstract wording drifts badly.
+
+| Slot | Wanted | Length |
+| --- | --- | --- |
+| `chop` | axe biting into a trunk, single hit | ~0.5s |
+| `mine` | pick on stone, dry, a little grit | ~0.4s |
+| `forage` | hands through a berry bush | ~0.4s |
+| `harvest` | scythe through standing wheat | ~0.5s |
+| `drop` | a sack set down, then coins | ~0.5s |
+| `hammer` | one blow of a builder's hammer on timber | ~0.3s |
+| `place` | a stake driven into ground | ~0.4s |
+| `built` | roof going on: a drum and a warm chord | ~1.2s |
+| `muster` | a soldier stepping out — short horn motif | ~0.8s |
+| `sword` | blade on blade, single clash | ~0.4s |
+| `bow` | bowstring released | ~0.3s |
+| `arrowhit` | an arrow finding timber | ~0.3s |
+| `launch` | trebuchet: rope, timber, counterweight dropping | ~0.9s |
+| `boom` | boulder landing, rubble thrown | ~1.0s |
+| `crumble` | a building giving way | ~1.4s |
+| `tap` | small UI tick, wooden not electronic | ~0.15s |
+| `bell` | a town bell, one strike, allowed to ring on | ~2s |
+| `gate` | heavy wooden gate swinging, then a thud | ~1.0s |
+| `ageup` | rising horn fanfare | ~2s |
+| `victory` | fuller fanfare, horns and bells | ~2.5s |
+| `defeat` | descending horns, a slow drum | ~2.5s |
+
+Long tails cost real bytes: `bell`, `ageup`, `victory` and `defeat` are encoded
+at 48 kbps and everything else at 32, and together they are about a third of the
+bank's size. Trim recordings to the table above before dropping them in.
+
 ## Development
 
 ```bash
