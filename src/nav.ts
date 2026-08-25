@@ -74,6 +74,7 @@ export function rebuildNav(g: Game): void {
     } else if (o.kind === 'crag') {
       stamp(o.x, o.y, o.r * 0.85 + 10, 3) // bare rock climbs for no one
     } else if (isBuilding(o)) {
+      if (o.kind === 'farm') continue // a field is walked straight across
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // pegs
       const bits = o.kind === 'gate' ? (o.team === 0 ? 2 : o.team === 1 ? 1 : 3) : 3
       stamp(o.x, o.y, o.r * 0.85 + 10, bits)

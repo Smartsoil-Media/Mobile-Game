@@ -736,6 +736,77 @@ if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + kn
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
 await waitSim(page3, 1)
 
+// 4.6650) fields: a 4x4 plot you can walk straight over, turning through the
+// year as it's worked
+const fieldSetup = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  let base = null
+  for (let ring = 130; ring < 700 && !base; ring += 16) {
+    for (let a = 0; a < Math.PI * 2 && !base; a += Math.PI / 24) {
+      const p = window.__game.snapFor('farm', tc.x + Math.cos(a) * ring, tc.y + Math.sin(a) * ring)
+      if ([0, 64].every(dx => window.__game.canPlaceAt('farm', p.x + dx, p.y))) base = p
+    }
+  }
+  if (!base) return null
+  const farmId = window.__game.spawn('farm', 0, base.x, base.y)
+  // a soldier ordered straight through the middle of the field
+  const solId = window.__game.spawn('spearman', 0, base.x - 90, base.y)
+  const sol = g.byId.get(solId)
+  sol.scanT = 999 // no distractions
+  sol.state = 'move'; sol.tx = base.x + 90; sol.ty = base.y
+  window.__game.setSpeed(5)
+  return { base, farmId, solId }
+})
+if (!fieldSetup) throw new Error('no room for a pair of fields')
+await waitSim(page3, 6)
+const crossing = await page3.evaluate(({ solId, base }) => {
+  const g = window.__game.state
+  const s = g.byId.get(solId)
+  const out = { dx: Math.round(s.x - base.x), drift: Math.round(Math.abs(s.y - base.y)) }
+  if (s) s.hp = 0 // the practice soldier stands down
+  return out
+}, fieldSetup)
+console.log('walking the field:', crossing)
+if (crossing.dx < 40) throw new Error('the soldier never got across the field')
+if (crossing.drift > 6) throw new Error(`a field should be crossed, not walked around (drifted ${crossing.drift})`)
+// the crop turns while a farmer works it, and comes round again after harvest
+const sown = await page3.evaluate(({ farmId, base }) => {
+  const g = window.__game.state
+  const farm = g.byId.get(farmId)
+  farm.crop = 0
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager' && e.state !== 'build')
+  const was = { id: v.id, x: v.x, y: v.y }
+  v.x = base.x + 40; v.y = base.y
+  v.state = 'gather'; v.targetId = farmId; v.gatherT = 0
+  return { crop: farm.crop, was }
+}, fieldSetup)
+await waitSim(page3, 8)
+const growing = await page3.evaluate(({ farmId }) => window.__game.state.byId.get(farmId).crop, fieldSetup)
+console.log('crop after a spell of work:', sown.crop, '->', +growing.toFixed(2))
+if (!(growing > 0.15)) throw new Error('the crop never came on while the field was worked')
+// wind it to the brink of harvest and watch it come round to bare earth again
+await page3.evaluate(({ farmId }) => { window.__game.state.byId.get(farmId).crop = 0.97 }, fieldSetup)
+await waitSim(page3, 4)
+const harvested = await page3.evaluate(({ farmId }) => {
+  const g = window.__game.state
+  const farm = g.byId.get(farmId)
+  const out = farm.crop
+  farm.hp = 0 // tidy the practice field away
+  window.__game.setSpeed(1)
+  return out
+}, fieldSetup)
+console.log('crop after the scythe:', +harvested.toFixed(2))
+if (harvested > 0.6) throw new Error('the ripe field was never harvested back to bare earth')
+await page3.evaluate(({ was }) => {
+  const g = window.__game.state
+  const v = g.byId.get(was.id)
+  if (!v) return
+  v.x = was.x; v.y = was.y
+  v.state = 'idle'; v.targetId = undefined; v.path = null; v.carry = 0
+}, sown)
+await waitSim(page3, 1)
+
 // 4.6651) the build grid, and building over worked-out ground
 const spentGround = await page3.evaluate(() => {
   const g = window.__game.state

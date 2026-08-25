@@ -505,8 +505,24 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       shrined.set(rl.shrineId, (shrined.get(rl.shrineId) ?? 0) + 1)
     }
   }
+  // Fields lie flat and are walked over, so they belong to the ground: drawn in
+  // their own pass beneath everything, or a villager standing in the crop would
+  // sort under the plot and vanish behind it.
+  for (const e of g.ents) {
+    if (e.kind !== 'farm') continue
+    if (e.complete) drawFarm(ctx, e, time)
+    else drawSite(ctx, e)
+    if (e.hp < e.maxHp && e.hp > 0 && e.complete !== false) {
+      const y = e.y - e.r - e.r * 0.8
+      ctx.fillStyle = 'rgba(60, 46, 30, 0.45)'
+      rrFill(ctx, e.x - 21, y - 1, 42, 5, 2.5)
+      ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
+      rrFill(ctx, e.x - 20, y, Math.max(2, 40 * (e.hp / e.maxHp)), 3, 1.5)
+    }
+  }
+
   const sorted = g.ents
-    .filter(e => !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
+    .filter(e => e.kind !== 'farm' && !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
       !((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) &&
       !(e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined ||
         g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)))
@@ -523,7 +539,6 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'relic': drawRelic(ctx, e, time); break
       case 'church': e.complete ? drawChurch(ctx, e, time, shrined.get(e.id) ?? 0) : drawSite(ctx, e); break
       case 'ministry': e.complete ? drawMinistry(ctx, e, time, shrined.get(e.id) ?? 0) : drawSite(ctx, e); break
-      case 'farm': e.complete ? drawFarm(ctx, e, time) : drawSite(ctx, e); break
       case 'towncenter': e.complete ? drawTC(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'house': e.complete ? drawHouse(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break
       case 'barracks': e.complete ? drawBarracks(ctx, e, time, g.age[e.team] ?? 1) : drawSite(ctx, e); break

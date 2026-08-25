@@ -57,9 +57,12 @@ chase at its edge.
   starting a fence post updates the grid on the spot
 - **Lumber/Mining Camps** (75 wood) act as drop-off points near the woods or
   a mine/quarry, so villagers don't trek back to the Town Hall
-- **Farms** (60 wood) give a steady food trickle — but each field wants
-  exactly **one farmer**; extra hands are waved off to a free farm (or told
-  to plant another). **Berry bushes** forage out, **mines and quarries**
+- **Farms** (60 wood) fill a **4×4 plot** and are **walked straight over**
+  — they're ground, not obstacles, so fields never wall your village in.
+  Each one wants exactly **one farmer**; extra hands are waved off to a
+  free farm (or told to plant another). A worked field **turns through
+  the year**: bare furrows and seed, green shoots, tall stalks, heavy
+  gold — then the scythe, a puff of chaff, and back to bare earth. **Berry bushes** forage out, **mines and quarries**
   shrink to rubble, **trees** leave stumps — and once they're spent you
   can build straight over them
 - **Deer** graze in shy little herds. Send a villager at one to **hunt**:

@@ -1464,41 +1464,75 @@ export function drawMill(ctx: CanvasRenderingContext2D, e: Ent, t: number, age =
   ctx.beginPath(); ctx.arc(x, hubY, 3, 0, Math.PI * 2); ctx.fill()
 }
 
+// A field fills its whole 4x4 plot and turns through the year as it's worked:
+// bare furrows and seed, green shoots, tall stalks, then heavy gold ready for
+// the scythe — and back to bare earth when it's cut.
 export function drawFarm(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
-  // tilled plot in a timber frame
+  const crop = Math.max(0, Math.min(1, e.crop ?? 0))
+  const grow = Math.min(1, crop / 0.85) // how tall the crop stands
+  const ripe = Math.max(0, (crop - 0.55) / 0.45) // green giving way to gold
+  const H = 30 // half the plot: a 4-tile field, edge to edge
+  // tilled earth, darker in the furrows
   ctx.fillStyle = '#B08968'
-  rr(ctx, x - 24, y - 15, 48, 32, 6); ctx.fill()
-  ctx.strokeStyle = WOOD
-  ctx.lineWidth = 3
-  rr(ctx, x - 24, y - 15, 48, 32, 6); ctx.stroke()
-  // furrow rows
+  rr(ctx, x - H, y - H, H * 2, H * 2, 5); ctx.fill()
+  ctx.fillStyle = 'rgba(154, 115, 87, 0.5)'
+  rr(ctx, x - H + 3, y - H + 3, H * 2 - 6, H * 2 - 6, 4); ctx.fill()
+  // the furrows themselves, ploughed in gentle waves
   ctx.strokeStyle = '#9A7357'
-  ctx.lineWidth = 2.4
-  for (let i = 0; i < 4; i++) {
-    const ry = y - 9 + i * 7
+  ctx.lineWidth = 2.6
+  const rows = 5
+  for (let i = 0; i < rows; i++) {
+    const ry = y - H + 9 + i * ((H * 2 - 16) / (rows - 1))
     ctx.beginPath()
-    ctx.moveTo(x - 19, ry)
-    ctx.quadraticCurveTo(x, ry + 1.5, x + 19, ry)
+    ctx.moveTo(x - H + 5, ry)
+    ctx.quadraticCurveTo(x, ry + 1.6, x + H - 5, ry)
     ctx.stroke()
   }
-  // little sprouts, swaying
-  ctx.fillStyle = '#7FA95E'
-  for (let i = 0; i < 8; i++) {
-    const sx = x - 16 + (i % 4) * 10.5 + Math.sin(t * 1.4 + i + e.seed) * 0.7
-    const sy = y - 6 + Math.floor(i / 4) * 14
-    ctx.beginPath(); ctx.ellipse(sx, sy, 2.4, 3.2, 0, 0, Math.PI * 2); ctx.fill()
+  // the crop, row by row
+  const green = [127, 169, 94], gold = [214, 176, 74]
+  const col = green.map((v, i) => Math.round(v + (gold[i] - v) * ripe))
+  ctx.fillStyle = `rgb(${col[0]}, ${col[1]}, ${col[2]})`
+  ctx.strokeStyle = `rgb(${col[0]}, ${col[1]}, ${col[2]})`
+  for (let i = 0; i < rows; i++) {
+    const ry = y - H + 9 + i * ((H * 2 - 16) / (rows - 1))
+    for (let j = 0; j < 7; j++) {
+      const sx = x - H + 7 + j * ((H * 2 - 14) / 6)
+      const sway = Math.sin(t * 1.5 + i * 0.7 + j + e.seed) * (0.6 + grow * 1.4)
+      if (crop < 0.1) {
+        // just sown: seed pressed into the furrow
+        ctx.fillStyle = '#8B6A4A'
+        ctx.beginPath(); ctx.arc(sx, ry + 1.5, 1.1, 0, Math.PI * 2); ctx.fill()
+        continue
+      }
+      const h = 2.5 + grow * 8.5
+      ctx.lineWidth = 1.4 + grow * 0.8
+      ctx.beginPath()
+      ctx.moveTo(sx, ry + 1)
+      ctx.quadraticCurveTo(sx + sway * 0.5, ry + 1 - h * 0.6, sx + sway, ry + 1 - h)
+      ctx.stroke()
+      if (ripe > 0.35) {
+        // a heavy head of grain, bowing as it ripens
+        ctx.beginPath()
+        ctx.ellipse(sx + sway, ry + 1 - h - 1, 1.5, 2.6 * ripe, sway * 0.12, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
   }
+  // timber frame over the top so the plot reads as ONE field
+  ctx.strokeStyle = WOOD
+  ctx.lineWidth = 3
+  rr(ctx, x - H, y - H, H * 2, H * 2, 5); ctx.stroke()
   // corner post with a team pennant
   ctx.strokeStyle = WOOD_DARK
   ctx.lineWidth = 2.4
-  ctx.beginPath(); ctx.moveTo(x + 21, y - 13); ctx.lineTo(x + 21, y - 26); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(x + H - 3, y - H + 2); ctx.lineTo(x + H - 3, y - H - 12); ctx.stroke()
   ctx.fillStyle = c.main
   ctx.beginPath()
-  ctx.moveTo(x + 21, y - 26)
-  ctx.lineTo(x + 30, y - 23.5)
-  ctx.lineTo(x + 21, y - 21)
+  ctx.moveTo(x + H - 3, y - H - 12)
+  ctx.lineTo(x + H + 6, y - H - 9.5)
+  ctx.lineTo(x + H - 3, y - H - 7)
   ctx.closePath(); ctx.fill()
 }
 

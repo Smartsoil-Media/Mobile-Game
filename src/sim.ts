@@ -7,7 +7,7 @@ import {
   CROC_DMG, CROC_CD, CROC_AGGRO, CROC_LEASH, CROC_SPEED,
   RELIC_GOLD_RATE, RELIC_FOOD_RATE, MONK_HEAL_RATE, MONK_HEAL_RADIUS, MONK_HEAL_TICK,
   SANCTUARY_HEAL_RATE, SANCTUARY_HEAL_RADIUS,
-  CARRY_CAP, GATHER_TICK, TC_RANGE, TC_VOLLEY, ARROW_DMG,
+  CARRY_CAP, GATHER_TICK, FARM_CYCLE, TC_RANGE, TC_VOLLEY, ARROW_DMG,
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
   TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
@@ -77,6 +77,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
     // living trees and bare rock are terrain; stumps and everything else stay open
     const terrain = (o.kind === 'tree' && (o.amount ?? 0) > 0) || o.kind === 'crag'
     if (!terrain && !isBuilding(o)) continue
+    if (o.kind === 'farm') continue // fields are crossed, not skirted
     if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
     if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // just pegs in the grass
     const clearance = e.r + o.r * 0.85
@@ -274,6 +275,14 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
       const gives: ResKind = isFarm ? 'food' : RESOURCES[res.kind].gives
       e.gatherT = (e.gatherT ?? 0) + dt * gatherRate(g, e.team, gives) // techs quicken the hands
+      if (isFarm) {
+        // sown, green, golden, cut — the field turns while it's worked
+        res.crop = (res.crop ?? 0) + dt / FARM_CYCLE
+        if (res.crop >= 1) {
+          res.crop = 0
+          puff(g, res.x, res.y - 4, '#E4CB8F', 10) // chaff on the breeze
+        }
+      }
       const tick = isFarm ? GATHER_TICK * 1.5 : GATHER_TICK // farms are steady but slow
       if (e.gatherT >= tick) {
         e.gatherT = 0
@@ -815,6 +824,7 @@ function separation(g: Game): void {
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'deer') continue // soft little things — they step around us
+      if (o.kind === 'farm') continue // a field is walked over, furrows and all
       if (o.kind === 'croc' && o.hp <= 0) continue // a bundle doesn't block the bank
       // a relic in a monk's arms (or on a shrine) rides along — only a free
       // wayside plinth stands its little ground

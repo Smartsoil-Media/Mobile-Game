@@ -74,6 +74,7 @@ export interface Ent {
   banner?: number // which banner this soldier rides under (monks may ride under none)
   recruitBanner?: number // on a military hall: the banner its recruits join
   setup?: number // a trebuchet plants its frame before it can loose (resets on the move)
+  crop?: number // a farm's field: 0 just sown, 1 ripe for the scythe
   // relics
   heldBy?: number // the monk carrying this relic
   shrineId?: number // the church or ministry this relic is enshrined in
@@ -192,7 +193,7 @@ export const BUILDINGS: Record<string, {
 }> = {
   towncenter: { hp: 800, r: 52, tiles: 7, foot: 56, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
   house: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
-  farm: { hp: 120, r: 24, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
+  farm: { hp: 120, r: 30, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
   barracks: { hp: 350, r: 40, tiles: 6, foot: 48, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
   archeryrange: { hp: 300, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
   stable: { hp: 350, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
@@ -319,6 +320,8 @@ export const CROC_LEASH = 135 // it gives up the chase before the meal is truly 
 export const CROC_SPEED = 46
 // farms are steady but small: one pair of hands per field
 export const FARM_CREW = 1
+// how long a field takes to come round from sowing to harvest, while worked
+export const FARM_CYCLE = 20
 
 // counter bonuses: extra damage dealt by attacker kind against target kind.
 // Scouts stand in for cavalry until the stable arrives; knights will slot in here.
