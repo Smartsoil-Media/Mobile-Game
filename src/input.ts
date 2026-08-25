@@ -1,6 +1,6 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
 import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner } from './data'
-import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -108,6 +108,18 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
   pay(g, 0, b.cost)
   clearSpent(g, kind, x, y) // sweep away the stumps and rubble underneath
   const site = spawn(g, kind, 0, x, y, false)
+  if (kind === 'gate') {
+    site.angle = g.placeAngle
+    // the gate is set INTO the fence: the posts it swallows come down, and
+    // their timber goes back in the pile
+    for (const post of wallsUnderGate(g, x, y)) {
+      g.res[0].wood += BUILDINGS.wall.cost.wood
+      const i = g.ents.indexOf(post)
+      if (i >= 0) g.ents.splice(i, 1)
+      g.byId.delete(post.id)
+    }
+    g.navDirty = true
+  }
   commandBuild(g, villagers, site)
   g.placing = null
   g.placePos = null
@@ -158,6 +170,13 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (g.placing) {
     // while placing, taps just move the ghost (snapped); the tick/cross decide.
     // Wall lines: the tap moves whichever end of the fence is closer.
+    if (g.placing === 'gate') {
+      // a gate belongs in a fence: lie along the run, at whatever slant it takes
+      const fit = gateSnap(g, x, y)
+      if (fit) { g.placePos = { x: fit.x, y: fit.y }; g.placeAngle = fit.angle }
+      else { g.placePos = snapPlace(x, y, 'gate'); g.placeAngle = 0 }
+      return
+    }
     const p = snapPlace(x, y, g.placing)
     if (g.placing === 'wall' && g.placePos && g.placeEnd) {
       const da = dist(x, y, g.placePos.x, g.placePos.y)

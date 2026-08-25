@@ -104,7 +104,7 @@ export function createGame(opts?: { seed?: number }): Game {
     nav: null, navDirty: true, navWater: null,
     mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
     streams: [], fords: [],
-    toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true,
+    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true,
   }
 
   const rnd = mulberry(random ? ((opts!.seed! | 0) || 1) : 20260819)
@@ -589,8 +589,9 @@ export function canPlaceAt(g: Game, kind: Kind, x: number, y: number, ents: Ent[
     if (isUnit(e)) continue
     if (isSpent(e)) continue // stumps, picked bushes, rubble and carcasses yield the ground
     if (isBuilding(e)) {
-      // square vs square, snug 6px seam — but palisade pieces overlap freely
-      // so a dragged line reads as one solid fence, diagonals included
+      // a gate is set INTO a fence: it may sit right on top of the posts it is
+      // about to swallow (see wallsUnderGate), whatever slant the run is at
+      if (kind === 'gate' && e.kind === 'wall') continue
       const of = BUILDINGS[e.kind].foot
       // tile-aligned footprints may touch exactly; palisade pieces still overlap
       // so a dragged line reads as one solid fence
@@ -627,6 +628,39 @@ export function placementCells(
     }
   }
   return out
+}
+
+// A gate belongs IN a fence, whatever slant the fence runs at. Given where the
+// player is pointing, find the local run of palisade and return the point on it
+// nearest that thumb, plus the run's angle — a least-squares fit of the nearby
+// posts, so it works for straight, diagonal and gently curving fences alike.
+export const GATE_SNAP_REACH = 70
+export function gateSnap(g: Game, x: number, y: number): { x: number; y: number; angle: number } | null {
+  const posts = g.ents.filter(e =>
+    e.kind === 'wall' && e.team === 0 && dist(e.x, e.y, x, y) < GATE_SNAP_REACH)
+  if (posts.length < 2) return null
+  let mx = 0, my = 0
+  for (const p of posts) { mx += p.x; my += p.y }
+  mx /= posts.length; my /= posts.length
+  let sxx = 0, sxy = 0, syy = 0
+  for (const p of posts) {
+    const dx = p.x - mx, dy = p.y - my
+    sxx += dx * dx; sxy += dx * dy; syy += dy * dy
+  }
+  // principal axis of the little cluster of posts
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+  const dx = Math.cos(angle), dy = Math.sin(angle)
+  // a blob of posts with no clear run gives no angle worth trusting
+  let spread = 0
+  for (const p of posts) spread = Math.max(spread, Math.abs((p.x - mx) * dx + (p.y - my) * dy))
+  if (spread < 10) return null
+  const t = (x - mx) * dx + (y - my) * dy
+  return { x: mx + dx * t, y: my + dy * t, angle }
+}
+
+// the posts a gate would swallow as it is set into the fence
+export function wallsUnderGate(g: Game, x: number, y: number): Ent[] {
+  return g.ents.filter(e => e.kind === 'wall' && e.team === 0 && dist(e.x, e.y, x, y) < 22)
 }
 
 // the run of posts a dragged wall line would place, flagged buildable or not.

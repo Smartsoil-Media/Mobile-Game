@@ -736,6 +736,108 @@ if (knightBorn.hp !== 110) throw new Error('knight spawned with wrong hp: ' + kn
 await page3.evaluate(({ id }) => { const k = window.__game.state.byId.get(id); if (k) k.hp = 0 }, knightBorn)
 await waitSim(page3, 1)
 
+// 4.6649) a gate sets itself into a fence, whatever slant the fence runs at
+const gateFit = await page3.evaluate(() => {
+  const g = window.__game.state
+  g.res[0].wood = 3000
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const out = []
+  const runs = [0, Math.PI / 4, Math.PI / 2.6, -Math.PI / 3]
+  const used = []
+  runs.forEach(a => {
+    // ground with room for the whole fence AND clear of the runs already laid
+    let base = null
+    for (let ring = 150; ring < 620 && !base; ring += 20) {
+      for (let th = 0; th < Math.PI * 2 && !base; th += Math.PI / 16) {
+        const bx = tc.x + Math.cos(th) * ring, by = tc.y + Math.sin(th) * ring
+        if (used.some(u => Math.hypot(u.bx - bx, u.by - by) < 220)) continue
+        let fits = window.__game.canPlaceAt('gate', bx, by)
+        for (let k = -5; k <= 5 && fits; k++) {
+          fits = window.__game.canPlaceAt('wall', bx + Math.cos(a) * k * 16, by + Math.sin(a) * k * 16)
+        }
+        if (fits) base = { bx, by }
+      }
+    }
+    if (!base) { out.push({ wanted: +a.toFixed(3), got: null }); return }
+    used.push(base)
+    const { bx, by } = base
+    for (let k = -5; k <= 5; k++) {
+      window.__game.spawn('wall', 0, bx + Math.cos(a) * k * 16, by + Math.sin(a) * k * 16)
+    }
+    // point a little off the line, as a thumb would
+    const fit = window.__game.gateSnap(bx + 7, by - 5)
+    // how far the gate sits from the fence line itself (across it, not along it)
+    const off = fit
+      ? Math.abs((fit.x - bx) * -Math.sin(a) + (fit.y - by) * Math.cos(a))
+      : null
+    out.push({
+      wanted: +a.toFixed(3),
+      got: fit ? +fit.angle.toFixed(3) : null,
+      offLine: off === null ? null : +off.toFixed(1),
+      bx, by,
+    })
+  })
+  return out
+})
+console.log('gate snap by fence angle:', gateFit.map(f => ({ wanted: f.wanted, got: f.got, offLine: f.offLine })))
+for (const f of gateFit) {
+  if (f.got === null) throw new Error(`no fence found to seat a gate in (wanted ${f.wanted})`)
+  // the fit is a line, so a half-turn either way is the same fence
+  const diff = Math.abs(((f.got - f.wanted + Math.PI * 1.5) % Math.PI) - Math.PI / 2)
+  if (diff > 0.06) throw new Error(`gate angle ${f.got} does not match the fence ${f.wanted}`)
+  if (f.offLine > 3) throw new Error(`the gate landed ${f.offLine}px off its fence line`)
+}
+// and through the real placement path: it takes the angle, swallows the posts
+// it covers, and their timber goes back in the pile
+const diag = gateFit[1]
+const gatePlaced = await page3.evaluate(({ bx, by }) => {
+  const g = window.__game.state
+  const v = g.ents.find(e => e.team === 0 && e.kind === 'villager' && e.state !== 'build')
+  const was = { id: v.id, x: v.x, y: v.y }
+  g.selection = [v.id]
+  const fit = window.__game.gateSnap(bx + 7, by - 5)
+  g.placing = 'gate'
+  g.placePos = { x: fit.x, y: fit.y }
+  g.placeAngle = fit.angle
+  g.uiDirty = true
+  return {
+    was, fit, wood: g.res[0].wood,
+    postsUnder: window.__game.wallsUnderGate(fit.x, fit.y).length,
+  }
+}, diag)
+if (gatePlaced.postsUnder < 1) throw new Error('the gate should sit over some fence posts')
+await page3.waitForTimeout(250)
+await page3.tap('[data-cmd="confirm"]')
+await page3.waitForTimeout(350)
+const gateBuilt = await page3.evaluate(({ fit, wood, postsUnder, was }) => {
+  const g = window.__game.state
+  const gate = g.ents.find(e =>
+    e.kind === 'gate' && e.team === 0 && Math.hypot(e.x - fit.x, e.y - fit.y) < 4)
+  const out = {
+    placed: !!gate,
+    angle: gate ? +gate.angle.toFixed(3) : null,
+    postsLeft: window.__game.wallsUnderGate(fit.x, fit.y).length,
+    // 20 wood for the gate, 3 back for each post it swallowed
+    woodSpent: Math.round(wood - g.res[0].wood),
+    expected: 20 - postsUnder * 3,
+  }
+  if (gate) gate.hp = 0
+  for (const w of g.ents.filter(e => e.kind === 'wall' && e.team === 0)) w.hp = 0
+  const v = g.byId.get(was.id)
+  if (v) { v.x = was.x; v.y = was.y; v.state = 'idle'; v.targetId = undefined; v.path = null }
+  g.selection = []
+  g.uiDirty = true
+  return out
+}, gatePlaced)
+console.log('gate set into the fence:', gateBuilt)
+if (!gateBuilt.placed) throw new Error('the gate never went up on the fence')
+if (Math.abs(gateBuilt.angle - +gatePlaced.fit.angle.toFixed(3)) > 0.01)
+  throw new Error('the gate did not keep its fence angle')
+if (gateBuilt.postsLeft !== 0) throw new Error('the posts under the gate should have come down')
+if (gateBuilt.woodSpent !== gateBuilt.expected)
+  throw new Error(`swallowed posts should refund their timber (spent ${gateBuilt.woodSpent}, want ${gateBuilt.expected})`)
+await waitSim(page3, 1)
+
 // 4.6650) fields: a 4x4 plot you can walk straight over, turning through the
 // year as it's worked
 const fieldSetup = await page3.evaluate(() => {

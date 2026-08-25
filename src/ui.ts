@@ -6,7 +6,7 @@ import {
   BANNERS, BANNER_MAX, KINGS_BANNER,
   isUnit, isBuilding, isSiege, canBanner, mustBanner,
 } from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, wallLinePoints, unitAgeReq, fogIndex } from './world'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex } from './world'
 import { selectArmy, selectBanner, assignBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
@@ -1165,7 +1165,9 @@ export function syncUI(g: Game): void {
           () => {
             if (g.age[0] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
             g.placing = kind
-            g.placePos = snapPlace(g.camera.x, g.camera.y, kind) // ghost starts under your thumb
+            const fit = kind === 'gate' ? gateSnap(g, g.camera.x, g.camera.y) : null
+            g.placeAngle = fit ? fit.angle : 0
+            g.placePos = fit ? { x: fit.x, y: fit.y } : snapPlace(g.camera.x, g.camera.y, kind)
             g.placeEnd = kind === 'wall'
               ? snapPlace(g.camera.x + 96, g.camera.y) // a fence starts as a short run; drag the ends
               : null

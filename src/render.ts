@@ -720,7 +720,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.globalAlpha = 0.55
     const ghost: any = {
       id: 0, kind: g.placing, team: 0, x, y, r: b.r, hp: 1, maxHp: 1, seed: 7,
-      complete: true, garrison: 0, queue: [],
+      complete: true, garrison: 0, queue: [], angle: g.placeAngle,
     }
     switch (g.placing) {
       case 'towncenter': drawTC(ctx, ghost, time, g.age[0]); break

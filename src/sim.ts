@@ -271,7 +271,11 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
         }
         break
       }
-      if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
+      // a farmer works from the middle of his own field, so it's plain at a
+      // glance who is tending what; everyone else works from arm's length
+      if (isFarm) {
+        if (dist(e.x, e.y, res.x, res.y) > 4) { moveToward(g, e, res.x, res.y, spd, dt); break }
+      } else if (!inRange(e, res, 6)) { moveToward(g, e, res.x, res.y, spd, dt); break }
       if (Math.abs(res.x - e.x) > 1) e.face = res.x > e.x ? 1 : -1
       const gives: ResKind = isFarm ? 'food' : RESOURCES[res.kind].gives
       e.gatherT = (e.gatherT ?? 0) + dt * gatherRate(g, e.team, gives) // techs quicken the hands

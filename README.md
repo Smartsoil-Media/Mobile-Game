@@ -62,7 +62,9 @@ chase at its edge.
   Each one wants exactly **one farmer**; extra hands are waved off to a
   free farm (or told to plant another). A worked field **turns through
   the year**: bare furrows and seed, green shoots, tall stalks, heavy
-  gold — then the scythe, a puff of chaff, and back to bare earth
+  gold — then the scythe, a puff of chaff, and back to bare earth. The
+  farmer stands in the **middle of his own field**, so it's plain at a
+  glance who is tending what
 - **Berry bushes** forage out, **mines and quarries** shrink to rubble,
   **trees** leave stumps — and once they're spent you can build straight
   over them
@@ -152,8 +154,11 @@ chase at its edge.
 - **Palisade walls** (3 wood a post, Dark Age) place as a dragged line —
   grab either end of the fence and stretch it; the ✓ shows a live post
   count and price, and your villager builds along the row without being
-  re-told. **Gates** (20 wood) swing open for your own units and stay
-  barred to the enemy, who must chop through
+  re-told. **Gates** (20 wood) **snap into a fence at whatever slant it
+  runs at** — level, diagonal, or anything between — lying along the run
+  and swallowing the posts they cover (whose timber goes straight back
+  in the pile). They swing open for your own units and stay barred to
+  the enemy, who must chop through
 - **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
   range and shelter up to 5 units — tap a tower with units selected to
   garrison them, select it to open the doors

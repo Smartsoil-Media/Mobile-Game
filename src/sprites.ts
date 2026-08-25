@@ -1072,6 +1072,15 @@ export function drawWall(ctx: CanvasRenderingContext2D, e: Ent): void {
 }
 
 export function drawGate(ctx: CanvasRenderingContext2D, e: Ent, t: number, open = false): void {
+  // a gate set into a slanting fence lies along the run: draw it about the
+  // origin and let the transform carry the angle
+  const a = e.angle ?? 0
+  if (a) {
+    ctx.save()
+    ctx.translate(e.x, e.y)
+    ctx.rotate(a)
+    ctx.translate(-e.x, -e.y)
+  }
   const x = e.x, y = e.y
   shadow(ctx, x, y + 10, 17, 5)
   // heavy end posts
@@ -1105,6 +1114,7 @@ export function drawGate(ctx: CanvasRenderingContext2D, e: Ent, t: number, open 
     ctx.moveTo(x + 8.6, y - 7.5); ctx.lineTo(x + 1.4, y + 8.5)
     ctx.stroke()
   }
+  if (a) ctx.restore()
 }
 
 // ---------- Landmarks ----------

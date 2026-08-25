@@ -75,6 +75,7 @@ export interface Ent {
   recruitBanner?: number // on a military hall: the banner its recruits join
   setup?: number // a trebuchet plants its frame before it can loose (resets on the move)
   crop?: number // a farm's field: 0 just sown, 1 ripe for the scythe
+  angle?: number // a gate set into a fence lies along the run, at any slant
   // relics
   heldBy?: number // the monk carrying this relic
   shrineId?: number // the church or ministry this relic is enshrined in
@@ -130,6 +131,7 @@ export interface Game {
   placing: Buildable | null
   placePos: { x: number; y: number } | null
   placeEnd: { x: number; y: number } | null // walls stretch between placePos and here
+  placeAngle: number // a gate ghost lies along the fence it has snapped to
   over: 'win' | 'lose' | null
   overT: number
   particles: Particle[]
