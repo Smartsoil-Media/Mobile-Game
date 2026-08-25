@@ -890,6 +890,117 @@ if (gateBuilt.woodSpent !== gateBuilt.expected)
   throw new Error(`swallowed posts should refund their timber (spent ${gateBuilt.woodSpent}, want ${gateBuilt.expected})`)
 await waitSim(page3, 1)
 
+// 4.66495) a gate is a way THROUGH: walkers must route to it and pass it, and
+// a crew must work its way down a long fence instead of downing tools
+const gateWay = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  const wx = tc.x + 150
+  const mine = []
+  for (let y = 8; y < g.world.h + 8; y += 14) mine.push(window.__game.spawn('wall', 0, wx, y))
+  const fit = window.__game.gateSnap(wx, tc.y)
+  const gid = window.__game.spawn('gate', 0, fit.x, fit.y)
+  const gate = g.byId.get(gid)
+  gate.angle = fit.angle
+  gate.complete = true
+  for (const p of window.__game.wallsUnderGate(fit.x, fit.y)) {
+    g.ents.splice(g.ents.indexOf(p), 1); g.byId.delete(p.id)
+  }
+  g.navDirty = true
+  const sy = tc.y + 190
+  const ours = window.__game.findPath(0, wx - 110, sy, wx + 110, sy)
+  const theirs = window.__game.findPath(1, wx - 110, sy, wx + 110, sy)
+  const viaGate = (p) => !!p && p.some(q => Math.hypot(q.x - fit.x, q.y - fit.y) < 80)
+  // and send the whole crew at it, from well off to one side
+  const vs = g.ents.filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden)
+  const were = vs.map(v => ({ id: v.id, x: v.x, y: v.y, state: v.state, targetId: v.targetId }))
+  vs.forEach((v, i) => {
+    v.x = tc.x + 40 + i * 22; v.y = tc.y + 200
+    v.state = 'move'; v.tx = tc.x + 280; v.ty = tc.y + 200
+    v.path = null; v.repathT = 0; v.carry = 0
+  })
+  window.__game.setSpeed(20)
+  return {
+    walls: mine, gid, wx, fit, were,
+    ours: { found: !!ours, viaGate: viaGate(ours) },
+    enemyBlocked: !theirs,
+  }
+})
+console.log('the way through:', { ours: gateWay.ours, enemyBlocked: gateWay.enemyBlocked })
+if (!gateWay.ours.found) throw new Error('no way through a fence that has a gate in it')
+if (!gateWay.ours.viaGate) throw new Error('the route through a walled line should pass the gate')
+if (!gateWay.enemyBlocked) throw new Error('the enemy should not walk through our gate')
+await waitSim(page3, 60)
+const gateCrowd = await page3.evaluate(({ walls, gid, wx, were }) => {
+  const g = window.__game.state
+  const vs = were.map(w => g.byId.get(w.id)).filter(Boolean)
+  const out = {
+    through: vs.filter(v => v.x > wx + 15).length,
+    of: vs.length,
+    stuckAtFence: vs.filter(v => Math.abs(v.x - wx) < 40).length,
+  }
+  // tear the practice fence down again and put everyone back
+  for (const id of [...walls, gid]) {
+    const e = g.byId.get(id)
+    if (e) { g.ents.splice(g.ents.indexOf(e), 1); g.byId.delete(id) }
+  }
+  g.navDirty = true
+  for (const w of were) {
+    const v = g.byId.get(w.id)
+    if (!v) continue
+    v.x = w.x; v.y = w.y; v.state = 'idle'; v.targetId = undefined
+    v.path = null; v.carry = 0
+  }
+  window.__game.setSpeed(1)
+  return out
+}, gateWay)
+console.log('the crew through the gateway:', gateCrowd)
+if (gateCrowd.through !== gateCrowd.of)
+  throw new Error(`everyone should get through their own gate (${gateCrowd.through}/${gateCrowd.of} did)`)
+if (gateCrowd.stuckAtFence) throw new Error('someone is jammed against the fence')
+
+// a long fence, a crew of three: nobody downs tools while posts remain
+const fenceRun = await page3.evaluate(() => {
+  const g = window.__game.state
+  const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  g.res[0].wood = 4000
+  const pegs = []
+  for (let k = 0; k < 34; k++) pegs.push(window.__game.spawn('wall', 0, tc.x - 260 + k * 16, tc.y + 300, false))
+  const vs = g.ents.filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden)
+  const were = vs.map(v => ({ id: v.id, x: v.x, y: v.y }))
+  vs.forEach(v => { v.state = 'build'; v.targetId = pegs[0]; v.path = null })
+  window.__game.setSpeed(20)
+  return { pegs, were, span: 34 * 16 }
+})
+await waitSim(page3, 120)
+const fenceDone = await page3.evaluate(({ pegs, were }) => {
+  const g = window.__game.state
+  const posts = pegs.map(id => g.byId.get(id)).filter(Boolean)
+  const out = {
+    raised: posts.filter(p => p.complete).length,
+    of: posts.length,
+    idleWithWorkLeft: posts.some(p => !p.complete)
+      ? g.ents.filter(e => e.team === 0 && e.kind === 'villager' && e.state === 'idle').length
+      : 0,
+  }
+  for (const id of pegs) {
+    const e = g.byId.get(id)
+    if (e) { g.ents.splice(g.ents.indexOf(e), 1); g.byId.delete(id) }
+  }
+  g.navDirty = true
+  for (const w of were) {
+    const v = g.byId.get(w.id)
+    if (!v) continue
+    v.x = w.x; v.y = w.y; v.state = 'idle'; v.targetId = undefined; v.path = null; v.carry = 0
+  }
+  window.__game.setSpeed(1)
+  return out
+}, fenceRun)
+console.log('a long fence, a crew of three:', fenceDone, `(run is ${fenceRun.span}px)`)
+if (fenceDone.raised !== fenceDone.of)
+  throw new Error(`the crew stopped short: ${fenceDone.raised}/${fenceDone.of} posts raised`)
+await waitSim(page3, 1)
+
 // 4.6650) fields: a 4x4 plot you can walk straight over, turning through the
 // year as it's worked
 const fieldSetup = await page3.evaluate(() => {

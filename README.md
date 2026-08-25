@@ -154,13 +154,17 @@ chase at its edge.
 - **Palisade walls** (3 wood a post, Dark Age) place as a dragged line —
   grab either end of the fence and stretch it; the ✓ shows a live post
   count and price, and your villager builds along the row without being
-  re-told. **Gates** (20 wood) **snap into a fence at whatever slant it
+  re-told, working right down the run rather than stopping when the next
+  post is a little way off. **Gates** (20 wood) **snap into a fence at whatever slant it
   runs at** — level, diagonal, or anything between. A gate follows the
   single run you point at, so corners, T-junctions and parallel fences
   all behave, and it can never slide off the end into open grass. Its
   posts stand upright whatever the angle and carry a team pennant, so a
   gateway reads even on a run pointing straight at you. It swallows the
-  posts it covers, whose timber goes straight back in the pile. They swing open for your own units and stay barred to
+  posts it covers, whose timber goes straight back in the pile. Your
+  people **route through their own gates** — a fenced-in village is not
+  a trap — and the posts framing a gateway stand aside as you pass, so a
+  crowd streams through instead of jamming in the doorway. They swing open for your own units and stay barred to
   the enemy, who must chop through
 - **Watchtowers** (150 wood) fire one arrow at a time at anything hostile in
   range and shelter up to 5 units — tap a tower with units selected to

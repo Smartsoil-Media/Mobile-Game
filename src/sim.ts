@@ -71,6 +71,12 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   // the separation push already slides walkers around them naturally)
   const probe = Math.min(d, e.r + 18)
   const px = e.x + dirX * probe, py = e.y + dirY * probe
+  // heading through our own gateway? then the fence beside it is a door frame
+  let nearOwnGate = false
+  for (const o of g.ents) {
+    if (o.kind !== 'gate' || !o.complete || o.team !== e.team) continue
+    if (dist(o.x, o.y, e.x, e.y) < o.r + 40) { nearOwnGate = true; break }
+  }
   let block: Ent | null = null
   for (const o of g.ents) {
     if (o === e) continue
@@ -79,6 +85,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
     if (!terrain && !isBuilding(o)) continue
     if (o.kind === 'farm') continue // fields are crossed, not skirted
     if (o.kind === 'gate' && o.team === e.team) continue // our own gates swing open
+    if (o.kind === 'wall' && o.team === e.team && nearOwnGate) continue // ...and so do their posts
     if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // just pegs in the grass
     const clearance = e.r + o.r * 0.85
     if (dist(tx, ty, o.x, o.y) < e.r + o.r + 24) continue // that's where we're headed — walk right up
@@ -391,8 +398,23 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
           }
           g.uiDirty = true
         }
-        // keep the hammer swinging: pick up the next site in the row (wall lines!)
-        const next = nearest(g, e.x, e.y, o => o.team === e.team && isBuilding(o) && !o.complete, 170)
+        // Keep the hammer swinging. A dragged fence can run a long way, and
+        // with a crew on it the near posts go first — so when the thing just
+        // finished was palisade, look right down the run for the next post
+        // rather than downing tools because it sat a bit further off.
+        const fence = site.kind === 'wall' || site.kind === 'gate'
+        const reach = fence ? 700 : 170
+        const wanted = (o: Ent) =>
+          o.team === e.team && isBuilding(o) && !o.complete &&
+          (!fence || o.kind === 'wall' || o.kind === 'gate')
+        // and spread out: take a post nobody else has started before doubling up
+        const taken = new Set<number>()
+        for (const o of g.ents) {
+          if (o !== e && o.team === e.team && o.kind === 'villager' &&
+            o.state === 'build' && o.targetId !== undefined) taken.add(o.targetId)
+        }
+        const next = nearest(g, e.x, e.y, o => wanted(o) && !taken.has(o.id), reach) ??
+          nearest(g, e.x, e.y, wanted, reach)
         if (next) { e.targetId = next.id }
         else { e.state = 'idle'; e.targetId = undefined }
       }
@@ -803,8 +825,20 @@ function killEnt(g: Game, e: Ent): void {
   if (!g.selection.length && g.placing) { g.placing = null; g.placePos = null; g.placeEnd = null }
 }
 
+// Standing in your own gateway, the posts framing it must not shove you: the
+// gap a gate leaves is barely wider than a villager, so with the fence pushing
+// from both sides walkers were squeezed back out and never got through.
+function inOwnDoorway(gates: Ent[], e: Ent): boolean {
+  for (const gt of gates) {
+    if (gt.team !== e.team) continue
+    if (dist(gt.x, gt.y, e.x, e.y) < gt.r + 26) return true
+  }
+  return false
+}
+
 function separation(g: Game): void {
   const units = g.ents.filter(e => isUnit(e) && !e.hidden)
+  const gates = g.ents.filter(e => e.kind === 'gate' && e.complete)
   for (let i = 0; i < units.length; i++) {
     const a = units[i]
     for (let j = i + 1; j < units.length; j++) {
@@ -825,6 +859,7 @@ function separation(g: Game): void {
       }
     }
     // push out of buildings, big resources, and living trees (stumps are open ground)
+    const doorway = inOwnDoorway(gates, a)
     for (const o of g.ents) {
       if (o === a || isUnit(o)) continue
       if (o.kind === 'deer') continue // soft little things — they step around us
@@ -835,6 +870,8 @@ function separation(g: Game): void {
       if (o.kind === 'relic' && (o.heldBy !== undefined || o.shrineId !== undefined)) continue
       if (o.kind === 'tree' && (o.amount ?? 0) <= 0) continue // chopped through — a path!
       if (o.kind === 'gate' && o.team === a.team) continue // friendly gates let us through
+      // in our own gateway, the posts framing it stand aside as well
+      if (doorway && o.kind === 'wall' && o.team === a.team) continue
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
       const dx = a.x - o.x, dy = a.y - o.y
       const d = Math.hypot(dx, dy)

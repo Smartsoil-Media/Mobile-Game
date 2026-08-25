@@ -3,11 +3,14 @@
 // line is blocked — open-meadow walking stays exactly as it always was, and
 // the local steering slide still handles fine detail and moving obstacles.
 // The payoff: a forest pocket is finally ONE obstacle, not a trap of trunks.
-import { Game, dist, isBuilding } from './data'
+import { Game, Ent, dist, isBuilding } from './data'
 
 export const NAV_CELL = 32
 
 // bit 1 blocks team 0, bit 2 blocks team 1 (gates open for their own side)
+// how much ground a finished gate reopens for its owner, so the gap survives
+// the coarse lattice and A* can actually route a walker through it
+const GATE_OPEN_R = 34
 function bitFor(team: number): number { return team === 1 ? 2 : 1 }
 
 // distance from a point to the nearest stream centerline (Infinity when dry)
@@ -68,6 +71,7 @@ export function rebuildNav(g: Game): void {
       }
     }
   }
+  const gates: Ent[] = []
   for (const o of g.ents) {
     if (o.kind === 'tree') {
       if ((o.amount ?? 0) > 0) stamp(o.x, o.y, o.r * 0.85 + 10, 3) // stumps stay open
@@ -78,6 +82,28 @@ export function rebuildNav(g: Game): void {
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // pegs
       const bits = o.kind === 'gate' ? (o.team === 0 ? 2 : o.team === 1 ? 1 : 3) : 3
       stamp(o.x, o.y, o.r * 0.85 + 10, bits)
+      if (o.kind === 'gate' && o.complete) gates.push(o)
+    }
+  }
+  // A gate has to leave a REAL hole for its own side, and it cannot do that
+  // while the fence is being stamped around it: the posts either side spread
+  // wider than the gap between them, so whether the gateway came out passable
+  // depended on where its centre happened to fall against the 32px lattice —
+  // half the time the fence closed over its own gate, A* found no way through,
+  // and the walker set off straight into the palisade. So open the ground back
+  // up afterwards, for the owner only.
+  for (const gt of gates) {
+    const mine = gt.team === 0 ? 1 : gt.team === 1 ? 2 : 3
+    const r = GATE_OPEN_R
+    const x0 = Math.max(0, Math.floor((gt.x - r) / NAV_CELL))
+    const x1 = Math.min(w - 1, Math.floor((gt.x + r) / NAV_CELL))
+    const y0 = Math.max(0, Math.floor((gt.y - r) / NAV_CELL))
+    const y1 = Math.min(h - 1, Math.floor((gt.y + r) / NAV_CELL))
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        if (dist(gt.x, gt.y, cx * NAV_CELL + NAV_CELL / 2, cy * NAV_CELL + NAV_CELL / 2) > r) continue
+        grid[cy * w + cx] &= ~mine
+      }
     }
   }
   g.navDirty = false
