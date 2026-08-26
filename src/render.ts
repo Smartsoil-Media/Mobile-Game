@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, PLACE_SNAP, TILE, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, BUILDINGS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
@@ -30,8 +30,8 @@ function drawFog(ctx: CanvasRenderingContext2D, g: Game): void {
   const d = img.data
   for (let i = 0; i < w * h; i++) {
     const o = i * 4
-    d[o] = 30; d[o + 1] = 42; d[o + 2] = 26
-    d[o + 3] = explored[i] ? (visible[i] ? 0 : 118) : 255
+    d[o] = 74; d[o + 1] = 86; d[o + 2] = 82
+    d[o + 3] = explored[i] ? (visible[i] ? 0 : 112) : 244
   }
   fctx.putImageData(img, 0, 0)
   ctx.imageSmoothingEnabled = true
@@ -42,36 +42,47 @@ function makeGroundPattern(ctx: CanvasRenderingContext2D): CanvasPattern {
   const c = document.createElement('canvas')
   c.width = c.height = 384
   const g = c.getContext('2d')!
-  g.fillStyle = '#A9C97E'
+  // A real meadow is not one green. It's a mid, slightly grey green broken up
+  // by drier and lusher drifts — saturation is what made the old ground read
+  // as illustration rather than land, so this palette stays deliberately muted.
+  g.fillStyle = '#7C8E55'
   g.fillRect(0, 0, 384, 384)
-  // soft meadow patches
   const rnd = (() => { let s = 7; return () => { s = (s * 16807) % 2147483647; return s / 2147483647 } })()
-  for (let i = 0; i < 16; i++) {
-    g.fillStyle = i % 2 ? 'rgba(190, 214, 140, 0.5)' : 'rgba(150, 184, 104, 0.45)'
+  // broad drifts of lusher and drier grass
+  for (let i = 0; i < 26; i++) {
+    const dry = i % 3 === 0
+    g.fillStyle = dry ? 'rgba(154, 145, 96, 0.34)'
+      : i % 2 ? 'rgba(139, 156, 96, 0.42)' : 'rgba(106, 126, 72, 0.38)'
     g.beginPath()
-    g.ellipse(rnd() * 384, rnd() * 384, 24 + rnd() * 46, 16 + rnd() * 30, rnd() * 3, 0, Math.PI * 2)
+    g.ellipse(rnd() * 384, rnd() * 384, 26 + rnd() * 54, 18 + rnd() * 34, rnd() * 3, 0, Math.PI * 2)
     g.fill()
   }
-  // grass tufts
-  g.strokeStyle = 'rgba(110, 148, 78, 0.55)'
-  g.lineWidth = 1.6
-  for (let i = 0; i < 44; i++) {
+  // fine blade texture, lit from the upper left so the ground has a grain
+  for (let i = 0; i < 300; i++) {
     const x = rnd() * 384, y = rnd() * 384
+    const lit = rnd() > 0.62
+    g.strokeStyle = lit ? 'rgba(168, 184, 118, 0.42)' : 'rgba(84, 100, 56, 0.40)'
+    g.lineWidth = rnd() > 0.7 ? 1.2 : 0.8
+    const h = 2.5 + rnd() * 3.5
     g.beginPath()
-    g.moveTo(x, y); g.quadraticCurveTo(x + 1.5, y - 4, x + 3, y - 6)
-    g.moveTo(x + 3, y); g.quadraticCurveTo(x + 3.5, y - 3.5, x + 5.5, y - 5)
+    g.moveTo(x, y)
+    g.quadraticCurveTo(x + 0.8, y - h * 0.6, x + 1.8 + rnd(), y - h)
     g.stroke()
   }
-  // tiny flowers
-  for (let i = 0; i < 10; i++) {
+  // scattered dry stalks and seed heads catching the light
+  for (let i = 0; i < 34; i++) {
     const x = rnd() * 384, y = rnd() * 384
-    g.fillStyle = i % 2 ? '#F7F1DE' : '#F0C9CF'
-    for (let p = 0; p < 5; p++) {
-      const a = (p / 5) * Math.PI * 2
-      g.beginPath(); g.arc(x + Math.cos(a) * 2.4, y + Math.sin(a) * 2.4, 1.5, 0, Math.PI * 2); g.fill()
-    }
-    g.fillStyle = '#E9B44C'
-    g.beginPath(); g.arc(x, y, 1.6, 0, Math.PI * 2); g.fill()
+    g.strokeStyle = 'rgba(186, 172, 112, 0.5)'
+    g.lineWidth = 0.9
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 1.2, y - 5.5); g.stroke()
+    g.fillStyle = 'rgba(198, 184, 124, 0.55)'
+    g.beginPath(); g.ellipse(x + 1.3, y - 6.2, 0.9, 1.6, 0.2, 0, Math.PI * 2); g.fill()
+  }
+  // the odd wildflower — sparse enough to read as chance, not decoration
+  for (let i = 0; i < 7; i++) {
+    const x = rnd() * 384, y = rnd() * 384
+    g.fillStyle = i % 3 === 0 ? 'rgba(214, 206, 186, 0.75)' : 'rgba(198, 176, 96, 0.6)'
+    g.beginPath(); g.arc(x, y, 1.3, 0, Math.PI * 2); g.fill()
   }
   return ctx.createPattern(c, 'repeat')!
 }
@@ -118,14 +129,14 @@ function drawZones(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
     }
     const o = (k: number) => ((z.seed >> k) % 5 - 2) * z.r * 0.14
     if (z.kind === 'lush') {
-      blob(o(0), o(1), z.r, z.r * 0.66, 'rgba(122, 168, 82, 0.18)')
-      blob(o(2) + z.r * 0.3, o(3), z.r * 0.7, z.r * 0.5, 'rgba(122, 168, 82, 0.14)')
-      blob(o(4) - z.r * 0.3, o(5) + z.r * 0.2, z.r * 0.55, z.r * 0.4, 'rgba(140, 181, 106, 0.14)')
+      blob(o(0), o(1), z.r, z.r * 0.66, 'rgba(126, 152, 82, 0.10)')
+      blob(o(2) + z.r * 0.3, o(3), z.r * 0.7, z.r * 0.5, 'rgba(126, 152, 82, 0.08)')
+      blob(o(4) - z.r * 0.3, o(5) + z.r * 0.2, z.r * 0.55, z.r * 0.4, 'rgba(140, 164, 96, 0.08)')
     } else if (z.kind === 'dry') {
-      blob(o(0), o(1), z.r, z.r * 0.62, 'rgba(205, 193, 118, 0.20)')
-      blob(o(2) - z.r * 0.25, o(3) + z.r * 0.15, z.r * 0.6, z.r * 0.42, 'rgba(214, 199, 128, 0.16)')
+      blob(o(0), o(1), z.r, z.r * 0.62, 'rgba(176, 164, 106, 0.12)')
+      blob(o(2) - z.r * 0.25, o(3) + z.r * 0.15, z.r * 0.6, z.r * 0.42, 'rgba(184, 170, 112, 0.09)')
       // a few straw tufts
-      ctx.strokeStyle = 'rgba(178, 162, 92, 0.6)'
+      ctx.strokeStyle = 'rgba(162, 148, 92, 0.34)'
       ctx.lineWidth = 1.5
       ctx.beginPath()
       for (let i = 0; i < 5; i++) {
@@ -136,10 +147,10 @@ function drawZones(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
       }
       ctx.stroke()
     } else if (z.kind === 'moss') {
-      blob(o(0), o(1), z.r * 0.9, z.r * 0.6, 'rgba(92, 138, 84, 0.15)')
-      blob(o(2) + z.r * 0.2, o(3) + z.r * 0.1, z.r * 0.55, z.r * 0.4, 'rgba(80, 124, 76, 0.12)')
+      blob(o(0), o(1), z.r * 0.9, z.r * 0.6, 'rgba(84, 116, 76, 0.09)')
+      blob(o(2) + z.r * 0.2, o(3) + z.r * 0.1, z.r * 0.55, z.r * 0.4, 'rgba(74, 104, 70, 0.07)')
     } else if (z.kind === 'scree') {
-      blob(o(0), o(1), z.r * 0.8, z.r * 0.5, 'rgba(172, 166, 148, 0.18)')
+      blob(o(0), o(1), z.r * 0.8, z.r * 0.5, 'rgba(158, 152, 136, 0.11)')
       for (let i = 0; i < 6; i++) {
         const a = z.seed * 0.7 + i * 1.9
         ctx.fillStyle = i % 2 ? 'rgba(150, 144, 126, 0.55)' : 'rgba(190, 184, 166, 0.6)'
@@ -439,6 +450,14 @@ function drawEdgeFade(ctx: CanvasRenderingContext2D, g: Game): void {
   ctx.fillRect(WW - 2, -M, M + 2, WH + M * 2)
 }
 
+// Stand a sprite up out of the tilted ground. Undo the view's squash, then
+// shift so the sprite's own y still lands on the ground point it was drawn
+// for — which is why every sprite function could stay exactly as it was.
+function upright(ctx: CanvasRenderingContext2D, y: number): void {
+  ctx.scale(1, 1 / TILT)
+  ctx.translate(0, y * (TILT - 1))
+}
+
 export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   const ctx = canvas.getContext('2d')!
   const dpr = window.devicePixelRatio || 1
@@ -447,12 +466,18 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   ctx.scale(dpr, dpr)
 
   // beyond-the-map backdrop matches the fog dark so unexplored map blends out
-  ctx.fillStyle = '#1E2A1A'
+  ctx.fillStyle = '#4A5450'
   ctx.fillRect(0, 0, vw, vh)
 
   const cam = g.camera
   ctx.translate(vw / 2, vh / 2)
   ctx.scale(cam.zoom, cam.zoom)
+  // From here on the context is *ground space*: the world plane laid down flat
+  // and squashed. Anything that genuinely lies on the ground — fields, worn
+  // earth, fog, the build grid, selection rings — draws here and gets the
+  // recession for free. Anything that stands up out of the ground calls
+  // upright() first.
+  ctx.scale(1, TILT)
   ctx.translate(-cam.x, -cam.y)
 
   // meadow
@@ -486,12 +511,12 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.strokeStyle = 'rgba(255, 252, 240, 0.95)'
     ctx.lineWidth = 2.6
     ctx.beginPath()
-    ctx.ellipse(e.x, e.y + (isBuilding(e) ? e.r * 0.45 : 5), e.r + 6, (e.r + 6) * 0.5, 0, 0, Math.PI * 2)
+    ctx.ellipse(e.x, e.y + (isBuilding(e) ? e.r * 0.45 : 5), e.r + 6, e.r + 6, 0, 0, Math.PI * 2)
     ctx.stroke()
     ctx.strokeStyle = 'rgba(233, 180, 76, 0.9)'
     ctx.lineWidth = 1.4
     ctx.beginPath()
-    ctx.ellipse(e.x, e.y + (isBuilding(e) ? e.r * 0.45 : 5), e.r + 9, (e.r + 9) * 0.5, 0, 0, Math.PI * 2)
+    ctx.ellipse(e.x, e.y + (isBuilding(e) ? e.r * 0.45 : 5), e.r + 9, e.r + 9, 0, 0, Math.PI * 2)
     ctx.stroke()
   }
 
@@ -528,6 +553,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
         g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)))
     .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
+    ctx.save()
+    upright(ctx, e.y)
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
       case 'deer': drawDeer(ctx, e, time); break
@@ -582,10 +609,13 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
       rrFill(ctx, e.x - w / 2, y, Math.max(2, w * (e.hp / e.maxHp)), 3, 1.5)
     }
+    ctx.restore()
   }
 
   // arrows and boulders
   for (const p of g.projectiles) {
+    ctx.save()
+    upright(ctx, p.y)
     if (p.kind === 'boulder') {
       // a lobbed boulder: it rides an arc above the straight line of its flight
       const total = dist(p.sx ?? p.x, p.sy ?? p.y, p.tx, p.ty) || 1
@@ -597,6 +627,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       ctx.beginPath(); ctx.arc(p.x, p.y - lift, 4, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = '#C5C0B2'
       ctx.beginPath(); ctx.arc(p.x - 1.2, p.y - lift - 1.2, 1.6, 0, Math.PI * 2); ctx.fill()
+      ctx.restore()
       continue
     }
     const dx = p.tx - p.x, dy = p.ty - p.y
@@ -612,10 +643,13 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.beginPath()
     ctx.arc(p.x + nx * 5, p.y + ny * 5, 1.6, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
   }
 
   // particles
   for (const p of g.particles) {
+    ctx.save()
+    upright(ctx, p.y)
     const a = 1 - p.life / p.maxLife
     ctx.globalAlpha = Math.max(0, a * 0.85)
     ctx.fillStyle = p.color
@@ -626,6 +660,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       ctx.arc(p.x, p.y, p.size * (p.kind === 'puff' ? 0.6 + p.life : 1), 0, Math.PI * 2)
     }
     ctx.fill()
+    ctx.restore()
   }
   ctx.globalAlpha = 1
 
@@ -648,12 +683,12 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
         ctx.strokeStyle = '#FFFCF0'
         ctx.lineWidth = 2.6
         ctx.beginPath()
-        ctx.ellipse(tp.x, tp.y + 4, tp.r + 7 + k * 14, (tp.r + 7 + k * 14) * 0.6, 0, 0, Math.PI * 2)
+        ctx.ellipse(tp.x, tp.y + 4, tp.r + 7 + k * 14, tp.r + 7 + k * 14, 0, 0, Math.PI * 2)
         ctx.stroke()
         ctx.globalAlpha = (1 - k) * 0.5
         ctx.lineWidth = 1.4
         ctx.beginPath()
-        ctx.ellipse(tp.x, tp.y + 4, tp.r + 3 + k * 8, (tp.r + 3 + k * 8) * 0.6, 0, 0, Math.PI * 2)
+        ctx.ellipse(tp.x, tp.y + 4, tp.r + 3 + k * 8, tp.r + 3 + k * 8, 0, 0, Math.PI * 2)
         ctx.stroke()
       } else {
         if (age > 0.45) continue
@@ -662,7 +697,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
         ctx.strokeStyle = '#E9B44C'
         ctx.lineWidth = 2.4
         ctx.beginPath()
-        ctx.ellipse(tp.x, tp.y, 17 - k * 11, (17 - k * 11) * 0.55, 0, 0, Math.PI * 2)
+        ctx.ellipse(tp.x, tp.y, 17 - k * 11, 17 - k * 11, 0, 0, Math.PI * 2)
         ctx.stroke()
         ctx.globalAlpha = (1 - k) * 0.9
         ctx.fillStyle = '#FFFCF0'
@@ -718,6 +753,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.setLineDash([])
     // half-opacity preview of the building itself
     ctx.globalAlpha = 0.55
+    ctx.save()
+    upright(ctx, y)
     const ghost: any = {
       id: 0, kind: g.placing, team: 0, x, y, r: b.r, hp: 1, maxHp: 1, seed: 7,
       complete: true, garrison: 0, queue: [], angle: g.placeAngle,
@@ -746,10 +783,55 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'redpalace': drawRedPalace(ctx, ghost, time); break
       case 'siegeworkshop': drawSiegeWorkshop(ctx, ghost, time); break
     }
+    ctx.restore()
     ctx.globalAlpha = 1
   }
 
+  // Atmosphere. Distance in this view is *up* the screen, so a pale wash that
+  // strengthens toward the top pushes the far meadow back and lifts the near
+  // ground forward — the depth cue a real 3D engine gets from fog, plus a
+  // vignette so the eye settles in the middle of the meadow.
+  //
+  // Both are fixed to the viewport, so they're baked once into a single layer
+  // and blitted. Drawing them live cost two full-screen gradient fills every
+  // frame — 14ms at 2x DPR, which was most of a frame's budget on its own.
   ctx.restore()
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  const atmos = atmosLayer(vw, vh, dpr)
+  if (atmos) ctx.drawImage(atmos, 0, 0, vw, vh)
+  ctx.restore()
+}
+
+let atmosCanvas: HTMLCanvasElement | null = null
+let atmosKey = ''
+
+function atmosLayer(vw: number, vh: number, dpr: number): HTMLCanvasElement | null {
+  const key = `${Math.round(vw)}x${Math.round(vh)}@${dpr}`
+  if (atmosCanvas && atmosKey === key) return atmosCanvas
+  if (vw < 1 || vh < 1) return null
+  const c = atmosCanvas ?? document.createElement('canvas')
+  c.width = Math.max(1, Math.round(vw * dpr))
+  c.height = Math.max(1, Math.round(vh * dpr))
+  const a = c.getContext('2d')
+  if (!a) return null
+  a.setTransform(dpr, 0, 0, dpr, 0, 0)
+  a.clearRect(0, 0, vw, vh)
+  const haze = a.createLinearGradient(0, 0, 0, vh)
+  haze.addColorStop(0, 'rgba(196, 208, 206, 0.26)')
+  haze.addColorStop(0.38, 'rgba(196, 208, 206, 0.09)')
+  haze.addColorStop(0.75, 'rgba(196, 208, 206, 0)')
+  a.fillStyle = haze
+  a.fillRect(0, 0, vw, vh)
+  const vig = a.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.34,
+                                     vw / 2, vh / 2, Math.max(vw, vh) * 0.78)
+  vig.addColorStop(0, 'rgba(28, 34, 24, 0)')
+  vig.addColorStop(1, 'rgba(28, 34, 24, 0.18)')
+  a.fillStyle = vig
+  a.fillRect(0, 0, vw, vh)
+  atmosCanvas = c
+  atmosKey = key
+  return c
 }
 
 // AoE-style build grid: while a building is in hand, the meadow rules itself

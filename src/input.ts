@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue} from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue} from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -15,7 +15,8 @@ export function screenToWorld(g: Game, canvas: HTMLCanvasElement, sx: number, sy
   const rect = canvas.getBoundingClientRect()
   const vx = sx - rect.left - rect.width / 2
   const vy = sy - rect.top - rect.height / 2
-  return { x: g.camera.x + vx / g.camera.zoom, y: g.camera.y + vy / g.camera.zoom }
+  // undo the view's vertical squash so a tap lands where the eye thinks it did
+  return { x: g.camera.x + vx / g.camera.zoom, y: g.camera.y + vy / (g.camera.zoom * TILT) }
 }
 
 export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
@@ -24,13 +25,19 @@ export function clampCamera(g: Game, canvas: HTMLCanvasElement): void {
   // never zoom out past "the world (plus its fog rim) fills the screen"
   const minZoom = Math.max(
     rect.width / (g.world.w + CAM_PAD * 2),
-    rect.height / (g.world.h + CAM_PAD * 2))
+    rect.height / ((g.world.h + CAM_PAD * 2) * TILT))
   g.camera.zoom = Math.max(minZoom, Math.min(1.6, g.camera.zoom))
   const halfW = rect.width / 2 / g.camera.zoom
-  const halfH = rect.height / 2 / g.camera.zoom
-  // the camera may drift a little past the edge — out there it's all fog-dark
-  g.camera.x = Math.max(halfW - CAM_PAD, Math.min(g.world.w - halfW + CAM_PAD, g.camera.x))
-  g.camera.y = Math.max(halfH - CAM_PAD, Math.min(g.world.h - halfH + CAM_PAD, g.camera.y))
+  const halfH = rect.height / 2 / (g.camera.zoom * TILT)
+  // The camera may drift a little past the edge — out there it's all fog-dark.
+  // A screenful now swallows far more ground north-to-south than east-to-west,
+  // because the tilt squashes the world's Y. If the view ever grows taller than
+  // the map the clamp would invert, so fall back to centring rather than
+  // letting the camera snap to a nonsense edge.
+  const span = (lo: number, hi: number, v: number, mid: number) =>
+    lo > hi ? mid : Math.max(lo, Math.min(hi, v))
+  g.camera.x = span(halfW - CAM_PAD, g.world.w - halfW + CAM_PAD, g.camera.x, g.world.w / 2)
+  g.camera.y = span(halfH - CAM_PAD, g.world.h - halfH + CAM_PAD, g.camera.y, g.world.h / 2)
 }
 
 function selectedEnts(g: Game): Ent[] {

@@ -416,6 +416,13 @@ export const WORLD_W = 1920
 export const WORLD_H = 1280
 export const CAM_PAD = 90 // how far the camera may drift past the world edge
 
+// The sim thinks in a flat top-down plane. The eye sits above and in front of
+// it, so the view squashes the world's Y and lets sprites stand upright on the
+// result — the whole 3/4 view is this one number. Nothing outside the renderer
+// and screenToWorld() is allowed to care: pathing, placement and combat all
+// stay honestly top-down, which is why tilting the camera didn't disturb them.
+export const TILT = 0.55
+
 export const TEAM_COLOR = [
   { main: '#6D9DC5', dark: '#4E7EA6', pale: '#A8C6E0' },
   { main: '#C4746B', dark: '#9E574F', pale: '#DBA49D' },

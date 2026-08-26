@@ -92,95 +92,484 @@ function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   }
 }
 
+// One sun for the whole meadow, sitting high in the upper left. Every shadow
+// in the game leans the same way off it, which is most of why the world reads
+// as lit rather than merely coloured.
+export const SUN_X = 0.42 // how far a shadow slides right, per unit of height
+export const SUN_Y = 0.20 // ...and down
+
 export function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = 'rgba(66, 84, 44, 0.18)'
+  // two stacked ellipses: a wide soft penumbra and a tighter contact patch, so
+  // the object looks planted instead of floating on a decal
+  ctx.fillStyle = 'rgba(44, 54, 36, 0.22)'
   ctx.beginPath()
-  ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2)
+  ctx.ellipse(x + w * SUN_X * 0.3, y + h * SUN_Y * 0.5, w, h, 0, 0, Math.PI * 2)
   ctx.fill()
+}
+
+
+
+// Trees are the most numerous thing in the meadow and, sway aside, each one
+// paints the same handful of arcs every frame. Bake each distinct tree once
+// into a small offscreen canvas and blit it instead: a dozen arcs per tree per
+// frame becomes a single drawImage, which is what buys the frame budget back.
+// The sway then rides as a sub-pixel nudge of the whole sprite — at this size
+// the eye reads that as wind, and the trunk's foot moving by a pixel is
+// invisible.
+const TREE_CACHE = new Map<string, { c: HTMLCanvasElement; ox: number; oy: number }>()
+const TREE_PAD = 46
+
+function treeSprite(e: Ent): { c: HTMLCanvasElement; ox: number; oy: number } | null {
+  const felled = (e.amount ?? 0) <= 0
+  // quantise size so a growing/shrinking wood reuses a handful of bakes
+  const bucket = felled ? 0 : Math.round(((e.amount ?? 60) / 60) * 8)
+  const key = `${e.seed % 5}:${e.seed % CANOPIES.length}:${bucket}:${felled ? 1 : 0}`
+  const hit = TREE_CACHE.get(key)
+  if (hit) return hit
+  if (TREE_CACHE.size > 240) return null // pathological map: just paint live
+  const c = document.createElement('canvas')
+  c.width = TREE_PAD * 2
+  c.height = TREE_PAD * 2
+  const g = c.getContext('2d')
+  if (!g) return null
+  g.translate(TREE_PAD, TREE_PAD)
+  // paint the archetype at the origin, with sway frozen at zero
+  paintTree(g, { ...e, x: 0, y: 0, amount: felled ? 0 : (bucket / 8) * 60 } as Ent, 0)
+  const made = { c, ox: TREE_PAD, oy: TREE_PAD }
+  TREE_CACHE.set(key, made)
+  return made
+}
+
+export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  const spr = treeSprite(e)
+  if (!spr) { paintTree(ctx, e, t); return }
+  const sway = Math.sin(t * 0.8 + e.seed) * 1.5
+  ctx.drawImage(spr.c, e.x - spr.ox + sway * 0.5, e.y - spr.oy)
+}
+
+// ------------------------------------------------------------- architecture
+// Every building in the meadow is assembled from these few parts, so they all
+// catch the same sun and share a vocabulary. Coordinates are always "ground
+// centre-front": (x, y) is where the building meets the earth, widths run
+// left-right, heights go up. The view's tilt is applied outside, by upright().
+const PLASTER = '#D9CDB5'
+const PLASTER_LIT = '#EADFC8'
+const PLASTER_SHADE = '#B3A68C'
+const BEAM = '#54402B'
+const TILE_MID = '#9E4B32'
+const TILE_LIT = '#BC6040'
+const TILE_SHADE = '#733524'
+const SLATE_MID = '#5C6970'
+const SLATE_LIT = '#77858D'
+const SLATE_SHADE = '#414A50'
+const THATCH_MID = '#A98B54'
+const THATCH_LIT = '#C6A96C'
+const THATCH_SHADE = '#7E6438'
+const STONE_MID = '#A9A396'
+const STONE_LIT = '#C0BAAC'
+const STONE_SHADE = '#847E72'
+
+export type Mat = 'plaster' | 'stone' | 'timber'
+export type RoofMat = 'tile' | 'slate' | 'thatch'
+const ROOFS: Record<RoofMat, [string, string, string]> = {
+  tile: [TILE_SHADE, TILE_MID, TILE_LIT],
+  slate: [SLATE_SHADE, SLATE_MID, SLATE_LIT],
+  thatch: [THATCH_SHADE, THATCH_MID, THATCH_LIT],
+}
+const WALLS: Record<Mat, [string, string, string]> = {
+  plaster: [PLASTER_SHADE, PLASTER, PLASTER_LIT],
+  stone: [STONE_SHADE, STONE_MID, STONE_LIT],
+  timber: ['#6B5238', '#8A6C49', '#A6855D'],
+}
+
+// The trodden earth a building sits in — softens the join to the grass so
+// nothing looks pasted onto the meadow.
+export function plot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {
+  ctx.fillStyle = 'rgba(120, 102, 74, 0.13)'
+  ctx.beginPath(); ctx.ellipse(x, y + 1, w * 0.54, w * 0.19, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(134, 116, 86, 0.10)'
+  ctx.beginPath(); ctx.ellipse(x - w * 0.06, y, w * 0.38, w * 0.13, 0, 0, Math.PI * 2); ctx.fill()
+}
+
+// A wall block standing on the ground: the face we look at, plus a shaded
+// return sliding off to the right, away from the sun.
+export function facade(ctx: CanvasRenderingContext2D, x: number, y: number,
+                       w: number, h: number, mat: Mat = 'plaster', depth = 0.22): void {
+  const [shade, mid, lit] = WALLS[mat]
+  const d = w * depth
+  // right-hand return, in shadow
+  ctx.fillStyle = shade
+  ctx.beginPath()
+  ctx.moveTo(x + w / 2, y)
+  ctx.lineTo(x + w / 2 + d, y - d * 0.5)
+  ctx.lineTo(x + w / 2 + d, y - h - d * 0.5)
+  ctx.lineTo(x + w / 2, y - h)
+  ctx.closePath(); ctx.fill()
+  // the face
+  ctx.fillStyle = mid
+  ctx.fillRect(x - w / 2, y - h, w, h)
+  // Light grazing the left, shadow gathering right. Bands rather than a
+  // gradient: at this size the eye can't tell, and a gradient object per wall
+  // per frame is real work on a phone.
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = lit
+  ctx.fillRect(x - w / 2, y - h, w * 0.3, h)
+  ctx.fillStyle = shade
+  ctx.fillRect(x + w * 0.16, y - h, w * 0.34, h)
+  ctx.globalAlpha = 1
+  // grime gathering where wall meets ground
+  ctx.fillStyle = 'rgba(60, 52, 38, 0.16)'
+  ctx.fillRect(x - w / 2, y - h * 0.16, w, h * 0.16)
+  if (mat === 'stone') {
+    ctx.strokeStyle = 'rgba(96, 90, 78, 0.35)'
+    ctx.lineWidth = 0.8
+    ctx.beginPath()
+    for (let sy = y - h + 5; sy < y - 1; sy += 5) { ctx.moveTo(x - w / 2, sy); ctx.lineTo(x + w / 2, sy) }
+    ctx.stroke()
+  }
+}
+
+// Half-timbering: the dark bracing that reads instantly as medieval.
+export function timberFrame(ctx: CanvasRenderingContext2D, x: number, y: number,
+                            w: number, h: number, bays = 3): void {
+  ctx.strokeStyle = BEAM
+  ctx.lineWidth = Math.max(1.4, w * 0.035)
+  ctx.beginPath()
+  ctx.moveTo(x - w / 2, y - h); ctx.lineTo(x + w / 2, y - h)   // wall plate
+  ctx.moveTo(x - w / 2, y); ctx.lineTo(x + w / 2, y)           // sill
+  for (let i = 1; i < bays; i++) {
+    const px = x - w / 2 + (w / bays) * i
+    ctx.moveTo(px, y - h); ctx.lineTo(px, y)                    // posts
+  }
+  ctx.stroke()
+  ctx.lineWidth = Math.max(1, w * 0.022)
+  ctx.beginPath()
+  for (let i = 0; i < bays; i++) {                              // braces
+    const a = x - w / 2 + (w / bays) * i, b = a + w / bays
+    ctx.moveTo(a, y); ctx.lineTo(b, y - h * 0.62)
+  }
+  ctx.stroke()
+}
+
+// A pitched roof with its ridge running left-right: we look straight at the
+// front slope, so that face carries the courses and the gable ends show as
+// small returns either side.
+export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
+                     w: number, rise: number, mat: RoofMat = 'tile', over = 0.12): void {
+  const [shade, mid, lit] = ROOFS[mat]
+  const ow = w * (1 + over)
+  const ridge = yEaves - rise
+  // gable return on the shaded side
+  ctx.fillStyle = shade
+  ctx.beginPath()
+  ctx.moveTo(x + ow / 2, yEaves)
+  ctx.lineTo(x + ow / 2 + w * 0.13, yEaves - rise * 0.42)
+  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
+  ctx.closePath(); ctx.fill()
+  // the front slope
+  ctx.fillStyle = mid
+  ctx.beginPath()
+  ctx.moveTo(x - ow / 2, yEaves)
+  ctx.lineTo(x + ow / 2, yEaves)
+  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
+  ctx.lineTo(x - ow / 2 + w * 0.02, ridge)
+  ctx.closePath(); ctx.fill()
+  // sun down the left of the slope, shade down the right
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(x - ow / 2, yEaves)
+  ctx.lineTo(x + ow / 2, yEaves)
+  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
+  ctx.lineTo(x - ow / 2 + w * 0.02, ridge)
+  ctx.closePath(); ctx.clip()
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = lit
+  ctx.fillRect(x - ow / 2, ridge, ow * 0.34, rise)
+  ctx.fillStyle = shade
+  ctx.fillRect(x + ow * 0.12, ridge, ow * 0.38, rise)
+  ctx.globalAlpha = 1
+  ctx.restore()
+  if (mat === 'thatch') {
+    // thatch has no courses — a combed edge and a fat ridge instead
+    ctx.strokeStyle = 'rgba(92, 74, 42, 0.13)'
+    ctx.lineWidth = 0.7
+    ctx.beginPath()
+    for (let i = 1; i < 14; i++) {
+      const px = x - ow / 2 + (ow / 14) * i
+      ctx.moveTo(px, yEaves); ctx.lineTo(px + w * 0.012, ridge)
+    }
+    ctx.stroke()
+    // straw lies in courses too, just softer than tile
+    ctx.strokeStyle = 'rgba(120, 96, 54, 0.16)'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    for (let i = 1; i < 4; i++) {
+      const ry = yEaves - rise * (i / 4)
+      ctx.moveTo(x - ow / 2 + 1, ry); ctx.lineTo(x + ow / 2 - 1, ry)
+    }
+    ctx.stroke()
+    ctx.fillStyle = lit
+    ctx.beginPath(); ctx.ellipse(x, ridge + 1, ow * 0.5, rise * 0.10, 0, 0, Math.PI * 2); ctx.fill()
+  } else {
+    // tile or slate courses, tightening toward the ridge
+    ctx.strokeStyle = 'rgba(38, 26, 20, 0.26)'
+    ctx.lineWidth = 0.8
+    ctx.beginPath()
+    const rows = Math.max(3, Math.round(rise / 4))
+    for (let i = 1; i < rows; i++) {
+      const k = i / rows
+      const ry = yEaves - rise * k
+      const hw = (ow / 2) * (1 - 0.02 * k)
+      ctx.moveTo(x - hw, ry); ctx.lineTo(x + hw, ry)
+    }
+    ctx.stroke()
+    ctx.fillStyle = lit
+    ctx.fillRect(x - ow / 2 + w * 0.02, ridge - 1.6, ow - w * 0.04, 2.2) // ridge cap
+  }
+  // eaves shadow cast onto the wall below
+  ctx.fillStyle = 'rgba(40, 32, 24, 0.22)'
+  ctx.fillRect(x - ow / 2, yEaves, ow, 2.4)
+}
+
+// A round tower with a conical cap — the silhouette that says "keep".
+export function tower(ctx: CanvasRenderingContext2D, x: number, y: number,
+                      r: number, h: number, mat: Mat = 'stone', cap: RoofMat = 'tile'): void {
+  const [shade, mid, lit] = WALLS[mat]
+  ctx.fillStyle = mid
+  ctx.fillRect(x - r, y - h, r * 2, h)
+  ctx.globalAlpha = 0.6
+  ctx.fillStyle = lit
+  ctx.fillRect(x - r * 0.72, y - h, r * 0.7, h)
+  ctx.fillStyle = shade
+  ctx.fillRect(x + r * 0.3, y - h, r * 0.7, h)
+  ctx.fillStyle = shade
+  ctx.fillRect(x - r, y - h, r * 0.3, h)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = 'rgba(96, 90, 78, 0.3)'
+  ctx.lineWidth = 0.7
+  ctx.beginPath()
+  for (let sy = y - h + 4; sy < y - 1; sy += 4.5) { ctx.moveTo(x - r, sy); ctx.lineTo(x + r, sy) }
+  ctx.stroke()
+  // corbelled band under the cap
+  ctx.fillStyle = lit
+  ctx.fillRect(x - r * 1.16, y - h - 2, r * 2.32, 3)
+  ctx.fillStyle = 'rgba(50, 44, 36, 0.25)'
+  ctx.fillRect(x - r * 1.16, y - h + 1, r * 2.32, 1.2)
+  // the cone
+  const [cs, cm, cl] = ROOFS[cap]
+  const ch = r * 2.3
+  ctx.fillStyle = cm
+  ctx.beginPath()
+  ctx.moveTo(x - r * 1.2, y - h - 2)
+  ctx.lineTo(x, y - h - 2 - ch)
+  ctx.lineTo(x + r * 1.2, y - h - 2)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = cl
+  ctx.beginPath()
+  ctx.moveTo(x - r * 1.2, y - h - 2)
+  ctx.lineTo(x, y - h - 2 - ch)
+  ctx.lineTo(x - r * 0.15, y - h - 2)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = cs
+  ctx.beginPath()
+  ctx.moveTo(x + r * 0.45, y - h - 2)
+  ctx.lineTo(x, y - h - 2 - ch)
+  ctx.lineTo(x + r * 1.2, y - h - 2)
+  ctx.closePath(); ctx.fill()
+}
+
+// Openings. Small, dark and deep-set — a bright window reads as a sticker.
+export function windowSlot(ctx: CanvasRenderingContext2D, x: number, y: number,
+                           w: number, h: number, arched = false): void {
+  ctx.fillStyle = '#33291F'
+  ctx.beginPath()
+  if (arched) {
+    ctx.moveTo(x - w / 2, y)
+    ctx.lineTo(x - w / 2, y - h + w / 2)
+    ctx.arc(x, y - h + w / 2, w / 2, Math.PI, 0)
+    ctx.lineTo(x + w / 2, y)
+  } else {
+    ctx.rect(x - w / 2, y - h, w, h)
+  }
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = 'rgba(226, 208, 160, 0.30)' // a little light from inside
+  ctx.fillRect(x - w / 2 + 0.6, y - h * 0.55, w - 1.2, h * 0.42)
+}
+
+export function doorArch(ctx: CanvasRenderingContext2D, x: number, y: number,
+                         w: number, h: number): void {
+  ctx.fillStyle = '#4A3722'
+  ctx.beginPath()
+  ctx.moveTo(x - w / 2, y)
+  ctx.lineTo(x - w / 2, y - h + w / 2)
+  ctx.arc(x, y - h + w / 2, w / 2, Math.PI, 0)
+  ctx.lineTo(x + w / 2, y)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#5E4830'
+  ctx.fillRect(x - w / 2 + 0.8, y - h + w / 2, w - 1.6, h - w / 2)
+  ctx.strokeStyle = 'rgba(30, 22, 14, 0.5)'
+  ctx.lineWidth = 0.7
+  ctx.beginPath()
+  ctx.moveTo(x, y); ctx.lineTo(x, y - h + w * 0.4)
+  ctx.stroke()
+}
+
+export function chimney(ctx: CanvasRenderingContext2D, x: number, y: number,
+                        w: number, h: number): void {
+  ctx.fillStyle = STONE_MID
+  ctx.fillRect(x - w / 2, y - h, w, h)
+  ctx.fillStyle = STONE_LIT
+  ctx.fillRect(x - w / 2, y - h, w * 0.4, h)
+  ctx.fillStyle = STONE_SHADE
+  ctx.fillRect(x - w / 2 - 0.8, y - h - 2, w + 1.6, 2.4)
 }
 
 // ---------- Resources ----------
 
-export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
-  if ((e.amount ?? 0) <= 0) {
-    // chopped: a cosy stump with growth rings and a stray leaf
-    shadow(ctx, e.x, e.y + 3, 9, 3.6)
-    ctx.fillStyle = WOOD
-    rr(ctx, e.x - 6, e.y - 6, 12, 10, 3.5)
+// ---------------------------------------------------------------- woodland
+// The meadow turns in autumn, so the canopy palette runs from held-on green
+// through gold and rust to deep maple red. Each tree picks one family from its
+// seed and keeps it, so the wood looks planted rather than randomised.
+type Canopy = { shade: string; mid: string; lit: string }
+const CANOPIES: Canopy[] = [
+  { shade: '#8E3526', mid: '#B4442E', lit: '#D26B44' }, // maple, turned hard
+  { shade: '#9A5822', mid: '#C0762F', lit: '#DF9A4C' }, // orange
+  { shade: '#94742A', mid: '#BE9C38', lit: '#DCC059' }, // gold
+  { shade: '#4E6331', mid: '#6B8342', lit: '#8CA659' }, // still green
+]
+const BARK = '#4A3B2C'
+const BARK_LIT = '#63503C'
+
+// A canopy is built in three passes — shade offset away from the sun, mid
+// tone, then a smaller lit cluster up toward the light. Overlapping circles
+// read as foliage far better than one silhouette does.
+function canopy(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number,
+                c: Canopy, blobs: [number, number, number][], sway: number): void {
+  ctx.fillStyle = c.shade
+  for (const [ox, oy, r] of blobs) {
+    ctx.beginPath()
+    ctx.arc(cx + (ox + 2.2) * s + sway * 0.4, cy + (oy + 2.0) * s, r * s, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#C89B6E'
-    ctx.beginPath(); ctx.ellipse(e.x, e.y - 6, 6, 3.4, 0, 0, Math.PI * 2); ctx.fill()
-    ctx.strokeStyle = '#A8794F'
-    ctx.lineWidth = 1
-    ctx.beginPath(); ctx.ellipse(e.x, e.y - 6, 3.4, 1.8, 0, 0, Math.PI * 2); ctx.stroke()
-    ctx.fillStyle = '#85B168'
-    ctx.beginPath(); ctx.ellipse(e.x + 8, e.y + 1, 2.8, 1.6, 0.5, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.fillStyle = c.mid
+  for (const [ox, oy, r] of blobs) {
+    ctx.beginPath()
+    ctx.arc(cx + ox * s + sway * 0.5, cy + oy * s, r * 0.94 * s, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.fillStyle = c.lit
+  for (const [ox, oy, r] of blobs) {
+    if (r < 7) continue
+    ctx.beginPath()
+    ctx.arc(cx + (ox - 2.6) * s + sway * 0.7, cy + (oy - 2.8) * s, r * 0.52 * s, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+// a tapering trunk with a couple of branches reaching into the crown
+function trunk(ctx: CanvasRenderingContext2D, x: number, y: number, h: number,
+               w: number, s: number): void {
+  ctx.fillStyle = BARK
+  ctx.beginPath()
+  ctx.moveTo(x - w * s, y)
+  ctx.quadraticCurveTo(x - w * 0.45 * s, y - h * 0.5 * s, x - w * 0.34 * s, y - h * s)
+  ctx.lineTo(x + w * 0.34 * s, y - h * s)
+  ctx.quadraticCurveTo(x + w * 0.45 * s, y - h * 0.5 * s, x + w * s, y)
+  ctx.closePath()
+  ctx.fill()
+  // sunlit edge down the left flank
+  ctx.strokeStyle = BARK_LIT
+  ctx.lineWidth = 1.1 * s
+  ctx.beginPath()
+  ctx.moveTo(x - w * 0.62 * s, y - h * 0.12 * s)
+  ctx.quadraticCurveTo(x - w * 0.34 * s, y - h * 0.5 * s, x - w * 0.2 * s, y - h * 0.9 * s)
+  ctx.stroke()
+  // branches
+  ctx.strokeStyle = BARK
+  ctx.lineWidth = 1.6 * s
+  ctx.beginPath()
+  ctx.moveTo(x, y - h * 0.62 * s); ctx.lineTo(x - w * 1.9 * s, y - h * 0.95 * s)
+  ctx.moveTo(x, y - h * 0.74 * s); ctx.lineTo(x + w * 1.9 * s, y - h * 1.02 * s)
+  ctx.stroke()
+}
+
+function paintTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+  if ((e.amount ?? 0) <= 0) {
+    // felled: a raw stump, pale heartwood against the weathered bark
+    shadow(ctx, e.x, e.y + 3, 9, 3.6)
+    ctx.fillStyle = BARK
+    rr(ctx, e.x - 6, e.y - 7, 12, 11, 2.5)
+    ctx.fill()
+    ctx.fillStyle = '#B79A76'
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 7, 6, 3.2, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = 'rgba(120, 96, 68, 0.7)'
+    ctx.lineWidth = 0.9
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 7, 3.2, 1.7, 0, 0, Math.PI * 2); ctx.stroke()
+    // sawdust and a few fallen leaves round the base
+    ctx.fillStyle = 'rgba(178, 150, 108, 0.5)'
+    ctx.beginPath(); ctx.ellipse(e.x + 5, e.y + 3, 4.5, 2, 0.3, 0, Math.PI * 2); ctx.fill()
     return
   }
-  const sway = Math.sin(t * 0.8 + e.seed) * 1.6
+  const sway = Math.sin(t * 0.8 + e.seed) * 1.5
   const full = (e.amount ?? 60) / 60
-  const s = 0.75 + 0.25 * full
-  shadow(ctx, e.x, e.y + 4, 15 * s, 6 * s)
-  const variant = e.seed % 3 // the woods are a mix: oaks, pines, and pale birches
+  const s = 0.78 + 0.30 * full
+  const variant = e.seed % 5
+  const c = CANOPIES[e.seed % CANOPIES.length]
+
   if (variant === 1) {
-    // pine: a dark trunk under stacked green skirts
-    ctx.fillStyle = WOOD_DARK
-    rr(ctx, e.x - 3, e.y - 12, 6, 16, 2.5)
+    // conifer: holds its dark green all year, a spire among the turned crowns
+    shadow(ctx, e.x, e.y + 3, 13 * s, 5 * s)
+    ctx.fillStyle = BARK
+    rr(ctx, e.x - 2.6 * s, e.y - 12 * s, 5.2 * s, 15 * s, 2)
     ctx.fill()
-    const tiers: [number, number][] = [[-8, 15], [-18, 12], [-27, 8.5]]
+    const tiers: [number, number][] = [[-7, 15], [-16, 12.5], [-24, 9.5], [-31, 6]]
     for (let i = 0; i < tiers.length; i++) {
       const [oy, w] = tiers[i]
-      ctx.fillStyle = i % 2 ? '#5E8A4E' : '#6D9552'
+      const sk = sway * (0.2 + i * 0.22)
+      ctx.fillStyle = ['#33452C', '#3D5235', '#33452C', '#3D5235'][i]
       ctx.beginPath()
-      ctx.moveTo(e.x + sway * (0.3 + i * 0.25), e.y + (oy - 13) * s)
+      ctx.moveTo(e.x + sk, e.y + (oy - 12) * s)
       ctx.lineTo(e.x - w * s, e.y + oy * s)
       ctx.lineTo(e.x + w * s, e.y + oy * s)
-      ctx.closePath()
-      ctx.fill()
+      ctx.closePath(); ctx.fill()
+      // light catching the left side of each skirt
+      ctx.fillStyle = 'rgba(126, 152, 96, 0.34)'
+      ctx.beginPath()
+      ctx.moveTo(e.x + sk, e.y + (oy - 12) * s)
+      ctx.lineTo(e.x - w * s, e.y + oy * s)
+      ctx.lineTo(e.x - w * 0.35 * s, e.y + oy * s)
+      ctx.closePath(); ctx.fill()
     }
-    ctx.fillStyle = '#85B168'
-    ctx.beginPath(); ctx.arc(e.x + sway, e.y - 36 * s, 3.4 * s, 0, Math.PI * 2); ctx.fill()
     return
   }
-  if (variant === 2) {
-    // birch: pale dashed trunk, a lighter, smaller crown
-    ctx.fillStyle = '#E6DCC8'
-    rr(ctx, e.x - 3.4, e.y - 16, 6.8, 20, 3)
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(90, 78, 60, 0.55)'
-    ctx.lineWidth = 1.4
+
+  if (variant === 3) {
+    // birch: slender pale trunk, an airy gold crown high up
+    shadow(ctx, e.x, e.y + 3, 11 * s, 4.4 * s)
+    ctx.fillStyle = '#D9D2C0'
     ctx.beginPath()
-    ctx.moveTo(e.x - 2, e.y - 4); ctx.lineTo(e.x + 0.5, e.y - 4)
-    ctx.moveTo(e.x + 0.5, e.y - 10); ctx.lineTo(e.x + 3, e.y - 10)
-    ctx.moveTo(e.x - 3, e.y - 14); ctx.lineTo(e.x - 0.5, e.y - 14)
+    ctx.moveTo(e.x - 3 * s, e.y)
+    ctx.quadraticCurveTo(e.x - 1.6 * s, e.y - 12 * s, e.x - 1.5 * s, e.y - 24 * s)
+    ctx.lineTo(e.x + 1.5 * s, e.y - 24 * s)
+    ctx.quadraticCurveTo(e.x + 1.6 * s, e.y - 12 * s, e.x + 3 * s, e.y)
+    ctx.closePath(); ctx.fill()
+    ctx.strokeStyle = 'rgba(74, 64, 50, 0.6)'
+    ctx.lineWidth = 1.1 * s
+    ctx.beginPath()
+    ctx.moveTo(e.x - 2.2 * s, e.y - 5 * s); ctx.lineTo(e.x - 0.2 * s, e.y - 5 * s)
+    ctx.moveTo(e.x + 0.6 * s, e.y - 12 * s); ctx.lineTo(e.x + 2.4 * s, e.y - 12 * s)
+    ctx.moveTo(e.x - 2.4 * s, e.y - 18 * s); ctx.lineTo(e.x - 0.6 * s, e.y - 18 * s)
     ctx.stroke()
-    const cy = e.y - 26 * s
-    ctx.fillStyle = '#8CB56A'
-    for (const [ox, oy, r] of [[-7, 2, 8], [7, 2, 8], [0, -4, 9.5]]) {
-      ctx.beginPath(); ctx.arc(e.x + ox * s + sway * 0.5, cy + oy * s, r * s, 0, Math.PI * 2); ctx.fill()
-    }
-    ctx.fillStyle = '#AACD8C'
-    ctx.beginPath(); ctx.arc(e.x - 3 * s + sway, cy - 6 * s, 5.5 * s, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#C4DCA8'
-    ctx.beginPath(); ctx.arc(e.x + 4 * s + sway, cy - 3 * s, 3.4 * s, 0, Math.PI * 2); ctx.fill()
+    canopy(ctx, e.x, e.y - 29 * s, s, CANOPIES[2],
+      [[-7, 3, 8], [7, 2, 7.5], [0, -4, 9], [-2, 6, 7]], sway)
     return
   }
-  // oak (the classic)
-  ctx.fillStyle = WOOD
-  rr(ctx, e.x - 4, e.y - 14, 8, 18, 3.5)
-  ctx.fill()
-  // canopy: puffy overlapping circles
-  const cy = e.y - 24 * s
-  ctx.fillStyle = '#6D9552'
-  for (const [ox, oy, r] of [[-9, 4, 10], [9, 4, 10], [0, -6, 12], [0, 5, 11]]) {
-    ctx.beginPath(); ctx.arc(e.x + ox * s + sway * 0.4, cy + oy * s, r * s, 0, Math.PI * 2); ctx.fill()
-  }
-  ctx.fillStyle = '#85B168'
-  for (const [ox, oy, r] of [[-6, -4, 8], [5, -6, 7.5], [-1, 2, 9]]) {
-    ctx.beginPath(); ctx.arc(e.x + ox * s + sway, cy + oy * s - 2, r * s, 0, Math.PI * 2); ctx.fill()
-  }
-  ctx.fillStyle = '#9CC47E'
-  ctx.beginPath(); ctx.arc(e.x - 4 * s + sway, cy - 8 * s, 5 * s, 0, Math.PI * 2); ctx.fill()
+
+  // broadleaf — the workhorse of the wood
+  shadow(ctx, e.x, e.y + 4, 15 * s, 6 * s)
+  trunk(ctx, e.x, e.y, 18, 3.6, s)
+  canopy(ctx, e.x, e.y - 26 * s, s, c,
+    [[-10, 5, 10.5], [10, 4, 10], [0, -7, 12.5], [-4, 7, 10], [6, -3, 9]], sway)
 }
 
 // a little fleur-de-lis, the French signature, at (x, y) roughly s tall
@@ -866,81 +1255,66 @@ function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number,
 
 export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
-  shadow(ctx, x, y + 26, 52, 15)
-  // walls wear the age: planks first, plaster on stone once Feudal
-  agedWall(ctx, x - 38, y - 16, 76, 44, 8, age)
-  if (age >= 2) {
-    // timber framing reads well on plaster
-    ctx.strokeStyle = '#E0CBA4'; ctx.lineWidth = 3
-    ctx.beginPath(); ctx.moveTo(x - 20, y - 14); ctx.lineTo(x - 20, y + 19); ctx.moveTo(x + 20, y - 14); ctx.lineTo(x + 20, y + 19); ctx.stroke()
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
+  shadow(ctx, x, y + 8, 46, 15)
+  plot(ctx, x, y + 6, 60)
+
+  // A hall grows into a keep as the age turns: timber and thatch in the Dark
+  // Age, plaster with a tiled roof in the Feudal, flanking stone towers in the
+  // Castle. Same footprint throughout, so the village silhouette stays legible.
+  const stone = age >= 3
+  if (stone) {
+    tower(ctx, x - 30, y - 2, 7, 30, 'stone', 'tile')
+    tower(ctx, x + 30, y - 2, 7, 30, 'stone', 'tile')
   }
-  // big friendly roof
-  ctx.fillStyle = ROOF
-  ctx.beginPath()
-  ctx.moveTo(x - 48, y - 10)
-  ctx.quadraticCurveTo(x - 46, y - 16, x - 40, y - 18)
-  ctx.lineTo(x - 6, y - 46)
-  ctx.quadraticCurveTo(x, y - 50, x + 6, y - 46)
-  ctx.lineTo(x + 40, y - 18)
-  ctx.quadraticCurveTo(x + 46, y - 16, x + 48, y - 10)
-  ctx.quadraticCurveTo(x + 40, y - 6, x, y - 8)
-  ctx.quadraticCurveTo(x - 40, y - 6, x - 48, y - 10)
-  ctx.closePath()
-  ctx.fill()
-  ctx.fillStyle = ROOF_DARK
-  ctx.beginPath()
-  ctx.moveTo(x - 48, y - 10); ctx.quadraticCurveTo(x - 40, y - 6, x, y - 8)
-  ctx.quadraticCurveTo(x + 40, y - 6, x + 48, y - 10)
-  ctx.quadraticCurveTo(x + 40, y - 2, x, y - 4)
-  ctx.quadraticCurveTo(x - 40, y - 2, x - 48, y - 10)
-  ctx.closePath(); ctx.fill()
-  // door
-  ctx.fillStyle = WOOD
-  rr(ctx, x - 9, y + 6, 18, 22, 8); ctx.fill()
-  ctx.fillStyle = '#E9B44C'
-  ctx.beginPath(); ctx.arc(x + 4, y + 18, 1.8, 0, Math.PI * 2); ctx.fill()
-  // bell arch in the gable — swings while villagers shelter inside
-  ctx.fillStyle = '#FBEFD3'; ctx.beginPath(); ctx.arc(x, y - 24, 6, 0, Math.PI * 2); ctx.fill()
-  ctx.strokeStyle = WOOD; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y - 24, 6, 0, Math.PI * 2); ctx.stroke()
+  const wallMat: Mat = age >= 3 ? 'stone' : age >= 2 ? 'plaster' : 'timber'
+  const roofMat: RoofMat = age >= 2 ? 'tile' : 'thatch'
+  facade(ctx, x, y, 52, 26, wallMat)
+  if (age === 2) timberFrame(ctx, x, y, 52, 26, 4)
+  roof(ctx, x, y - 26, 52, 24, roofMat, 0.16)
+
+  doorArch(ctx, x, y, 12, 17)
+  windowSlot(ctx, x - 17, y - 9, 5, 7, age >= 2)
+  windowSlot(ctx, x + 17, y - 9, 5, 7, age >= 2)
+  chimney(ctx, x + 20, y - 40, 6, 12)
+  chimneySmoke(ctx, x + 20, y - 52, t, e.seed)
+
+  // the bell in its gable cote, swinging while villagers shelter inside
   const ringing = (e.garrison ?? 0) > 0
-  const swing = ringing ? Math.sin(t * 9) * 0.55 : 0
+  const swing = ringing ? Math.sin(t * 9) * 0.5 : 0
+  ctx.fillStyle = STONE_LIT
+  ctx.beginPath(); ctx.arc(x, y - 42, 5.5, Math.PI, 0); ctx.fill()
   ctx.save()
-  ctx.translate(x, y - 28)
+  ctx.translate(x, y - 44)
   ctx.rotate(swing)
-  ctx.fillStyle = '#E9B44C'
+  ctx.fillStyle = '#C89A3A'
   ctx.beginPath()
-  ctx.moveTo(-3.2, 5.5)
-  ctx.quadraticCurveTo(-3.4, 0.5, 0, 0)
-  ctx.quadraticCurveTo(3.4, 0.5, 3.2, 5.5)
-  ctx.closePath()
-  ctx.fill()
-  ctx.fillStyle = '#B8842E'
-  ctx.beginPath(); ctx.arc(0, 6.4, 1.4, 0, Math.PI * 2); ctx.fill()
+  ctx.moveTo(-3, 4.5); ctx.lineTo(-1.6, -1); ctx.lineTo(1.6, -1); ctx.lineTo(3, 4.5)
+  ctx.closePath(); ctx.fill()
   ctx.restore()
-  // chimney
-  ctx.fillStyle = '#B9977C'
-  rr(ctx, x + 20, y - 44, 9, 16, 2.5); ctx.fill()
-  chimneySmoke(ctx, x + 24.5, y - 46, t, e.seed)
-  flag(ctx, x - 34, y - 22, e.team, t + e.seed)
+
+  // the team's colours hung from the wall plate
+  ctx.fillStyle = c.main
+  ctx.fillRect(x - 30, y - 26, 60, 2.6)
+  ctx.fillStyle = c.dark
+  ctx.fillRect(x - 30, y - 23.6, 60, 1.2)
 }
 
 export function drawHouse(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
-  shadow(ctx, x, y + 15, 27, 9)
-  agedWall(ctx, x - 19, y - 8, 38, 24, 6, age)
-  ctx.fillStyle = ROOF
-  ctx.beginPath()
-  ctx.moveTo(x - 25, y - 5)
-  ctx.lineTo(x - 3, y - 25)
-  ctx.quadraticCurveTo(x, y - 27, x + 3, y - 25)
-  ctx.lineTo(x + 25, y - 5)
-  ctx.quadraticCurveTo(x, y - 10, x - 25, y - 5)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = WOOD
-  rr(ctx, x - 5, y + 3, 10, 13, 4.5); ctx.fill()
-  ctx.fillStyle = '#B9977C'
-  rr(ctx, x + 9, y - 22, 6, 11, 2); ctx.fill()
-  chimneySmoke(ctx, x + 12, y - 24, t, e.seed)
+  shadow(ctx, x, y + 5, 24, 8)
+  plot(ctx, x, y + 4, 32)
+  // cottages vary a little by seed so a street of them isn't a row of clones
+  const wide = 26 + (e.seed % 3) * 3
+  const wallMat: Mat = age >= 2 ? 'plaster' : 'timber'
+  const roofMat: RoofMat = age >= 2 ? 'tile' : 'thatch'
+  facade(ctx, x, y, wide, 15, wallMat)
+  if (age >= 2) timberFrame(ctx, x, y, wide, 15, 2 + (e.seed % 2))
+  roof(ctx, x, y - 15, wide, 15, roofMat, 0.18)
+  doorArch(ctx, x - wide * 0.18, y, 6, 9)
+  windowSlot(ctx, x + wide * 0.24, y - 6, 4.5, 5, age >= 2)
+  chimney(ctx, x + wide * 0.34, y - 27, 4, 8)
+  chimneySmoke(ctx, x + wide * 0.34, y - 35, t, e.seed)
 }
 
 export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {

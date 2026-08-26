@@ -83,7 +83,11 @@ export function createGame(opts?: { seed?: number }): Game {
       { wood: 100, food: 50, gold: 0, stone: 0 },
       { wood: 100, food: 50, gold: 0, stone: 0 }, // the enemy plays fair now
     ],
-    camera: { x: 0, y: 0, zoom: 0.85 }, // starts close and cosy; pinch out for the wide view
+    // The tilted view swallows far more ground north-to-south than a top-down
+    // one, so the old 0.85 fitted the whole map on a phone and left the camera
+    // nothing to pan over. Sitting closer restores that headroom and gives the
+    // rebuilt architecture room to actually read. Pinch out for the wide view.
+    camera: { x: 0, y: 0, zoom: 1.3 },
     selection: [], placing: null, placePos: null, placeEnd: null, over: null, overT: 0,
     particles: [],
     projectiles: [],
