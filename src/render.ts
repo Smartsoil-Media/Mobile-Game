@@ -5,7 +5,7 @@ import { inWater } from './nav'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawCroc, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
-  drawWall, drawGate, groundDecal, setDecals,
+  drawWall, drawGate, groundDecal, setDecals, baseSkirt,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
   drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
@@ -613,6 +613,10 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       case 'mangonel': drawMangonel(ctx, e, time); break
       case 'trebuchet': drawTrebuchet(ctx, e, time); break
       case 'siegeworkshop': e.complete ? drawSiegeWorkshop(ctx, e, time) : drawSite(ctx, e); break
+    }
+    // grass over the foot of the building — after the walls, so it overlaps
+    if (bd && e.kind !== 'wall' && e.kind !== 'gate' && e.kind !== 'farm' && e.complete !== false) {
+      baseSkirt(ctx, e, (bd.art ?? bd.foot) * 0.52)
     }
     // health bar when hurt (hunted wildlife shows its last strength too)
     if ((isUnit(e) || isBuilding(e) || e.kind === 'deer' || e.kind === 'croc') && e.hp < e.maxHp && e.hp > 0 && (e.complete !== false)) {

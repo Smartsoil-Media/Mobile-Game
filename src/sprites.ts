@@ -315,6 +315,53 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   ctx.fill()
 }
 
+// Nothing in a meadow meets the ground along a clean straight line, but a wall
+// drawn with fillRect does exactly that — and no amount of shadow fixes it,
+// because the eye reads an uninterrupted horizontal edge as a card standing in
+// FRONT of the ground rather than something sitting in it. So grass grows up
+// over the foot of every building, drawn after the walls so it genuinely
+// overlaps them and breaks that line. This is what actually plants them.
+export function baseSkirt(ctx: CanvasRenderingContext2D, e: Ent, halfW: number): void {
+  const y = e.y
+  // Dense and short. Sparse tall blades read as chives standing about in the
+  // field; what tucks a wall in is a close fringe that actually touches it.
+  const n = Math.max(14, Math.round(halfW / 1.5))
+  for (let i = 0; i < n; i++) {
+    // seeded, so a building's own fringe never shimmers between frames
+    const r1 = ((e.seed * 37 + i * 101) % 1000) / 1000
+    const r2 = ((e.seed * 61 + i * 233) % 1000) / 1000
+    const r3 = ((e.seed * 17 + i * 397) % 1000) / 1000
+    const bx = e.x - halfW * 1.06 + (halfW * 2.12) * ((i + (r1 - 0.5) * 1.6) / n)
+    const by = y + (r2 - 0.4) * 3.2          // some in front of the wall, some behind
+    const h = 2.6 + r3 * 3.6                  // just enough to break the line
+    const lean = (r1 - 0.5) * 2.6
+    ctx.strokeStyle = r3 > 0.58 ? 'rgba(134, 154, 96, 0.7)' : 'rgba(100, 120, 68, 0.72)'
+    ctx.lineWidth = 0.9 + r2 * 0.7
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(bx, by + 1.2)
+    ctx.quadraticCurveTo(bx + lean * 0.4, by - h * 0.55, bx + lean, by - h)
+    ctx.stroke()
+    if (r1 > 0.9) {
+      ctx.fillStyle = r2 > 0.5 ? 'rgba(230, 222, 198, 0.9)' : 'rgba(216, 190, 104, 0.9)'
+      ctx.beginPath(); ctx.arc(bx + lean, by - h, 1.1, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+  // fuller tufts at the two corners, where growth actually gathers against a wall
+  for (const side of [-1, 1]) {
+    const r = ((e.seed * 53 + (side + 2) * 191) % 1000) / 1000
+    const bx = e.x + side * halfW * (0.94 + r * 0.1)
+    ctx.strokeStyle = 'rgba(110, 132, 74, 0.75)'
+    ctx.lineWidth = 1.1
+    ctx.beginPath()
+    for (let k = -1; k <= 1; k++) {
+      ctx.moveTo(bx + k * 1.5, y + 1.6)
+      ctx.quadraticCurveTo(bx + k * 1.9, y - 3, bx + k * 2.4 + side * 0.8, y - 5.5 - r * 2.4)
+    }
+    ctx.stroke()
+  }
+}
+
 // A wall block standing on the ground: the face we look at, plus a shaded
 // return sliding off to the right, away from the sun.
 export function facade(ctx: CanvasRenderingContext2D, x: number, y: number,
