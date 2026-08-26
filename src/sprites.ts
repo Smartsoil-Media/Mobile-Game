@@ -105,7 +105,7 @@ function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 // shadow straight out of the front of a building, which reads as a puddle under
 // it rather than something the building is casting.
 export const SUN_X = 0.44 // how far a shadow reaches east, per unit of height
-export const SUN_Y = 0.10 // ...and how little it drifts toward the viewer
+export const SUN_Y = 0.13 // ...and how little it drifts toward the viewer
 
 // Buildings draw their shadow and worn earth in the ground pass, where those
 // things actually lie flat. While one is being painted this is switched off so
@@ -312,7 +312,7 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   // between the building's base and where that base would land if you slid it
   // east. Sweeping it forward instead — which is what a quad hung off the front
   // edge does — puts the shadow in front of the door, where no shadow belongs.
-  const sx = tall * SUN_X * 1.75, sy = tall * SUN_Y * 1.75
+  const sx = tall * SUN_X * 1.95, sy = tall * SUN_Y * 1.95
   const f = foot * 0.72
   const quad = (ex: number, ey: number, spread: number): void => {
     const g = f * (1 + spread * 0.08)
@@ -327,18 +327,18 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
     ctx.closePath()
     ctx.fill()
   }
-  soft(Math.max(2.6, tall * 0.13))
-  ctx.fillStyle = 'rgba(38, 46, 32, 0.30)'
+  soft(Math.max(1.5, tall * 0.05))
+  ctx.fillStyle = 'rgba(38, 46, 32, 0.26)'
   quad(sx * 1.12, sy * 1.12, 1)
-  soft(Math.max(1.2, tall * 0.05))
-  ctx.fillStyle = 'rgba(34, 42, 28, 0.40)'
+  soft(Math.max(0.6, tall * 0.018))
+  ctx.fillStyle = 'rgba(34, 42, 28, 0.42)'
   quad(sx * 0.62, sy * 0.62, 0)
 
   // The contact patch. Laid out round because ground space squashes it by TILT
   // anyway, and tight and dark, because something touching the ground is
   // darkest exactly where it touches.
-  soft(Math.max(1.1, foot * 0.045))
-  ctx.fillStyle = 'rgba(30, 38, 26, 0.42)'
+  soft(Math.max(1.0, foot * 0.04))
+  ctx.fillStyle = 'rgba(30, 38, 26, 0.38)'
   ctx.beginPath()
   ctx.ellipse(x + f * 0.08, y, f * 1.02, f * 0.88, 0, 0, Math.PI * 2)
   ctx.fill()
