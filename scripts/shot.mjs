@@ -183,9 +183,14 @@ await page.waitForTimeout(200)
 const placeTap = await page.evaluate(() => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
-  g.camera.x = tc.x; g.camera.y = tc.y
+  // The town hall and the barracks are both 12 tiles across, so the build spot
+  // needs real daylight from it — further than a phone screen is wide at this
+  // zoom. Point the camera at the spot and tap the middle instead of reaching
+  // for it, which keeps this independent of viewport and zoom. Due west: this
+  // town hall sits near the map's left edge, so due south runs out of world.
+  g.camera.x = tc.x - 200; g.camera.y = tc.y
   const c = document.getElementById('game').getBoundingClientRect()
-  return { x: c.width / 2 - 150 * g.camera.zoom, y: c.height / 2 + 40 * g.camera.zoom }
+  return { x: c.width / 2, y: c.height / 2 }
 })
 await page.tap('#game', { position: placeTap })
 await page.waitForTimeout(200)
@@ -402,7 +407,13 @@ if (darkLocks.locked.includes('build-barracks')) throw new Error('barracks shoul
 await page3.evaluate(() => {
   window.__findSpot = (foot, ax, ay) => {
     const g = window.__game.state
-    for (let ring = 90; ring < 420; ring += 30) {
+    // The clearance a caller passes is only a floor. If a building is actually
+    // in hand, its own footprint wins — otherwise every one of these call sites
+    // silently encodes the size buildings happened to be the day it was written,
+    // and they all rot together the moment a footprint changes.
+    const B = window.__game.BUILDINGS
+    if (g.placing && B && B[g.placing]) foot = Math.max(foot, B[g.placing].foot + 8)
+    for (let ring = 90; ring < 700; ring += 30) {
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 10) {
         const s = {
           x: Math.round((ax + Math.cos(a) * ring) / 16) * 16,
@@ -439,6 +450,8 @@ await page3.waitForTimeout(250)
 const lmPlacing = await page3.evaluate(() => {
   const g = window.__game.state
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
+  // the clearance to look for is the landmark's own half-footprint, not the
+  // 34 it wanted back when landmarks were four tiles across
   const spot = window.__findSpot(34, tc.x, tc.y)
   if (spot) g.placePos = spot
   return { placing: g.placing, spot, food: g.res[0].food, wood: g.res[0].wood }
@@ -1519,7 +1532,9 @@ const faithSetup = await page3.evaluate(() => {
   const tc = g.ents.find(e => e.team === 0 && e.kind === 'towncenter')
   const relics = g.ents.filter(e => e.kind === 'relic')
   const reachable = relics.filter(r => !!window.__game.findPath(0, tc.x, tc.y, r.x, r.y)).length
-  const spot = window.__findSpot(34, tc.x, tc.y)
+  // the clearance to look for is the landmark's own half-footprint, not the
+  // 34 it wanted back when landmarks were four tiles across
+  const spot = window.__findSpot(72, tc.x, tc.y)
   const churchId = window.__game.spawn('church', 0, spot.x, spot.y)
   // room and board for the ordination: gold for the fee, a house for the cot
   g.res[0].gold = Math.max(g.res[0].gold, 200)
@@ -2821,7 +2836,8 @@ await page3.evaluate(() => {
   const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager')
   for (const v of vills) { v.state = 'idle'; v.targetId = undefined }
   window.__game.select(vills[0].id)
-  const spot = window.__findSpot(44, 700, 900) // archery range footprint
+  // asked before the range is in hand, so name the building explicitly
+  const spot = window.__findSpot(window.__game.BUILDINGS.archeryrange.foot + 8, 700, 900)
   g.camera.x = spot.x; g.camera.y = spot.y
   g.uiDirty = true
 })

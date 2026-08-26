@@ -202,33 +202,33 @@ export const UNITS: Record<string, {
 // in pixels — so every footprint edge lands on a grid line and buildings pack
 // against each other cleanly.
 export const BUILDINGS: Record<string, {
-  hp: number; r: number; tiles: number; foot: number; cost: Cost; time: number; pop: number; los: number
+  hp: number; r: number; tiles: number; foot: number; art?: number; cost: Cost; time: number; pop: number; los: number
   garrisonCap: number; age?: number; name: string
 }> = {
-  towncenter: { hp: 800, r: 52, tiles: 7, foot: 56, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
+  towncenter: { hp: 800, r: 59, tiles: 8, foot: 64, art: 56, cost: cost({ wood: 200, stone: 150 }), time: 45, pop: 6, los: 200, garrisonCap: 10, age: 2, name: 'Town Hall' },
   house: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 50 }), time: 12, pop: 5, los: 140, garrisonCap: 0, name: 'House' },
   farm: { hp: 120, r: 30, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 10, pop: 0, los: 140, garrisonCap: 0, name: 'Farm' },
-  barracks: { hp: 350, r: 40, tiles: 6, foot: 48, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
-  archeryrange: { hp: 300, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
-  stable: { hp: 350, r: 38, tiles: 6, foot: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
+  barracks: { hp: 350, r: 53, tiles: 8, foot: 64, art: 48, cost: cost({ wood: 150 }), time: 20, pop: 0, los: 140, garrisonCap: 0, name: 'Barracks' },
+  archeryrange: { hp: 300, r: 51, tiles: 8, foot: 64, art: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Archery Range' },
+  stable: { hp: 350, r: 51, tiles: 8, foot: 64, art: 48, cost: cost({ wood: 175 }), time: 20, pop: 0, los: 140, garrisonCap: 0, age: 2, name: 'Stable' },
   watchtower: { hp: 280, r: 22, tiles: 3, foot: 24, cost: cost({ wood: 150 }), time: 18, pop: 0, los: 260, garrisonCap: 5, age: 2, name: 'Watchtower' },
   lumbercamp: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Lumber Camp' },
   miningcamp: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 75 }), time: 13, pop: 0, los: 140, garrisonCap: 0, name: 'Mining Camp' },
   mill: { hp: 200, r: 26, tiles: 4, foot: 32, cost: cost({ wood: 60 }), time: 12, pop: 0, los: 140, garrisonCap: 0, name: 'Mill' },
-  church: { hp: 320, r: 30, tiles: 4, foot: 32, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
-  ministry: { hp: 350, r: 32, tiles: 5, foot: 40, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
-  siegeworkshop: { hp: 350, r: 40, tiles: 6, foot: 48, cost: cost({ wood: 200 }), time: 22, pop: 0, los: 140, garrisonCap: 0, age: 3, name: 'Siege Workshop' },
+  church: { hp: 320, r: 60, tiles: 8, foot: 64, art: 32, cost: cost({ wood: 150, gold: 50 }), time: 22, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Church' },
+  ministry: { hp: 350, r: 51, tiles: 8, foot: 64, art: 40, cost: cost({ wood: 175, gold: 75 }), time: 24, pop: 0, los: 160, garrisonCap: 0, age: 3, name: 'Ministry' },
+  siegeworkshop: { hp: 350, r: 53, tiles: 8, foot: 64, art: 48, cost: cost({ wood: 200 }), time: 22, pop: 0, los: 140, garrisonCap: 0, age: 3, name: 'Siege Workshop' },
   wall: { hp: 220, r: 8, tiles: 1, foot: 8, cost: cost({ wood: 3 }), time: 4, pop: 0, los: 60, garrisonCap: 0, name: 'Palisade Wall' },
   gate: { hp: 300, r: 15, tiles: 2, foot: 16, cost: cost({ wood: 20 }), time: 8, pop: 0, los: 80, garrisonCap: 0, name: 'Palisade Gate' },
   // Landmarks — building one IS the age-up; it dawns when the walls rise
-  abbeymill: { hp: 400, r: 30, tiles: 4, foot: 32, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
-  kingsbarracks: { hp: 500, r: 40, tiles: 6, foot: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
-  guildhall: { hp: 500, r: 34, tiles: 5, foot: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
-  whitekeep: { hp: 900, r: 30, tiles: 4, foot: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
-  chamberofcommerce: { hp: 400, r: 32, tiles: 5, foot: 40, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Chamber of Commerce' },
-  cavalryschool: { hp: 500, r: 40, tiles: 6, foot: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'School of Cavalry' },
-  royalvineyard: { hp: 500, r: 34, tiles: 5, foot: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Royal Vineyard' },
-  redpalace: { hp: 900, r: 30, tiles: 4, foot: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The Red Palace' },
+  abbeymill: { hp: 400, r: 60, tiles: 8, foot: 64, art: 32, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Abbey Mill' },
+  kingsbarracks: { hp: 500, r: 53, tiles: 8, foot: 64, art: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: "King's Barracks" },
+  guildhall: { hp: 500, r: 55, tiles: 8, foot: 64, art: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Guild Hall' },
+  whitekeep: { hp: 900, r: 60, tiles: 8, foot: 64, art: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The White Keep' },
+  chamberofcommerce: { hp: 400, r: 51, tiles: 8, foot: 64, art: 40, cost: cost({ food: 200, wood: 100 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'Chamber of Commerce' },
+  cavalryschool: { hp: 500, r: 53, tiles: 8, foot: 64, art: 48, cost: cost({ food: 150, wood: 150 }), time: 45, pop: 0, los: 160, garrisonCap: 0, name: 'School of Cavalry' },
+  royalvineyard: { hp: 500, r: 55, tiles: 8, foot: 64, art: 40, cost: cost({ food: 300, gold: 100 }), time: 55, pop: 0, los: 160, garrisonCap: 0, name: 'Royal Vineyard' },
+  redpalace: { hp: 900, r: 60, tiles: 8, foot: 64, art: 32, cost: cost({ food: 250, stone: 200 }), time: 60, pop: 0, los: 300, garrisonCap: 8, name: 'The Red Palace' },
 }
 
 // ---- landmarks: the age-up IS a building, eco path or military path ----

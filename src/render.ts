@@ -555,6 +555,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   for (const e of sorted) {
     ctx.save()
     upright(ctx, e.y)
+    // A building's art was drawn for one footprint; `art` records which. When
+    // the footprint changes the sprite scales about its ground point to match,
+    // rather than every building being redrawn by hand at a new size.
+    const bd = isBuilding(e) ? BUILDINGS[e.kind] : undefined
+    if (bd?.art && bd.art !== bd.foot) {
+      const k = bd.foot / bd.art
+      ctx.translate(e.x, e.y)
+      ctx.scale(k, k)
+      ctx.translate(-e.x, -e.y)
+    }
     switch (e.kind) {
       case 'tree': drawTree(ctx, e, time); break
       case 'deer': drawDeer(ctx, e, time); break

@@ -43,9 +43,12 @@ type AIPlaceable = 'house' | 'barracks' | 'farm' | 'mill' | 'stable' | 'archeryr
 function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   const b = BUILDINGS[kind]
   if (!canAfford(g, 1, b.cost)) return null
-  for (let tries = 0; tries < 40; tries++) {
+  // The ring to search has to widen with the thing being placed: a hall twelve
+  // tiles across needs far more daylight than a house does, and hunting for it
+  // in the same narrow band the small buildings use simply fails.
+  for (let tries = 0; tries < 90; tries++) {
     const a = Math.random() * Math.PI * 2
-    const d = tc.r + b.foot + 30 + Math.random() * 130
+    const d = tc.r + b.foot + 30 + Math.random() * (130 + b.foot * 2.4)
     // the rival village builds on the same lattice, so its streets line up too
     const { x, y } = snapTiles(tc.x + Math.cos(a) * d, tc.y + Math.sin(a) * d, b.tiles)
     if (!canPlaceAt(g, kind, x, y)) continue

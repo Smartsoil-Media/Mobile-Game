@@ -1,5 +1,5 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
-import { Game, Kind, Buildable } from './data'
+import { Game, Kind, Buildable, BUILDINGS } from './data'
 import { createGame, spawn, canPlaceAt, placementCells, gateSnap, wallsUnderGate } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
@@ -85,6 +85,7 @@ requestAnimationFrame(frame)
   findPath(team: number, x0: number, y0: number, x1: number, y1: number) { return findPath(g, team, x0, y0, x1, y1) },
   inWater(x: number, y: number) { return inWater(g, x, y) },
   canPlaceAt(kind: Kind, x: number, y: number) { return canPlaceAt(g, kind, x, y) },
+  BUILDINGS, // read-only stats, so a test can ask how big a thing actually is
   snapFor(kind: Buildable, x: number, y: number) { return snapPlace(x, y, kind) },
   gateSnap(x: number, y: number) { return gateSnap(g, x, y) },
   wallsUnderGate(x: number, y: number) { return wallsUnderGate(g, x, y) },
