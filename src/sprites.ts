@@ -285,22 +285,33 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
     ctx.fill()
   }
 
-  // The shadow the building throws: a sheared footprint lying along the ground
-  // away from the sun, not a blob parked underneath it.
+  // The shadow the building throws. It has to START at the foot of the wall —
+  // begun even a few pixels below the base it reads as a separate dark shape on
+  // the grass and the building looks like it is hovering over it.
   const sx = tall * SUN_X * 1.9, sy = tall * SUN_Y * 1.9
   const f = foot * 0.72
   ctx.fillStyle = 'rgba(38, 46, 32, 0.30)'
   ctx.beginPath()
-  ctx.moveTo(x - f * 0.9, y + f * 0.42)
-  ctx.lineTo(x + f, y + f * 0.42)
-  ctx.lineTo(x + f + sx, y + f * 0.42 + sy)
-  ctx.lineTo(x - f * 0.5 + sx, y + f * 0.42 + sy)
+  ctx.moveTo(x - f * 0.92, y - f * 0.10)
+  ctx.lineTo(x + f * 0.92, y - f * 0.10)
+  ctx.lineTo(x + f * 0.92 + sx, y + sy)
+  ctx.lineTo(x - f * 0.55 + sx, y + sy)
   ctx.closePath()
   ctx.fill()
-  // a tighter core where the wall meets the ground
-  ctx.fillStyle = 'rgba(34, 42, 28, 0.22)'
+  // The contact patch right under the wall, which is what actually plants the
+  // building: something touching the ground is darkest where it touches.
+  //
+  // This is drawn in ground space, which already squashes everything by TILT,
+  // so it must be laid out ROUND here. Flattening it by hand as well squashed
+  // it twice and left a pool about a third of the size the building needed —
+  // which is exactly what made them look like they were hovering.
+  ctx.fillStyle = 'rgba(30, 38, 26, 0.30)'
   ctx.beginPath()
-  ctx.ellipse(x + f * 0.12, y + f * 0.3, f * 0.92, f * 0.34, 0, 0, Math.PI * 2)
+  ctx.ellipse(x + f * 0.08, y, f * 1.02, f * 0.88, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(26, 33, 22, 0.22)'
+  ctx.beginPath()
+  ctx.ellipse(x + f * 0.04, y, f * 0.72, f * 0.6, 0, 0, Math.PI * 2)
   ctx.fill()
 }
 
@@ -385,8 +396,11 @@ export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
   // the shaded hip on the sun-away end, tucked back along the wall's return
   ctx.fillStyle = shade
   ctx.beginPath()
+  // It has to land on the wall's own back corner — facade() carries its return
+  // out to (w/2 + d) and up by d/2, so anything short of that leaves the top of
+  // the back wall poking out above the roofline.
   ctx.moveTo(x + ow / 2, yEaves)
-  ctx.lineTo(x + ow / 2 + d * 0.55, yEaves - d * 0.3)
+  ctx.lineTo(x + w / 2 + d, yEaves - d * 0.5)
   ctx.lineTo(x + rhw, ridge)
   ctx.closePath(); ctx.fill()
   // the front slope: wide at the eaves, drawn in to the ridge
