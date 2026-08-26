@@ -273,6 +273,17 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   wobbleRing(ctx, x - foot * 0.14, y - foot * 0.04, foot * 0.55, seed * 2.3 + 1, 0.68); ctx.fill()
   ctx.fillStyle = 'rgba(136, 114, 78, 0.16)'
   wobbleRing(ctx, x + foot * 0.2, y + foot * 0.24, foot * 0.36, seed * 3.1 + 2, 0.66); ctx.fill()
+  // The threshold: bare, tramped ground where the door is and a short path
+  // trailing off it. This is what the fringe above thins out over, so the worn
+  // earth and the missing grass are describing the same traffic.
+  ctx.fillStyle = 'rgba(122, 100, 68, 0.30)'
+  ctx.beginPath()
+  ctx.ellipse(x, y + foot * 0.30, foot * 0.40, foot * 0.30, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(112, 92, 62, 0.18)'
+  ctx.beginPath()
+  ctx.ellipse(x + foot * 0.06, y + foot * 0.66, foot * 0.28, foot * 0.34, 0.15, 0, Math.PI * 2)
+  ctx.fill()
   // loose scuffs that break the outline, so the worn ground doesn't stop on a
   // clean edge the way a decal does
   for (let i = 0; i < 6; i++) {
@@ -325,15 +336,22 @@ export function baseSkirt(ctx: CanvasRenderingContext2D, e: Ent, halfW: number):
   const y = e.y
   // Dense and short. Sparse tall blades read as chives standing about in the
   // field; what tucks a wall in is a close fringe that actually touches it.
-  const n = Math.max(14, Math.round(halfW / 1.5))
+  const n = Math.max(18, Math.round(halfW / 1.15))
   for (let i = 0; i < n; i++) {
     // seeded, so a building's own fringe never shimmers between frames
     const r1 = ((e.seed * 37 + i * 101) % 1000) / 1000
     const r2 = ((e.seed * 61 + i * 233) % 1000) / 1000
     const r3 = ((e.seed * 17 + i * 397) % 1000) / 1000
     const bx = e.x - halfW * 1.06 + (halfW * 2.12) * ((i + (r1 - 0.5) * 1.6) / n)
+    // Grass doesn't grow where feet fall. The doorway is in the middle of the
+    // front wall, so wear is heaviest there and eases off toward the corners,
+    // where nothing walks and growth actually gathers. Same curve the trodden
+    // earth uses underneath, so the bare ground and the bare fringe agree.
+    const t = Math.min(1, Math.abs(bx - e.x) / halfW)
+    const lush = Math.max(0, Math.min(1, (t - 0.09) * 1.9))
+    if (lush < 0.18 || r3 * 0.7 > lush) continue // trodden bare at the threshold
     const by = y + (r2 - 0.4) * 3.2          // some in front of the wall, some behind
-    const h = 2.6 + r3 * 3.6                  // just enough to break the line
+    const h = (2.2 + r3 * 3.4) * (0.55 + lush * 0.75)
     const lean = (r1 - 0.5) * 2.6
     ctx.strokeStyle = r3 > 0.58 ? 'rgba(134, 154, 96, 0.7)' : 'rgba(100, 120, 68, 0.72)'
     ctx.lineWidth = 0.9 + r2 * 0.7
