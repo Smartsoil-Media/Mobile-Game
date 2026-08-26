@@ -94,22 +94,33 @@ chase at its edge.
   command dock stays clean for giving orders
 - **Banners** (multiple armies): every soldier and siege engine musters
   under **the King's Army** by default — the shield *is* that banner, so
-  if you never split your host, nothing changes. Select any soldiers and
-  the dock offers *ride under a banner* or *raise a new one* (the Rose,
-  the Star, the Oak); the banners then fly as pennants in the **row at
-  the top right** — tap one to switch companies. The bucklers below
-  show **that banner's roster**, and the **shield musters all of it**,
-  wearing that banner's colours so the whole right edge belongs to the
-  company you're looking at. A **military hall can send its recruits to a
-  banner** — tap the pennant on its dock — and it then *flies that
-  banner's colours on its roof*, so you can read your whole muster off
-  the rooftops. One banner per unit; an emptied banner keeps flying,
-  pale, because its halls still feed it. **Monks are the exception**:
-  they swear to no banner unless invited, can be released again, and a
-  monk carrying a relic ignores the muster entirely — the reliquary
-  matters more than the parade
+  if you never split your host, nothing changes. A soldier's banner is
+  settled where the soldier is *raised*: a **military hall sends its
+  recruits to a banner** — tap the pennant on its dock, and *raise a new
+  one* there (the Rose, the Star, the Oak) if you want a fresh company.
+  The hall then *flies that banner's colours on its roof*, so you can
+  read your whole muster off the rooftops. The banners fly as pennants in
+  the **row at the top right** — tap one to switch companies. The
+  bucklers below show **that banner's roster**, and the **shield musters
+  all of it**, wearing that banner's colours so the whole right edge
+  belongs to the company you're looking at. One banner per unit; an
+  emptied banner keeps flying, pale, because its halls still feed it.
+  **Monks are the exception**: they are ordained at a church rather than
+  a military hall, so they swear to no banner at all — and a monk
+  carrying a relic ignores the muster entirely, the reliquary mattering
+  more than the parade
+- **Formation** (how a company marches): select soldiers and the dock
+  carries a single formation button — a **bunch** (a square block,
+  shoulder to shoulder) or a **line** (one rank drawn *across* the
+  direction of travel, folding into a second rank past twelve). The
+  button always shows the shape you'd be switching *to*, and switching
+  re-forms a company that is already on the march. Every move order then
+  hands out standing places rather than sending everyone at one point:
+  the company keeps its shape on the way over instead of scattering and
+  jostling. Each banner remembers its own formation, so the King's Army
+  can hold a line while the Rose stays bunched
 - **The build grid**: every building covers a whole number of **16px
-  tiles** — a house is 4×4, a barracks 6×6, the Town Hall 7×7, a fence
+  tiles** — a house is 4×4, a barracks 8×8, the Town Hall 8×8, a fence
   post 1×1 — and pick one up and the meadow rules itself into that
   lattice, with a heavier line every fourth. The ghost shows the true
   footprint, tile by tile, and **snaps so its edges land on the grid

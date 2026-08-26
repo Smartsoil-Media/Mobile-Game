@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue} from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING} from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -59,17 +59,92 @@ export function commandGather(g: Game, villagers: Ent[], res: Ent): void {
   }
 }
 
+// Which formation a company marches in. Soldiers carry their banner with them,
+// so the order follows whichever banner most of the selection rides under, and
+// falls back to the one whose roster is on screen.
+export function formationOf(g: Game, units: Ent[]): Formation {
+  const tally = new Map<number, number>()
+  for (const u of units) {
+    if (u.banner === undefined) continue
+    tally.set(u.banner, (tally.get(u.banner) ?? 0) + 1)
+  }
+  let best = g.activeBanner, most = 0
+  for (const [b, n] of tally) if (n > most) { most = n; best = b }
+  return g.formation[best] ?? 'bunch'
+}
+
+// Where each soldier should stand once they arrive. Everything is laid out
+// facing the way the company is marching, so a line is drawn ACROSS the advance
+// rather than along it.
+const LINE_MAX = 12 // a rank wider than this is more of a wall than a company
+
+function formationSlots(n: number, x: number, y: number, ux: number, uy: number,
+                        kind: Formation): { x: number; y: number }[] {
+  const S = FORMATION_SPACING
+  // px,py is "across the advance"; ux,uy is "along it"
+  const px = -uy, py = ux
+  const out: { x: number; y: number }[] = []
+  if (kind === 'line') {
+    // one rank across, folding into a second once it would be absurdly wide
+    const perRank = Math.min(n, LINE_MAX)
+    const ranks = Math.ceil(n / perRank)
+    for (let i = 0; i < n; i++) {
+      const r = Math.floor(i / perRank)
+      const inRank = Math.min(perRank, n - r * perRank)
+      const k = i % perRank - (inRank - 1) / 2
+      out.push({ x: x + px * k * S - ux * r * S, y: y + py * k * S - uy * r * S })
+    }
+    return out
+  }
+  // a bunch: as square a block as the numbers allow, centred on the target
+  const cols = Math.max(1, Math.round(Math.sqrt(n)))
+  const rows = Math.ceil(n / cols)
+  for (let i = 0; i < n; i++) {
+    const c = i % cols, r = Math.floor(i / cols)
+    const inRow = Math.min(cols, n - r * cols)
+    const kx = c - (inRow - 1) / 2
+    const ky = r - (rows - 1) / 2
+    out.push({ x: x + px * kx * S - ux * ky * S, y: y + py * kx * S - uy * ky * S })
+  }
+  return out
+}
+
 export function commandMove(g: Game, units: Ent[], x: number, y: number): void {
   const n = units.length
-  units.forEach((u, i) => {
-    const a = (i / Math.max(1, n)) * Math.PI * 2
-    const spread = n > 1 ? 16 + 6 * Math.sqrt(n) : 0
+  if (n === 1) {
+    const u = units[0]
     u.state = isUnit(u) ? 'move' : u.state
-    u.tx = x + Math.cos(a) * spread * (i > 0 ? 1 : 0)
-    u.ty = y + Math.sin(a) * spread * (i > 0 ? 1 : 0)
+    u.tx = x; u.ty = y
     u.targetId = undefined
     u.resume = null
-  })
+    return
+  }
+  // face the way the company is actually going, from where it stands now
+  let cx = 0, cy = 0
+  for (const u of units) { cx += u.x; cy += u.y }
+  cx /= n; cy /= n
+  const dx = x - cx, dy = y - cy
+  const d = Math.hypot(dx, dy) || 1
+  const ux = dx / d, uy = dy / d
+
+  const slots = formationSlots(n, x, y, ux, uy, formationOf(g, units))
+  // Hand out the slots nearest-first so the company keeps its shape on the way
+  // over instead of crossing through itself. Numbers here are tiny, so the
+  // obvious greedy pass is plenty.
+  const left = units.slice()
+  for (const slot of slots) {
+    let bi = 0, bd = Infinity
+    for (let i = 0; i < left.length; i++) {
+      const dd = (left[i].x - slot.x) ** 2 + (left[i].y - slot.y) ** 2
+      if (dd < bd) { bd = dd; bi = i }
+    }
+    const u = left.splice(bi, 1)[0]
+    u.state = isUnit(u) ? 'move' : u.state
+    u.tx = slot.x
+    u.ty = slot.y
+    u.targetId = undefined
+    u.resume = null
+  }
 }
 
 export function commandAttack(g: Game, units: Ent[], target: Ent): void {
@@ -455,7 +530,7 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
 }
 
 // swear a selection to a banner (or, for monks alone, release them from one)
-export function assignBanner(g: Game, units: Ent[], banner: number | null): void {
+function assignBanner(g: Game, units: Ent[], banner: number | null): void {
   let n = 0
   for (const u of units) {
     if (!canBanner(u) || u.team !== 0) continue

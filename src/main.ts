@@ -1,10 +1,10 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
-import { Game, Kind, Buildable, BUILDINGS } from './data'
+import { Game, Kind, Buildable, Ent, BUILDINGS } from './data'
 import { createGame, spawn, canPlaceAt, placementCells, gateSnap, wallsUnderGate } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
 import { render } from './render'
-import { attachInput, clampCamera, selectArmy, snapPlace } from './input'
+import { attachInput, clampCamera, selectArmy, snapPlace, commandMove } from './input'
 import { initUI, syncUI } from './ui'
 import { unlockAudio, listenFrom, drainSfx, sfx, setMuted, setVolume, audioReady, muted, heardSfx, clearHeard, sfxProbe } from './audio'
 
@@ -86,6 +86,7 @@ requestAnimationFrame(frame)
   inWater(x: number, y: number) { return inWater(g, x, y) },
   canPlaceAt(kind: Kind, x: number, y: number) { return canPlaceAt(g, kind, x, y) },
   BUILDINGS, // read-only stats, so a test can ask how big a thing actually is
+  commandMove(units: Ent[], x: number, y: number) { commandMove(g, units, x, y) },
   snapFor(kind: Buildable, x: number, y: number) { return snapPlace(x, y, kind) },
   gateSnap(x: number, y: number) { return gateSnap(g, x, y) },
   wallsUnderGate(x: number, y: number) { return wallsUnderGate(g, x, y) },

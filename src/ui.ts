@@ -5,10 +5,9 @@ import {
   CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
   BANNERS, BANNER_MAX, KINGS_BANNER,
-  isUnit, isBuilding, isSiege, canBanner, mustBanner,
-} from './data'
+  isUnit, isBuilding, isSiege, canBanner, mustBanner, Formation} from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex } from './world'
-import { selectArmy, selectBanner, assignBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera } from './input'
+import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove} from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
 const ICON = {
@@ -693,29 +692,50 @@ function syncArmyPanel(g: Game): void {
   })
 }
 
-// ---- banners in the dock ----
-// With soldiers selected the dock is otherwise empty, so the join buttons live
-// there directly: no long-press, no hidden gesture, right where every other
-// command in the game appears.
-function bannerDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
+// ---- formation in the dock ----
+// With soldiers selected the dock is otherwise empty, so how the company stands
+// on the march lives there. Which banner a soldier rides under is set where the
+// soldier is RAISED — at the military hall — rather than being fiddled with
+// unit by unit in the field.
+function formationIcon(kind: Formation, size = 38): string {
+  const dot = (cx: number, cy: number): string =>
+    `<circle cx="${cx}" cy="${cy}" r="2.6" fill="currentColor"/>`
+  const pips = kind === 'line'
+    ? [[6, 19], [13, 19], [20, 19], [27, 19], [34, 19]]
+    : [[13, 12], [20, 12], [27, 12], [13, 19], [20, 19], [27, 19], [16.5, 26], [23.5, 26]]
+  return `<svg viewBox="0 0 40 38" width="${size}" height="${size}" aria-hidden="true">` +
+    pips.map(([cx, cy]) => dot(cx, cy)).join('') + '</svg>'
+}
+
+function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
   const troop = sel.filter(e => canBanner(e) && e.team === 0)
-  for (let i = 0; i < g.banners; i++) {
-    if (troop.length && troop.every(u => u.banner === i)) continue // already theirs
+  if (!troop.length) return
+  const cur = formationOf(g, troop) // the shape a move order would use right now
+  let owner = g.activeBanner
+  const tally = new Map<number, number>()
+  for (const u of troop) if (u.banner !== undefined) tally.set(u.banner, (tally.get(u.banner) ?? 0) + 1)
+  let most = 0
+  for (const [b2, n] of tally) if (n > most) { most = n; owner = b2 }
+  for (const kind of ['bunch', 'line'] as Formation[]) {
+    if (cur === kind) continue // already how they stand
     dock.appendChild(iconButton(
-      { cmd: `banner-join-${i}`, label: `Ride under ${BANNERS[i].name}`, icon: bannerIcon(i, 38) },
-      () => assignBanner(g, troop, i)))
-  }
-  if (g.banners < BANNER_MAX) {
-    dock.appendChild(iconButton(
-      { cmd: 'banner-raise', label: 'Raise a new banner and give it these', icon: bannerIcon(g.banners, 38) },
-      () => raiseBanner(g, troop)))
-    dock.querySelector('[data-cmd="banner-raise"]')!.insertAdjacentHTML('beforeend', '<i>new</i>')
-  }
-  // only a monk may stand outside a banner — a loose soldier would just get lost
-  if (troop.some(u => !mustBanner(u) && u.banner !== undefined)) {
-    dock.appendChild(iconButton(
-      { cmd: 'banner-leave', label: 'Release the monks from their banner', icon: ICON.deselect },
-      () => assignBanner(g, troop.filter(u => !mustBanner(u)), null)))
+      { cmd: `formation-${kind}`,
+        label: kind === 'line' ? 'Form a line across the advance' : 'Bunch up shoulder to shoulder',
+        icon: formationIcon(kind) },
+      () => {
+        g.formation[owner] = kind
+        toast(g, kind === 'line'
+          ? `${BANNERS[owner].name} forms a line.`
+          : `${BANNERS[owner].name} bunches up.`)
+        // re-issue the order in the new shape so it takes effect on the spot
+        const moving = troop.filter(u => u.state === 'move' && u.tx !== undefined)
+        if (moving.length > 1) {
+          let tx = 0, ty = 0
+          for (const u of moving) { tx += u.tx!; ty += u.ty! }
+          commandMove(g, moving, tx / moving.length, ty / moving.length)
+        }
+        g.uiDirty = true
+      }))
   }
 }
 
@@ -1195,7 +1215,7 @@ export function syncUI(g: Game): void {
       }
     }
   } else if (sel.some(e => canBanner(e) && e.team === 0)) {
-    bannerDock(g, dock, sel)
+    formationDock(g, dock, sel)
   }
 
   el('dock').classList.toggle('hidden', dock.children.length === 0)

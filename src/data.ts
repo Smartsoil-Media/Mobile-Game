@@ -32,6 +32,11 @@ export const CIVS: Record<CivId, { name: string; blurb: string }> = {
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
+// How a company arranges itself on the march. A bunch is a block, shoulder to
+// shoulder; a line is a rank drawn across the direction of travel.
+export type Formation = 'bunch' | 'line'
+export const FORMATION_SPACING = 26 // shoulder to shoulder: a shade over two unit widths
+
 export interface Ent {
   id: number
   kind: Kind
@@ -156,6 +161,7 @@ export interface Game {
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
   banners: number // how many banners are raised (1 = just the King's Army)
+  formation: Formation[] // per banner: how its companies stand when they march
   activeBanner: number // whose roster the bucklers are showing
   infoMode: boolean // the ? button: taps read a thing out instead of commanding it
   infoId: number | null // what the info card is currently reading out

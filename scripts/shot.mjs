@@ -1198,9 +1198,21 @@ await page3.waitForTimeout(250)
 const unitDock = await page3.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
 console.log('soldier dock:', unitDock)
-if (!unitDock.includes('banner-raise')) throw new Error('soldiers should be offered a new banner in the dock')
-if (unitDock.includes('banner-join-0')) throw new Error('no need to offer the banner they already ride under')
-await page3.tap('[data-cmd="banner-raise"]')
+// The dock offers FORMATION now, not banners: which banner a soldier rides
+// under is settled at the hall that raised him, not fiddled with in the field.
+if (unitDock.some(c => c.startsWith('banner-')))
+  throw new Error('the unit dock should not hand out banners any more: ' + unitDock.join(','))
+if (!unitDock.includes('formation-line'))
+  throw new Error('soldiers should be offered a formation, got ' + unitDock.join(','))
+// split the knights onto their own banner directly — the field UI for it is gone
+await page3.evaluate(({ knights }) => {
+  const g = window.__game.state
+  g.banners = 2
+  g.activeBanner = 1
+  for (const id of knights) g.byId.get(id).banner = 1
+  g.selection = knights.slice()
+  g.uiDirty = true
+}, bannerStage)
 await page3.waitForTimeout(300)
 const raised = await page3.evaluate(({ knights }) => {
   const g = window.__game.state
@@ -1241,34 +1253,48 @@ console.log('after split:', { kings: afterSplit, rose: roseMuster })
 if (afterSplit !== 3) throw new Error(`the King\u2019s Army should be down to 3, got ${afterSplit}`)
 if (roseMuster.sel !== 2 || roseMuster.active !== 1) throw new Error('the new banner did not muster its own')
 if (roseMuster.chips.join(',') !== 'army-knight') throw new Error('the bucklers should show only the active banner: ' + roseMuster.chips.join(','))
-// a monk may be invited to a banner, and released again — soldiers may not
-await page3.evaluate(({ monkId }) => {
+// formation: a company can be told to bunch up or draw out into a line, and the
+// order takes the shape it was given rather than scattering everyone at a point
+await page3.evaluate(({ spears }) => {
   const g = window.__game.state
-  g.selection = [monkId]
+  g.selection = spears.slice()
   g.uiDirty = true
 }, bannerStage)
 await page3.waitForTimeout(250)
-await page3.tap('[data-cmd="banner-join-1"]')
-await page3.waitForTimeout(250)
-const monkJoined = await page3.evaluate(({ monkId }) => window.__game.state.byId.get(monkId).banner, bannerStage)
-if (monkJoined !== 1) throw new Error('the monk would not join the banner')
-const monkDock = await page3.evaluate(() =>
+const formDock = await page3.evaluate(() =>
   [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
-if (!monkDock.includes('banner-leave')) throw new Error('a monk should be releasable from his banner')
-await page3.tap('[data-cmd="banner-leave"]')
+console.log('formation dock:', formDock)
+if (!formDock.includes('formation-line')) throw new Error('no line formation offered: ' + formDock.join(','))
+if (formDock.includes('formation-bunch')) throw new Error('no need to offer the formation they already hold')
+await page3.tap('[data-cmd="formation-line"]')
 await page3.waitForTimeout(250)
-const monkFree = await page3.evaluate(({ monkId, spears }) => {
+const lined = await page3.evaluate(({ spears }) => {
+  const g = window.__game.state
+  const us = spears.map(id => g.byId.get(id)).filter(Boolean)
+  // march them due east and read back where each was told to stand
+  us.forEach(u => { u.x = 900; u.y = 700 })
+  window.__game.commandMove(us, 1200, 700)
+  return {
+    formation: g.formation[us[0].banner ?? 0],
+    spread: us.map(u => ({ x: Math.round(u.tx), y: Math.round(u.ty) })),
+  }
+}, bannerStage)
+console.log('formation line:', lined)
+if (lined.formation !== 'line') throw new Error('the company did not take the line')
+{
+  const xs = lined.spread.map(p => p.x), ys = lined.spread.map(p => p.y)
+  const spanX = Math.max(...xs) - Math.min(...xs)
+  const spanY = Math.max(...ys) - Math.min(...ys)
+  // marching east, a line is drawn ACROSS the advance: it should be tall, not wide
+  if (spanY <= spanX) throw new Error(`a line marching east should spread north-south, got ${spanX}x${spanY}`)
+  if (spanY < 10) throw new Error('the line has no width at all: ' + JSON.stringify(lined.spread))
+}
+await page3.evaluate(({ spears }) => {
   const g = window.__game.state
   g.selection = [spears[0]]
   g.uiDirty = true
-  return g.byId.get(monkId).banner ?? null
 }, bannerStage)
 await page3.waitForTimeout(250)
-const soldierDock = await page3.evaluate(() =>
-  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
-console.log('monk released:', { monkBanner: monkFree, soldierDock })
-if (monkFree !== null) throw new Error('the monk was not released')
-if (soldierDock.includes('banner-leave')) throw new Error('a soldier must always ride under some banner')
 // a hall routes its recruits: it flies the banner, and the next man out joins it
 const raxBanner = await page3.evaluate(() => {
   const g = window.__game.state
@@ -1699,26 +1725,42 @@ await waitSim(page3, 1)
 const wallSetup = await page3.evaluate(() => {
   const g = window.__game.state
   g.res[0].wood = 100
+  // Hunt for a clear eight-post run rather than naming one. Earlier tests leave
+  // buildings scattered over this corner of the map, and a hall's footprint is
+  // wide enough to swallow a line picked by hand.
+  let run = null
+  for (let y = 480; y <= 940 && !run; y += 16) {
+    for (let x0 = 1080; x0 <= 1520 && !run; x0 += 16) {
+      let clear = true
+      for (let i = 0; i < 8 && clear; i++) clear = window.__game.canPlaceAt('wall', x0 + i * 16, y)
+      if (clear) run = { x0, y }
+    }
+  }
   const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager')[0]
-  v.x = 1320; v.y = 700; v.state = 'idle'; v.targetId = undefined
+  // stand the villager well clear of the run so she is not her own obstacle
+  v.x = run.x0 + 56; v.y = run.y + 90; v.state = 'idle'; v.targetId = undefined
   window.__game.select(v.id)
-  return { wood: g.res[0].wood, villId: v.id }
+  const still = []
+  for (let i = 0; i < 8; i++) still.push(window.__game.canPlaceAt('wall', run.x0 + i * 16, run.y))
+  return { wood: g.res[0].wood, villId: v.id, run, clear: still.every(Boolean) }
 })
+if (!wallSetup.run) throw new Error('no clear ground left for a fence')
+if (!wallSetup.clear) throw new Error('the villager stood in her own fence line')
 await page3.waitForTimeout(250)
 await openCat(page3, 'military')
 await page3.tap('[data-cmd="build-wall"]')
 await page3.waitForTimeout(200)
-const wallPlacing = await page3.evaluate(() => {
+const wallPlacing = await page3.evaluate(({ run }) => {
   const g = window.__game.state
   const ok = g.placing === 'wall' && !!g.placePos && !!g.placeEnd
-  g.placePos = { x: 1264, y: 640 }
-  g.placeEnd = { x: 1376, y: 640 }
+  g.placePos = { x: run.x0, y: run.y }
+  g.placeEnd = { x: run.x0 + 112, y: run.y }
   // Setting the line by hand skips whatever would normally have dirtied the UI,
   // so the badge below only refreshed if something else happened to mark it
   // within the wait. That raced, and lost about one run in three.
   g.uiDirty = true
-  return { ok }
-})
+  return { ok, at: run }
+}, wallSetup)
 console.log('wall placing:', wallPlacing)
 if (!wallPlacing.ok) throw new Error('wall placement did not open with a line')
 await page3.waitForTimeout(300) // the ✓ badge updates live as the line drags

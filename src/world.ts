@@ -3,7 +3,7 @@ import {
   Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H, KINGS_BANNER,
-  dist, isUnit, isBuilding, isResource, mustBanner,
+  dist, isUnit, isBuilding, isResource, mustBanner, BANNER_MAX, Formation,
 } from './data'
 import { inWater } from './nav'
 
@@ -108,7 +108,9 @@ export function createGame(opts?: { seed?: number }): Game {
     nav: null, navDirty: true, navWater: null,
     mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
     streams: [], fords: [],
-    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1, activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true, sfxQueue: [],
+    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1,
+    formation: Array.from({ length: BANNER_MAX }, () => 'bunch' as Formation),
+    activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true, sfxQueue: [],
   }
 
   const rnd = mulberry(random ? ((opts!.seed! | 0) || 1) : 20260819)
