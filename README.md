@@ -297,9 +297,17 @@ files regenerate from source, and licensed samples don't belong in a public repo
 
 ### The twenty-one slots
 
-The bank is meant to end up as real foley — dry, close-mic'd, one hit per file,
-no reverb of its own (the mixer supplies distance). Sources are searched by
-physical description rather than by mood; abstract wording drifts badly.
+All twenty-one now ship as real licensed recordings — dry, close-mic'd, one hit
+per file, no reverb of their own (the mixer supplies distance). Sources are
+searched by physical description rather than by mood; abstract wording drifts
+badly. Because `audio-src/` is untracked, a fresh clone has only the encoded
+result in `src/sfx-data.ts`; re-running `npm run audio` without re-fetching the
+originals will fall back to the synthesised stand-ins for every slot.
+
+One thing to watch when picking a replacement: the bank encodes to 22.05kHz
+mono MP3 at 32 kbps, which lowpasses hard. A sample whose energy all sits above
+about 6kHz — a bright coin jangle, say — survives the encoder as near-silence
+and trips the playtest's sound check. Prefer sources with real low-mid body.
 
 | Slot | Wanted | Length |
 | --- | --- | --- |
