@@ -25,14 +25,17 @@ const HEADROOM_DB = -3.0 // MP3 decoding overshoots the encoded peak; leave it r
 
 const ff = (args) => execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', ...args])
 
-// Two passes: measure the true peak, then apply one flat gain. A compressor
-// would even out the bank but it also flattens the character out of a hit.
-function peakGain(file) {
+// Two passes: shape the audio first, THEN measure what actually came out and
+// apply one flat gain. Measuring the source instead is a trap — a wide stereo
+// recording loses up to 6 dB in the mono downmix, so it lands far quieter than
+// the target. A compressor would even the bank out but it also flattens the
+// character out of a hit, so a single gain it is.
+function peakOf(file) {
   const r = spawnSync(ffmpeg, ['-hide_banner', '-i', file, '-af', 'volumedetect', '-f', 'null', '-'],
     { encoding: 'utf8' })
   const m = /max_volume:\s*(-?[\d.]+) dB/.exec(r.stderr ?? '')
   if (!m) throw new Error(`could not measure the peak of ${file}`)
-  return HEADROOM_DB - parseFloat(m[1])
+  return parseFloat(m[1])
 }
 
 const tmp = mkdtempSync(join(tmpdir(), 'bw-sfx-'))
@@ -48,16 +51,19 @@ const rows = []
 let total = 0
 for (const { name, file, picked } of [...bySound.values()].sort((a, b) => a.name.localeCompare(b.name))) {
   const mp3 = join(tmp, `${name}.mp3`)
-  const gain = peakGain(file)
+  const flat = join(tmp, `${name}.flat.wav`)
   // Trim dead air off both ends — Splice one-shots often carry a lot of it.
   const chain = [
     'silenceremove=start_periods=1:start_threshold=-60dB:start_silence=0',
     'areverse',
     'silenceremove=start_periods=1:start_threshold=-60dB:start_silence=0.02',
     'areverse',
-    `volume=${gain.toFixed(2)}dB`,
   ].join(',')
-  ff(['-i', file, '-af', chain, '-ac', '1', '-ar', '22050',
+  // pass one: trim and fold to mono at the game's rate, and see where that lands
+  ff(['-i', file, '-af', chain, '-ac', '1', '-ar', '22050', flat])
+  const gain = HEADROOM_DB - peakOf(flat)
+  // pass two: one flat gain onto the shaped audio, then encode
+  ff(['-i', flat, '-af', `volume=${gain.toFixed(2)}dB`,
       '-c:a', 'libmp3lame', '-b:a', RICH.has(name) ? '48k' : '32k', mp3])
   const b64 = readFileSync(mp3).toString('base64')
   total += b64.length
