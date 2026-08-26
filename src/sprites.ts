@@ -242,7 +242,7 @@ export function groundDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   let hit = DECAL_CACHE.get(key)
   if (!hit) {
     if (DECAL_CACHE.size > 160) { paintDecal(ctx, e, foot, tall); return }
-    const pad = Math.ceil(foot * 1.7 + tall * 1.4 + 12)
+    const pad = Math.ceil(foot * 1.9 + tall * 1.5 + 24) // + room for the blur to spread
     const c = document.createElement('canvas')
     c.width = pad * 2
     c.height = pad * 2
@@ -260,32 +260,35 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
                     tall: number): void {
   const seed = (e.seed % 1000) * 0.017
   const x = e.x, y = e.y
+  // These are baked into an offscreen canvas once, so a real blur costs nothing
+  // per frame. Hard-edged shapes are what made the shadow and the worn ground
+  // read as decals stuck under the building — nothing outdoors has an outline
+  // that crisp. Softness is doing most of the blending here.
+  const soft = (px: number): boolean => {
+    ctx.filter = `blur(${px.toFixed(1)}px)`
+    return ctx.filter !== 'none'   // false on a context that can't blur
+  }
+  const sharp = (): void => { ctx.filter = 'none' }
 
-  // Worn earth first, then the shadow on top of it — the other way round and
-  // the dirt washes the shadow out to nothing.
-  //
-  // It has to be browner and darker than the grass it sits in. Too pale and it
-  // reads as a halo of light around the building rather than ground that has
-  // been walked bare.
-  ctx.fillStyle = 'rgba(124, 101, 66, 0.26)'
+  // ---- worn earth, softest of the three: it has no edge at all in life ----
+  soft(Math.max(2.2, foot * 0.13))
+  ctx.fillStyle = 'rgba(124, 101, 66, 0.38)'
   wobbleRing(ctx, x, y + foot * 0.12, foot * 0.78, seed, 0.70); ctx.fill()
-  ctx.fillStyle = 'rgba(112, 92, 62, 0.20)'
+  ctx.fillStyle = 'rgba(112, 92, 62, 0.30)'
   wobbleRing(ctx, x - foot * 0.14, y - foot * 0.04, foot * 0.55, seed * 2.3 + 1, 0.68); ctx.fill()
-  ctx.fillStyle = 'rgba(136, 114, 78, 0.16)'
+  ctx.fillStyle = 'rgba(136, 114, 78, 0.24)'
   wobbleRing(ctx, x + foot * 0.2, y + foot * 0.24, foot * 0.36, seed * 3.1 + 2, 0.66); ctx.fill()
-  // The threshold: bare, tramped ground where the door is and a short path
-  // trailing off it. This is what the fringe above thins out over, so the worn
-  // earth and the missing grass are describing the same traffic.
-  ctx.fillStyle = 'rgba(122, 100, 68, 0.30)'
+  // the tramped threshold at the door, and the path trailing off it
+  ctx.fillStyle = 'rgba(122, 100, 68, 0.42)'
   ctx.beginPath()
   ctx.ellipse(x, y + foot * 0.30, foot * 0.40, foot * 0.30, 0, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = 'rgba(112, 92, 62, 0.18)'
+  ctx.fillStyle = 'rgba(112, 92, 62, 0.26)'
   ctx.beginPath()
   ctx.ellipse(x + foot * 0.06, y + foot * 0.66, foot * 0.28, foot * 0.34, 0.15, 0, Math.PI * 2)
   ctx.fill()
-  // loose scuffs that break the outline, so the worn ground doesn't stop on a
-  // clean edge the way a decal does
+  // loose scuffs further out, softer still, so the worn ground fades into grass
+  soft(Math.max(3, foot * 0.2))
   for (let i = 0; i < 6; i++) {
     const a = seed * 4 + i * 2.39
     const d = foot * (0.66 + ((i * 37 + e.seed) % 45) / 100)
@@ -296,34 +299,42 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
     ctx.fill()
   }
 
-  // The shadow the building throws. It has to START at the foot of the wall —
-  // begun even a few pixels below the base it reads as a separate dark shape on
-  // the grass and the building looks like it is hovering over it.
+  // ---- the shadow the building throws ----
+  // Two passes. A long soft penumbra reaching away from the sun, then a shorter,
+  // darker, tighter core near the wall: a shadow is sharpest where it meets the
+  // thing casting it and loses its edge with distance, and drawing both is what
+  // separates a shadow from a grey shape lying on the grass.
   const sx = tall * SUN_X * 1.9, sy = tall * SUN_Y * 1.9
   const f = foot * 0.72
-  ctx.fillStyle = 'rgba(38, 46, 32, 0.30)'
-  ctx.beginPath()
-  ctx.moveTo(x - f * 0.92, y - f * 0.10)
-  ctx.lineTo(x + f * 0.92, y - f * 0.10)
-  ctx.lineTo(x + f * 0.92 + sx, y + sy)
-  ctx.lineTo(x - f * 0.55 + sx, y + sy)
-  ctx.closePath()
-  ctx.fill()
-  // The contact patch right under the wall, which is what actually plants the
-  // building: something touching the ground is darkest where it touches.
-  //
-  // This is drawn in ground space, which already squashes everything by TILT,
-  // so it must be laid out ROUND here. Flattening it by hand as well squashed
-  // it twice and left a pool about a third of the size the building needed —
-  // which is exactly what made them look like they were hovering.
-  ctx.fillStyle = 'rgba(30, 38, 26, 0.30)'
+  const quad = (ex: number, ey: number, spread: number): void => {
+    ctx.beginPath()
+    ctx.moveTo(x - f * (0.9 + spread * 0.1), y - f * 0.10)
+    ctx.lineTo(x + f * (0.9 + spread * 0.1), y - f * 0.10)
+    ctx.lineTo(x + f * 0.95 + ex, y + ey)
+    ctx.lineTo(x - f * 0.5 + ex, y + ey)
+    ctx.closePath()
+    ctx.fill()
+  }
+  soft(Math.max(3.2, tall * 0.22))
+  ctx.fillStyle = 'rgba(38, 46, 32, 0.26)'
+  quad(sx * 1.12, sy * 1.12, 1)
+  soft(Math.max(1.3, tall * 0.06))
+  ctx.fillStyle = 'rgba(34, 42, 28, 0.36)'
+  quad(sx * 0.62, sy * 0.62, 0)
+
+  // The contact patch. Laid out round because ground space squashes it by TILT
+  // anyway, and tight and dark, because something touching the ground is
+  // darkest exactly where it touches.
+  soft(Math.max(1.1, foot * 0.045))
+  ctx.fillStyle = 'rgba(30, 38, 26, 0.42)'
   ctx.beginPath()
   ctx.ellipse(x + f * 0.08, y, f * 1.02, f * 0.88, 0, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = 'rgba(26, 33, 22, 0.22)'
+  ctx.fillStyle = 'rgba(24, 31, 20, 0.34)'
   ctx.beginPath()
-  ctx.ellipse(x + f * 0.04, y, f * 0.72, f * 0.6, 0, 0, Math.PI * 2)
+  ctx.ellipse(x + f * 0.04, y, f * 0.7, f * 0.58, 0, 0, Math.PI * 2)
   ctx.fill()
+  sharp()
 }
 
 // Nothing in a meadow meets the ground along a clean straight line, but a wall
