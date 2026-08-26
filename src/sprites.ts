@@ -316,14 +316,20 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   const f = foot * 0.72
   const quad = (ex: number, ey: number, spread: number): void => {
     const g = f * (1 + spread * 0.08)
-    const b = g * 0.5 // the footprint is square, so it is half as deep as wide
+    // The footprint is SQUARE, and this is drawn in ground space, which already
+    // squashes by TILT. Laying it out half as deep as it is wide flattens it a
+    // second time — which is why the shadow never reached back to the rear wall
+    // and sat as a band across the front instead. Same mistake the contact pool
+    // had. Square here, flattened once by the view.
+    const back = y - g * 1.55   // the rear wall's foot
+    const front = y + g * 0.2   // just past the near wall
     ctx.beginPath()
-    ctx.moveTo(x - g, y - b)          // near-left corner of the base
-    ctx.lineTo(x + g, y - b)          // ...round the back
-    ctx.lineTo(x + g + ex, y - b + ey) // and off east with the sun
-    ctx.lineTo(x + g + ex, y + b + ey)
-    ctx.lineTo(x - g + ex * 0.25, y + b + ey * 0.25)
-    ctx.lineTo(x - g, y + b)
+    ctx.moveTo(x - g, back)                 // back-left corner of the building
+    ctx.lineTo(x + g, back)                 // back-right
+    ctx.lineTo(x + g + ex, back + ey)       // and the whole footprint slid east
+    ctx.lineTo(x + g + ex, front + ey)
+    ctx.lineTo(x - g + ex * 0.3, front + ey * 0.3)
+    ctx.lineTo(x - g, front)
     ctx.closePath()
     ctx.fill()
   }
