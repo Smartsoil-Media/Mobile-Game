@@ -3352,7 +3352,16 @@ console.log('random map invariants hold')
   const probe = await pgA.evaluate(() => window.__game.sfxProbe())
   const quiet = probe.filter(p => p.peak < 0.3)
   const stubs = probe.filter(p => p.dur < 0.08)
-  console.log('sound bank:', { sounds: probe.length, quiet: quiet.map(p => p.name), stubs: stubs.map(p => p.name) })
+  // after the engine's load-time levelling every sample should sit on the same
+  // reference, whatever level its recording happened to arrive at
+  const lv = probe.map(p => p.levelled)
+  const spread = Math.max(...lv) / Math.min(...lv)
+  console.log('sound bank:', {
+    sounds: probe.length, quiet: quiet.map(p => p.name), stubs: stubs.map(p => p.name),
+    rawSpread: (Math.max(...probe.map(p => p.peak)) / Math.min(...probe.map(p => p.peak))).toFixed(2) + 'x',
+    levelledSpread: spread.toFixed(2) + 'x',
+  })
+  if (spread > 1.35) throw new Error('the bank is not levelled: ' + spread.toFixed(2) + 'x between quietest and loudest')
   if (probe.length < 20) throw new Error('the sound bank is short: ' + probe.length)
   // a silent sample means the encoder ate it — exactly how the bell was lost once
   if (quiet.length) throw new Error('these sounds decoded to near-silence: ' + quiet.map(p => p.name).join(', '))
