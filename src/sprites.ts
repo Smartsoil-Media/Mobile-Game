@@ -1985,7 +1985,74 @@ export function drawMinistry(ctx: CanvasRenderingContext2D, e: Ent, t: number, r
   relicPips(ctx, x, y + 0, relics)
 }
 
-// ---------- Units ----------
+// ---------- the people ----------
+// Everyone in the meadow wears the same cut of tunic, so it is shaped once
+// here and, more importantly, lit once here: the sun catches the left shoulder
+// and the right side falls away. Flat fills are what made a crowd of these
+// read as pawns on a board rather than people standing in a field.
+const SKIN_SHADE = '#C89A6E'
+
+// Feet alone, tucked straight under a rounded tunic, make an egg with boots.
+// A pair of short legs between hem and foot is the whole difference between a
+// pawn and a person at this size.
+function legs(ctx: CanvasRenderingContext2D, bx: number, groundY: number, by: number,
+              spread: number, walk: number, hose: string): void {
+  ctx.strokeStyle = hose
+  ctx.lineWidth = 2.6
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(bx - spread, by + 4); ctx.lineTo(bx - spread, groundY + 3 + walk * 1.2)
+  ctx.moveTo(bx + spread, by + 4); ctx.lineTo(bx + spread, groundY + 3 - walk * 1.2)
+  ctx.stroke()
+}
+
+function tunicPath(ctx: CanvasRenderingContext2D, cx: number, by: number, hw: number): void {
+  ctx.beginPath()
+  ctx.moveTo(cx - hw * 0.98, by + 5.4)
+  ctx.quadraticCurveTo(cx - hw * 0.92, by - 6.4, cx, by - 7.8)
+  ctx.quadraticCurveTo(cx + hw * 0.92, by - 6.4, cx + hw * 0.98, by + 5.4)
+  ctx.quadraticCurveTo(cx, by + 7.6, cx - hw * 0.98, by + 5.4)
+  ctx.closePath()
+}
+
+function tunic(ctx: CanvasRenderingContext2D, cx: number, by: number, hw: number,
+               fill: string, shade: string, lit?: string): void {
+  tunicPath(ctx, cx, by, hw)
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.save()
+  tunicPath(ctx, cx, by, hw)
+  ctx.clip()
+  ctx.globalAlpha = 0.42
+  ctx.fillStyle = shade
+  ctx.fillRect(cx + hw * 0.1, by - 12, hw * 1.2, 24)
+  if (lit) {
+    ctx.globalAlpha = 0.3
+    ctx.fillStyle = lit
+    ctx.fillRect(cx - hw * 1.2, by - 12, hw * 0.62, 24)
+  }
+  ctx.globalAlpha = 1
+  ctx.restore()
+}
+
+// A head, with the same light on it. No eyes: two dots at this size read as a
+// toy, and the meadow is not that kind of place any more.
+function headBall(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  // A shade smaller than the old storybook head. Hats and helms keep their own
+  // radii, which is right: a brim should oversail the face it shades.
+  r *= 0.88
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
+  ctx.save()
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip()
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = SKIN_SHADE
+  ctx.fillRect(cx + r * 0.15, cy - r, r, r * 2)
+  ctx.globalAlpha = 0.35
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 0.5) // brow shadow under hat or helm
+  ctx.globalAlpha = 1
+  ctx.restore()
+}
 
 function unitBase(ctx: CanvasRenderingContext2D, e: Ent, t: number): { bx: number; by: number; walk: number } {
   const moving = e.stepped === true
@@ -2005,28 +2072,28 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   // feet
+  legs(ctx, bx, e.y + 4, by, 3.5, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.5, e.y + 4 + walk * 1.2, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.5, e.y + 4 - walk * 1.2, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   // body: rounded tunic in team color
-  ctx.fillStyle = c.main
-  ctx.beginPath()
-  ctx.moveTo(bx - 6.5, by + 4)
-  ctx.quadraticCurveTo(bx - 7.5, by - 6, bx, by - 7)
-  ctx.quadraticCurveTo(bx + 7.5, by - 6, bx + 6.5, by + 4)
-  ctx.quadraticCurveTo(bx, by + 7, bx - 6.5, by + 4)
-  ctx.closePath(); ctx.fill()
+  tunic(ctx, bx, by, 6.5, c.main, c.dark, c.pale)
   // head
-  ctx.fillStyle = SKIN
-  ctx.beginPath(); ctx.arc(bx, by - 11, 6, 0, Math.PI * 2); ctx.fill()
+  headBall(ctx, bx, by - 11, 6)
   // straw hat
   ctx.fillStyle = '#E8C97A'
   ctx.beginPath(); ctx.ellipse(bx, by - 14.5, 8, 3, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.arc(bx, by - 15.5, 4.4, Math.PI, 0); ctx.fill()
-  // eyes
-  ctx.fillStyle = '#5A4632'
-  ctx.beginPath(); ctx.arc(bx + f * 2, by - 10.5, 0.9, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bx + f * 4.5, by - 10.5, 0.9, 0, Math.PI * 2); ctx.fill()
+  // a single soft eye-line rather than two dots — enough to say which
+  // way the face is turned without reading as a doll
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#5A4632'
+  ctx.lineWidth = 1.1
+  ctx.beginPath()
+  ctx.moveTo(bx + f * 2, by - 10.5)
+  ctx.lineTo(bx + f * 4.5, by - 10.5)
+  ctx.stroke()
+  ctx.globalAlpha = 1
   // carrying something home
   if ((e.carry ?? 0) > 0) {
     if (e.carryRes === 'gold') {
@@ -2067,17 +2134,12 @@ export function drawMonk(ctx: CanvasRenderingContext2D, e: Ent, t: number, carry
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   // sandalled feet
+  legs(ctx, bx, e.y + 4, by, 3.2, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.2, e.y + 4 + walk * 1.2, 2.5, 1.7, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.2, e.y + 4 - walk * 1.2, 2.5, 1.7, 0, 0, Math.PI * 2); ctx.fill()
   // the long brown habit, hem swaying
-  ctx.fillStyle = '#8A6B4E'
-  ctx.beginPath()
-  ctx.moveTo(bx - 7, by + 5)
-  ctx.quadraticCurveTo(bx - 7.5, by - 7, bx, by - 8)
-  ctx.quadraticCurveTo(bx + 7.5, by - 7, bx + 7, by + 5)
-  ctx.quadraticCurveTo(bx, by + 7.5, bx - 7, by + 5)
-  ctx.closePath(); ctx.fill()
+  tunic(ctx, bx, by, 7, '#7A5C42', '#4E3A29', '#9B7A5A')
   // rope belt in the team's color
   ctx.strokeStyle = c.main; ctx.lineWidth = 1.8
   ctx.beginPath(); ctx.moveTo(bx - 6.2, by); ctx.lineTo(bx + 6.2, by); ctx.stroke()
@@ -2136,23 +2198,17 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number, 
   const striking = e.state === 'attack' && (e.cd ?? 0) > UNITS_CD_SWORD - 0.25
   const lunge = striking ? f * 3 : 0
   // feet
+  legs(ctx, bx, e.y + 4.4, by, 3.8, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.8, e.y + 4.4 + walk * 1.2, 2.8, 2, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.8, e.y + 4.4 - walk * 1.2, 2.8, 2, 0, 0, Math.PI * 2); ctx.fill()
   // body
-  ctx.fillStyle = c.main
-  ctx.beginPath()
-  ctx.moveTo(bx - 7.5 + lunge, by + 4.6)
-  ctx.quadraticCurveTo(bx - 8.5 + lunge, by - 6.5, bx + lunge, by - 8)
-  ctx.quadraticCurveTo(bx + 8.5 + lunge, by - 6.5, bx + 7.5 + lunge, by + 4.6)
-  ctx.quadraticCurveTo(bx + lunge, by + 8, bx - 7.5 + lunge, by + 4.6)
-  ctx.closePath(); ctx.fill()
+  tunic(ctx, bx + lunge, by, 7.5, c.main, c.dark, c.pale)
   // belt
   ctx.fillStyle = c.dark
   rr(ctx, bx - 7 + lunge, by + 0.5, 14, 3, 1.5); ctx.fill()
   // head + round helmet
-  ctx.fillStyle = SKIN
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 12, 6.2, 0, Math.PI * 2); ctx.fill()
+  headBall(ctx, bx + lunge, by - 12, 6.2)
   ctx.fillStyle = '#C7CCD4'
   ctx.beginPath(); ctx.arc(bx + lunge, by - 13.5, 6.4, Math.PI * 0.98, Math.PI * 2.02); ctx.fill()
   ctx.fillStyle = '#AEB4BF'
@@ -2160,10 +2216,16 @@ export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number, 
   // plume — champions wear the gold
   ctx.fillStyle = champ ? '#E9B44C' : c.main
   ctx.beginPath(); ctx.arc(bx + lunge, by - 19.5, champ ? 3.1 : 2.6, 0, Math.PI * 2); ctx.fill()
-  // eyes
-  ctx.fillStyle = '#5A4632'
-  ctx.beginPath(); ctx.arc(bx + f * 2 + lunge, by - 11, 1, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bx + f * 4.6 + lunge, by - 11, 1, 0, Math.PI * 2); ctx.fill()
+  // a single soft eye-line rather than two dots — enough to say which
+  // way the face is turned without reading as a doll
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#5A4632'
+  ctx.lineWidth = 1.1
+  ctx.beginPath()
+  ctx.moveTo(bx + f * 2 + lunge, by - 11)
+  ctx.lineTo(bx + f * 4.6 + lunge, by - 11)
+  ctx.stroke()
+  ctx.globalAlpha = 1
   // round shield on the off-hand side
   ctx.fillStyle = c.dark
   ctx.beginPath(); ctx.arc(bx - f * 7.5 + lunge, by - 2, 5.4, 0, Math.PI * 2); ctx.fill()
@@ -2190,25 +2252,19 @@ export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, c
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   // feet
+  legs(ctx, bx, e.y + 4.2, by, 3.6, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.6, e.y + 4.2 + walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.6, e.y + 4.2 - walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
   // body
-  ctx.fillStyle = c.main
-  ctx.beginPath()
-  ctx.moveTo(bx - 6.5 + lunge, by + 4.4)
-  ctx.quadraticCurveTo(bx - 7.5 + lunge, by - 6, bx + lunge, by - 7.5)
-  ctx.quadraticCurveTo(bx + 7.5 + lunge, by - 6, bx + 6.5 + lunge, by + 4.4)
-  ctx.quadraticCurveTo(bx + lunge, by + 7.5, bx - 6.5 + lunge, by + 4.4)
-  ctx.closePath(); ctx.fill()
+  tunic(ctx, bx + lunge, by, 6.5, c.main, c.dark, c.pale)
   // small buckler on the off-hand
   ctx.fillStyle = WOOD
   ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 4.2, 0, Math.PI * 2); ctx.fill()
   ctx.fillStyle = '#C7CCD4'
   ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 1.6, 0, Math.PI * 2); ctx.fill()
   // head + conical cap
-  ctx.fillStyle = SKIN
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 11.5, 6, 0, Math.PI * 2); ctx.fill()
+  headBall(ctx, bx + lunge, by - 11.5, 6)
   ctx.fillStyle = c.dark
   ctx.beginPath()
   ctx.moveTo(bx - 6.2 + lunge, by - 13.5)
@@ -2222,10 +2278,16 @@ export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, c
     ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 1.6
     ctx.beginPath(); ctx.moveTo(bx - 5.6 + lunge, by - 14); ctx.lineTo(bx + 5.6 + lunge, by - 14); ctx.stroke()
   }
-  // eyes
-  ctx.fillStyle = '#5A4632'
-  ctx.beginPath(); ctx.arc(bx + f * 1.8 + lunge, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bx + f * 4.2 + lunge, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  // a single soft eye-line rather than two dots — enough to say which
+  // way the face is turned without reading as a doll
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#5A4632'
+  ctx.lineWidth = 1.1
+  ctx.beginPath()
+  ctx.moveTo(bx + f * 1.8 + lunge, by - 10.8)
+  ctx.lineTo(bx + f * 4.2 + lunge, by - 10.8)
+  ctx.stroke()
+  ctx.globalAlpha = 1
   // the long spear, angled forward; thrusts on attack
   ctx.save()
   ctx.translate(bx + f * 6 + lunge * 1.4, by - 3)
@@ -2253,17 +2315,12 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   // feet
+  legs(ctx, bx, e.y + 4, by, 3.4, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.4, e.y + 4 + walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.4, e.y + 4 - walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   // body: slim tunic
-  ctx.fillStyle = c.main
-  ctx.beginPath()
-  ctx.moveTo(bx - 6, by + 4)
-  ctx.quadraticCurveTo(bx - 7, by - 6.5, bx, by - 7.5)
-  ctx.quadraticCurveTo(bx + 7, by - 6.5, bx + 6, by + 4)
-  ctx.quadraticCurveTo(bx, by + 7, bx - 6, by + 4)
-  ctx.closePath(); ctx.fill()
+  tunic(ctx, bx, by, 6, c.main, c.dark, c.pale)
   // quiver on the back
   ctx.save()
   ctx.translate(bx - f * 6.5, by - 4)
@@ -2277,8 +2334,7 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.stroke()
   ctx.restore()
   // head with a hood
-  ctx.fillStyle = SKIN
-  ctx.beginPath(); ctx.arc(bx, by - 11.5, 5.8, 0, Math.PI * 2); ctx.fill()
+  headBall(ctx, bx, by - 11.5, 5.8)
   ctx.fillStyle = champ ? '#C98F2B' : c.dark // champion longbows hood in gold-braid
   ctx.beginPath(); ctx.arc(bx, by - 12.5, 6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill()
   ctx.beginPath()
@@ -2286,10 +2342,16 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.quadraticCurveTo(bx - f * 7, by - 17, bx - f * 8, by - 13)
   ctx.quadraticCurveTo(bx - f * 5, by - 15.5, bx - f * 2.5, by - 16.5)
   ctx.closePath(); ctx.fill()
-  // eyes
-  ctx.fillStyle = '#5A4632'
-  ctx.beginPath(); ctx.arc(bx + f * 1.8, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bx + f * 4.2, by - 10.8, 0.9, 0, Math.PI * 2); ctx.fill()
+  // a single soft eye-line rather than two dots — enough to say which
+  // way the face is turned without reading as a doll
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#5A4632'
+  ctx.lineWidth = 1.1
+  ctx.beginPath()
+  ctx.moveTo(bx + f * 1.8, by - 10.8)
+  ctx.lineTo(bx + f * 4.2, by - 10.8)
+  ctx.stroke()
+  ctx.globalAlpha = 1
   // bow held forward
   ctx.save()
   ctx.translate(bx + f * 7, by - 4)
@@ -2398,8 +2460,7 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   ctx.quadraticCurveTo(bxr(e.x, f) - 5, by - 17, bxr(e.x, f), by - 18)
   ctx.quadraticCurveTo(bxr(e.x, f) + 5, by - 17, bxr(e.x, f) + 4.5, by - 10)
   ctx.closePath(); ctx.fill()
-  ctx.fillStyle = SKIN
-  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 20.5, 4.6, 0, Math.PI * 2); ctx.fill()
+  headBall(ctx, bxr(e.x, f), by - 20.5, 4.6)
   // feathered cap
   ctx.fillStyle = c.dark
   ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22, 4.8, Math.PI * 0.95, Math.PI * 2.05); ctx.fill()
@@ -2409,10 +2470,16 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   ctx.moveTo(bxr(e.x, f) - f * 3, by - 25)
   ctx.quadraticCurveTo(bxr(e.x, f) - f * 6, by - 28, bxr(e.x, f) - f * 8, by - 26)
   ctx.stroke()
-  // eyes
-  ctx.fillStyle = '#5A4632'
-  ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 1.5, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bxr(e.x, f) + f * 3.4, by - 20, 0.8, 0, Math.PI * 2); ctx.fill()
+  // a single soft eye-line rather than two dots — enough to say which
+  // way the face is turned without reading as a doll
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#5A4632'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(bxr(e.x, f) + f * 1.5, by - 20)
+  ctx.lineTo(bxr(e.x, f) + f * 3.4, by - 20)
+  ctx.stroke()
+  ctx.globalAlpha = 1
   ctx.restore()
 }
 
@@ -2456,9 +2523,17 @@ export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.quadraticCurveTo(bxr(e.x, f) - 5.5, by - 19, bxr(e.x, f), by - 20)
   ctx.quadraticCurveTo(bxr(e.x, f) + 5.5, by - 19, bxr(e.x, f) + 5, by - 11)
   ctx.closePath(); ctx.fill()
-  // great helm with a plume
-  ctx.fillStyle = '#C7CCD4'
+  // great helm with a plume — steel takes the sun harder than skin does, so
+  // it gets a bright edge as well as a shaded side
+  ctx.fillStyle = '#AEB4BF'
   ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22.5, 4.8, 0, Math.PI * 2); ctx.fill()
+  ctx.save()
+  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22.5, 4.8, 0, Math.PI * 2); ctx.clip()
+  ctx.fillStyle = '#E4E8EE'
+  ctx.fillRect(bxr(e.x, f) - 4.8, by - 27.3, 3.2, 9.6)
+  ctx.fillStyle = '#7E858F'
+  ctx.fillRect(bxr(e.x, f) + 1.2, by - 27.3, 3.6, 9.6)
+  ctx.restore()
   ctx.fillStyle = '#5A4632'
   rr(ctx, bxr(e.x, f) - 4.4, by - 23.4, 8.8, 1.8, 0.9); ctx.fill() // visor slit
   ctx.fillStyle = champ ? '#E9B44C' : c.main
