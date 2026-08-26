@@ -100,8 +100,12 @@ function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 // One sun for the whole meadow, sitting high in the upper left. Every shadow
 // in the game leans the same way off it, which is most of why the world reads
 // as lit rather than merely coloured.
-export const SUN_X = 0.42 // how far a shadow slides right, per unit of height
-export const SUN_Y = 0.20 // ...and down
+// The sun sits low in the west, so shadows lie along the ground to the EAST —
+// mostly sideways, only slightly toward the camera. A steeper sun throws the
+// shadow straight out of the front of a building, which reads as a puddle under
+// it rather than something the building is casting.
+export const SUN_X = 0.44 // how far a shadow reaches east, per unit of height
+export const SUN_Y = 0.10 // ...and how little it drifts toward the viewer
 
 // Buildings draw their shadow and worn earth in the ground pass, where those
 // things actually lie flat. While one is being painted this is switched off so
@@ -304,22 +308,30 @@ function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
   // darker, tighter core near the wall: a shadow is sharpest where it meets the
   // thing casting it and loses its edge with distance, and drawing both is what
   // separates a shadow from a grey shape lying on the grass.
-  const sx = tall * SUN_X * 1.9, sy = tall * SUN_Y * 1.9
+  // The footprint swept along the sun's direction: the shadow is the ground
+  // between the building's base and where that base would land if you slid it
+  // east. Sweeping it forward instead — which is what a quad hung off the front
+  // edge does — puts the shadow in front of the door, where no shadow belongs.
+  const sx = tall * SUN_X * 1.75, sy = tall * SUN_Y * 1.75
   const f = foot * 0.72
   const quad = (ex: number, ey: number, spread: number): void => {
+    const g = f * (1 + spread * 0.08)
+    const b = g * 0.5 // the footprint is square, so it is half as deep as wide
     ctx.beginPath()
-    ctx.moveTo(x - f * (0.9 + spread * 0.1), y - f * 0.10)
-    ctx.lineTo(x + f * (0.9 + spread * 0.1), y - f * 0.10)
-    ctx.lineTo(x + f * 0.95 + ex, y + ey)
-    ctx.lineTo(x - f * 0.5 + ex, y + ey)
+    ctx.moveTo(x - g, y - b)          // near-left corner of the base
+    ctx.lineTo(x + g, y - b)          // ...round the back
+    ctx.lineTo(x + g + ex, y - b + ey) // and off east with the sun
+    ctx.lineTo(x + g + ex, y + b + ey)
+    ctx.lineTo(x - g + ex * 0.25, y + b + ey * 0.25)
+    ctx.lineTo(x - g, y + b)
     ctx.closePath()
     ctx.fill()
   }
-  soft(Math.max(3.2, tall * 0.22))
-  ctx.fillStyle = 'rgba(38, 46, 32, 0.26)'
+  soft(Math.max(2.6, tall * 0.13))
+  ctx.fillStyle = 'rgba(38, 46, 32, 0.30)'
   quad(sx * 1.12, sy * 1.12, 1)
-  soft(Math.max(1.3, tall * 0.06))
-  ctx.fillStyle = 'rgba(34, 42, 28, 0.36)'
+  soft(Math.max(1.2, tall * 0.05))
+  ctx.fillStyle = 'rgba(34, 42, 28, 0.40)'
   quad(sx * 0.62, sy * 0.62, 0)
 
   // The contact patch. Laid out round because ground space squashes it by TILT
