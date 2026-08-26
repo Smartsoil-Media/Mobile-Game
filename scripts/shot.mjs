@@ -1713,6 +1713,10 @@ const wallPlacing = await page3.evaluate(() => {
   const ok = g.placing === 'wall' && !!g.placePos && !!g.placeEnd
   g.placePos = { x: 1264, y: 640 }
   g.placeEnd = { x: 1376, y: 640 }
+  // Setting the line by hand skips whatever would normally have dirtied the UI,
+  // so the badge below only refreshed if something else happened to mark it
+  // within the wait. That raced, and lost about one run in three.
+  g.uiDirty = true
   return { ok }
 })
 console.log('wall placing:', wallPlacing)

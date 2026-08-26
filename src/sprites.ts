@@ -164,9 +164,9 @@ export function drawTree(ctx: CanvasRenderingContext2D, e: Ent, t: number): void
 // catch the same sun and share a vocabulary. Coordinates are always "ground
 // centre-front": (x, y) is where the building meets the earth, widths run
 // left-right, heights go up. The view's tilt is applied outside, by upright().
-const PLASTER = '#D9CDB5'
-const PLASTER_LIT = '#EADFC8'
-const PLASTER_SHADE = '#B3A68C'
+const PLASTER = '#D6C4A2'
+const PLASTER_LIT = '#E4D6B6'
+const PLASTER_SHADE = '#A8977A'
 const BEAM = '#54402B'
 const TILE_MID = '#9E4B32'
 const TILE_LIT = '#BC6040'
@@ -351,10 +351,10 @@ export function baseSkirt(ctx: CanvasRenderingContext2D, e: Ent, halfW: number):
     const lush = Math.max(0, Math.min(1, (t - 0.09) * 1.9))
     if (lush < 0.18 || r3 * 0.7 > lush) continue // trodden bare at the threshold
     const by = y + (r2 - 0.4) * 3.2          // some in front of the wall, some behind
-    const h = (2.2 + r3 * 3.4) * (0.55 + lush * 0.75)
+    const h = (1.5 + r3 * 2.2) * (0.55 + lush * 0.75)
     const lean = (r1 - 0.5) * 2.6
     ctx.strokeStyle = r3 > 0.58 ? 'rgba(134, 154, 96, 0.7)' : 'rgba(100, 120, 68, 0.72)'
-    ctx.lineWidth = 0.9 + r2 * 0.7
+    ctx.lineWidth = 0.7 + r2 * 0.5
     ctx.lineCap = 'round'
     ctx.beginPath()
     ctx.moveTo(bx, by + 1.2)
@@ -374,7 +374,7 @@ export function baseSkirt(ctx: CanvasRenderingContext2D, e: Ent, halfW: number):
     ctx.beginPath()
     for (let k = -1; k <= 1; k++) {
       ctx.moveTo(bx + k * 1.5, y + 1.6)
-      ctx.quadraticCurveTo(bx + k * 1.9, y - 3, bx + k * 2.4 + side * 0.8, y - 5.5 - r * 2.4)
+      ctx.quadraticCurveTo(bx + k * 1.7, y - 2.2, bx + k * 2.1 + side * 0.7, y - 3.8 - r * 1.6)
     }
     ctx.stroke()
   }
@@ -383,37 +383,85 @@ export function baseSkirt(ctx: CanvasRenderingContext2D, e: Ent, halfW: number):
 // A wall block standing on the ground: the face we look at, plus a shaded
 // return sliding off to the right, away from the sun.
 export function facade(ctx: CanvasRenderingContext2D, x: number, y: number,
-                       w: number, h: number, mat: Mat = 'plaster', depth = 0.22): void {
+                       w: number, h: number, mat: Mat = 'plaster', depth = 0.42,
+                       plinth = true): void {
   const [shade, mid, lit] = WALLS[mat]
   const d = w * depth
-  // right-hand return, in shadow
+  const rise = d * 0.5 // how far the far corner lifts — this is the view's tilt
+  const pH = Math.max(3, h * 0.22) // the stone footing course
+
+  // The side face, turned away from the sun. Wide enough to read as a real
+  // face rather than a sliver: two visible sides meeting at a corner is what
+  // makes a box look like a building instead of a painted flat.
   ctx.fillStyle = shade
   ctx.beginPath()
   ctx.moveTo(x + w / 2, y)
-  ctx.lineTo(x + w / 2 + d, y - d * 0.5)
-  ctx.lineTo(x + w / 2 + d, y - h - d * 0.5)
+  ctx.lineTo(x + w / 2 + d, y - rise)
+  ctx.lineTo(x + w / 2 + d, y - h - rise)
   ctx.lineTo(x + w / 2, y - h)
   ctx.closePath(); ctx.fill()
-  // the face
+
+  // the front face
   ctx.fillStyle = mid
   ctx.fillRect(x - w / 2, y - h, w, h)
-  // Light grazing the left, shadow gathering right. Bands rather than a
-  // gradient: at this size the eye can't tell, and a gradient object per wall
-  // per frame is real work on a phone.
-  ctx.globalAlpha = 0.5
+  // Light grazing the left, shadow gathering toward the corner. Bands rather
+  // than a gradient: at this size the eye can't tell, and a gradient object per
+  // wall per frame is real work on a phone.
+  ctx.globalAlpha = 0.45
   ctx.fillStyle = lit
-  ctx.fillRect(x - w / 2, y - h, w * 0.3, h)
+  ctx.fillRect(x - w / 2, y - h, w * 0.34, h)
   ctx.fillStyle = shade
-  ctx.fillRect(x + w * 0.16, y - h, w * 0.34, h)
+  ctx.fillRect(x + w * 0.26, y - h, w * 0.24, h)
   ctx.globalAlpha = 1
+  // the corner itself, where the two faces meet
+  ctx.strokeStyle = 'rgba(60, 52, 38, 0.22)'
+  ctx.lineWidth = 0.9
+  ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y - h); ctx.stroke()
+
+  // A stone footing course wrapping both faces. Real cottages sit on one, and
+  // it also gives the wall a heavier, more planted foot than plaster to grass.
+  if (plinth) {
+    ctx.fillStyle = STONE_MID
+    ctx.beginPath()
+    ctx.moveTo(x + w / 2, y)
+    ctx.lineTo(x + w / 2 + d, y - rise)
+    ctx.lineTo(x + w / 2 + d, y - rise - pH)
+    ctx.lineTo(x + w / 2, y - pH)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = 'rgba(40, 36, 30, 0.22)'
+    ctx.beginPath()
+    ctx.moveTo(x + w / 2, y)
+    ctx.lineTo(x + w / 2 + d, y - rise)
+    ctx.lineTo(x + w / 2 + d, y - rise - pH)
+    ctx.lineTo(x + w / 2, y - pH)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = STONE_LIT
+    ctx.fillRect(x - w / 2, y - pH, w, pH)
+    ctx.fillStyle = 'rgba(120, 112, 98, 0.35)'
+    ctx.fillRect(x - w / 2, y - pH, w, 0.9) // the shadow the wall casts on it
+    // block joints, staggered course to course
+    ctx.strokeStyle = 'rgba(112, 104, 90, 0.5)'
+    ctx.lineWidth = 0.7
+    ctx.beginPath()
+    const rows = Math.max(1, Math.round(pH / 3.4))
+    for (let r = 0; r < rows; r++) {
+      const ry = y - pH + (pH / rows) * r
+      if (r > 0) { ctx.moveTo(x - w / 2, ry); ctx.lineTo(x + w / 2, ry) }
+      for (let bx = x - w / 2 + (r % 2 ? 3.4 : 6.8); bx < x + w / 2 - 1; bx += 6.8) {
+        ctx.moveTo(bx, ry); ctx.lineTo(bx, ry + pH / rows)
+      }
+    }
+    ctx.stroke()
+  }
+
   // grime gathering where wall meets ground
-  ctx.fillStyle = 'rgba(60, 52, 38, 0.16)'
-  ctx.fillRect(x - w / 2, y - h * 0.16, w, h * 0.16)
+  ctx.fillStyle = 'rgba(60, 52, 38, 0.14)'
+  ctx.fillRect(x - w / 2, y - h * 0.1, w, h * 0.1)
   if (mat === 'stone') {
     ctx.strokeStyle = 'rgba(96, 90, 78, 0.35)'
     ctx.lineWidth = 0.8
     ctx.beginPath()
-    for (let sy = y - h + 5; sy < y - 1; sy += 5) { ctx.moveTo(x - w / 2, sy); ctx.lineTo(x + w / 2, sy) }
+    for (let sy = y - h + 5; sy < y - pH - 1; sy += 5) { ctx.moveTo(x - w / 2, sy); ctx.lineTo(x + w / 2, sy) }
     ctx.stroke()
   }
 }
@@ -445,7 +493,7 @@ export function timberFrame(ctx: CanvasRenderingContext2D, x: number, y: number,
 // small returns either side.
 export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
                      w: number, rise: number, mat: RoofMat = 'tile', over = 0.12,
-                     depth = 0.22): void {
+                     depth = 0.42): void {
   const [shade, mid, lit] = ROOFS[mat]
   const ow = w * (1 + over)
   const ridge = yEaves - rise
@@ -499,26 +547,55 @@ export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
   ctx.globalAlpha = 1
   ctx.restore()
   if (mat === 'thatch') {
-    // thatch has no courses — a combed edge and a fat ridge instead
-    ctx.strokeStyle = 'rgba(92, 74, 42, 0.13)'
+    // combed straw running down the slope
+    ctx.strokeStyle = 'rgba(92, 74, 42, 0.16)'
     ctx.lineWidth = 0.7
     ctx.beginPath()
-    for (let i = 1; i < 14; i++) {
-      const px = x - ow / 2 + (ow / 14) * i
-      ctx.moveTo(px, yEaves); ctx.lineTo(x - rhw + (rhw * 2 / 14) * i, ridge)
+    for (let i = 1; i < 16; i++) {
+      const px = x - ow / 2 + (ow / 16) * i
+      ctx.moveTo(px, yEaves); ctx.lineTo(x - rhw + (rhw * 2 / 16) * i, ridge)
     }
     ctx.stroke()
-    // straw lies in courses too, just softer than tile
-    ctx.strokeStyle = 'rgba(120, 96, 54, 0.16)'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    for (let i = 1; i < 4; i++) {
-      const ry = yEaves - rise * (i / 4)
-      ctx.moveTo(x - ow / 2 + 1, ry); ctx.lineTo(x + ow / 2 - 1, ry)
+    // The rope binding that holds it down, sagging a little between fixings.
+    // These bands are most of what says "thatch" rather than "brown roof".
+    for (let i = 1; i <= 2; i++) {
+      const k = i / 3
+      const ry = yEaves - rise * k
+      const hw = ow / 2 + (rhw - ow / 2) * k
+      ctx.strokeStyle = 'rgba(150, 124, 74, 0.85)'
+      ctx.lineWidth = 1.4
+      ctx.beginPath()
+      ctx.moveTo(x - hw + 1, ry)
+      ctx.quadraticCurveTo(x, ry + 1.1, x + hw - 1, ry)
+      ctx.stroke()
+      ctx.strokeStyle = 'rgba(88, 68, 38, 0.4)'
+      ctx.lineWidth = 0.6
+      ctx.beginPath()
+      ctx.moveTo(x - hw + 1, ry + 1); ctx.quadraticCurveTo(x, ry + 2.1, x + hw - 1, ry + 1)
+      ctx.stroke()
     }
-    ctx.stroke()
+    // the rolled ridge, fat and rounded, with its own binding
+    // A roll along the ridge, not a cap over the whole hip — sized to the
+    // ridge line it sits on, or it reads as a pale disc dropped on the roof.
+    ctx.fillStyle = mid
+    ctx.beginPath(); ctx.ellipse(x, ridge + 0.2, rhw * 0.98, 1.35, 0, 0, Math.PI * 2); ctx.fill()
     ctx.fillStyle = lit
-    ctx.beginPath(); ctx.ellipse(x, ridge + 1, rhw, rise * 0.10, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 0.6
+    ctx.beginPath(); ctx.ellipse(x - rhw * 0.1, ridge - 0.35, rhw * 0.66, 0.7, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = 'rgba(150, 124, 74, 0.7)'
+    ctx.lineWidth = 0.7
+    ctx.beginPath()
+    for (let i = -1; i <= 1; i++) {
+      const rx = x + i * rhw * 0.55
+      ctx.moveTo(rx, ridge - 1.9); ctx.lineTo(rx, ridge + 1.9)
+    }
+    ctx.stroke()
+    // a rolled, slightly ragged eave rather than a knife edge
+    ctx.strokeStyle = shade
+    ctx.lineWidth = 2.2
+    ctx.lineCap = 'round'
+    ctx.beginPath(); ctx.moveTo(x - ow / 2 + 0.8, yEaves - 0.4); ctx.lineTo(x + ow / 2 - 0.8, yEaves - 0.4); ctx.stroke()
   } else {
     // tile or slate courses, tightening toward the ridge
     ctx.strokeStyle = 'rgba(38, 26, 20, 0.26)'
@@ -590,6 +667,9 @@ export function tower(ctx: CanvasRenderingContext2D, x: number, y: number,
 // Openings. Small, dark and deep-set — a bright window reads as a sticker.
 export function windowSlot(ctx: CanvasRenderingContext2D, x: number, y: number,
                            w: number, h: number, arched = false): void {
+  // a pale reveal around the opening, so it sits IN the wall
+  ctx.fillStyle = STONE_LIT
+  ctx.fillRect(x - w / 2 - 1.1, y - h - 1.1, w + 2.2, h + 2.2)
   ctx.fillStyle = '#33291F'
   ctx.beginPath()
   if (arched) {
@@ -601,12 +681,37 @@ export function windowSlot(ctx: CanvasRenderingContext2D, x: number, y: number,
     ctx.rect(x - w / 2, y - h, w, h)
   }
   ctx.closePath(); ctx.fill()
-  ctx.fillStyle = 'rgba(226, 208, 160, 0.30)' // a little light from inside
-  ctx.fillRect(x - w / 2 + 0.6, y - h * 0.55, w - 1.2, h * 0.42)
+  ctx.fillStyle = 'rgba(226, 208, 160, 0.26)' // a little light from inside
+  ctx.fillRect(x - w / 2 + 0.5, y - h * 0.6, w - 1, h * 0.45)
+  // mullions: the cross that makes it a window rather than a dark hole
+  if (w >= 4) {
+    ctx.strokeStyle = 'rgba(72, 60, 44, 0.9)'
+    ctx.lineWidth = 0.7
+    ctx.beginPath()
+    ctx.moveTo(x, y - h + (arched ? w * 0.3 : 0)); ctx.lineTo(x, y)
+    ctx.moveTo(x - w / 2, y - h * 0.5); ctx.lineTo(x + w / 2, y - h * 0.5)
+    ctx.stroke()
+  }
 }
 
 export function doorArch(ctx: CanvasRenderingContext2D, x: number, y: number,
-                         w: number, h: number): void {
+                         w: number, h: number, surround = true): void {
+  // a dressed stone surround, the way a cottage door actually sits in a wall
+  if (surround) {
+    ctx.fillStyle = STONE_LIT
+    ctx.beginPath()
+    ctx.moveTo(x - w / 2 - 1.8, y)
+    ctx.lineTo(x - w / 2 - 1.8, y - h + w / 2)
+    ctx.arc(x, y - h + w / 2, w / 2 + 1.8, Math.PI, 0)
+    ctx.lineTo(x + w / 2 + 1.8, y)
+    ctx.closePath(); ctx.fill()
+    ctx.strokeStyle = 'rgba(112, 104, 90, 0.5)'
+    ctx.lineWidth = 0.6
+    ctx.beginPath()
+    ctx.moveTo(x - w / 2 - 1.8, y - h * 0.34); ctx.lineTo(x - w / 2, y - h * 0.34)
+    ctx.moveTo(x + w / 2, y - h * 0.34); ctx.lineTo(x + w / 2 + 1.8, y - h * 0.34)
+    ctx.stroke()
+  }
   ctx.fillStyle = '#4A3722'
   ctx.beginPath()
   ctx.moveTo(x - w / 2, y)
@@ -616,11 +721,18 @@ export function doorArch(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.closePath(); ctx.fill()
   ctx.fillStyle = '#5E4830'
   ctx.fillRect(x - w / 2 + 0.8, y - h + w / 2, w - 1.6, h - w / 2)
-  ctx.strokeStyle = 'rgba(30, 22, 14, 0.5)'
-  ctx.lineWidth = 0.7
+  // plank joints and the iron ring
+  ctx.strokeStyle = 'rgba(30, 22, 14, 0.45)'
+  ctx.lineWidth = 0.6
   ctx.beginPath()
-  ctx.moveTo(x, y); ctx.lineTo(x, y - h + w * 0.4)
+  ctx.moveTo(x - w * 0.16, y); ctx.lineTo(x - w * 0.16, y - h + w * 0.35)
+  ctx.moveTo(x + w * 0.16, y); ctx.lineTo(x + w * 0.16, y - h + w * 0.35)
   ctx.stroke()
+  if (w > 7) {
+    ctx.strokeStyle = '#2E2A24'
+    ctx.lineWidth = 0.8
+    ctx.beginPath(); ctx.arc(x + w * 0.26, y - h * 0.42, w * 0.11, 0, Math.PI * 2); ctx.stroke()
+  }
 }
 
 export function chimney(ctx: CanvasRenderingContext2D, x: number, y: number,
@@ -1413,19 +1525,47 @@ export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2
 
 export function drawHouse(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
   const x = e.x, y = e.y
-  shadow(ctx, x, y + 5, 24, 8)
-  plot(ctx, x, y + 4, 32)
+  const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   // cottages vary a little by seed so a street of them isn't a row of clones
-  const wide = 26 + (e.seed % 3) * 3
-  const wallMat: Mat = age >= 2 ? 'plaster' : 'timber'
-  const roofMat: RoofMat = age >= 2 ? 'tile' : 'thatch'
-  facade(ctx, x, y, wide, 15, wallMat)
-  if (age >= 2) timberFrame(ctx, x, y, wide, 15, 2 + (e.seed % 2))
-  roof(ctx, x, y - 15, wide, 15, roofMat, 0.18)
-  doorArch(ctx, x - wide * 0.18, y, 6, 9)
-  windowSlot(ctx, x + wide * 0.24, y - 6, 4.5, 5, age >= 2)
-  chimney(ctx, x + wide * 0.34, y - 27, 4, 8)
-  chimneySmoke(ctx, x + wide * 0.34, y - 35, t, e.seed)
+  const wide = 27 + (e.seed % 3) * 2.5
+  const wallH = 16
+  const dark = age === 1
+
+  // plaster over a stone footing — no half-timbering, the reference cottage is
+  // a limewashed wall with dressed stone at the base and around the door
+  facade(ctx, x, y, wide, wallH, dark ? 'timber' : 'plaster', 0.42, !dark)
+  // the painted fascia under the eaves, in the village's colours
+  ctx.fillStyle = c.main
+  ctx.fillRect(x - wide / 2, y - wallH - 2.4, wide, 2.6)
+  ctx.fillStyle = c.dark
+  ctx.fillRect(x - wide / 2, y - wallH - 0.2, wide, 0.8)
+  const d = wide * 0.42
+  ctx.fillStyle = c.dark
+  ctx.beginPath()
+  ctx.moveTo(x + wide / 2, y - wallH - 2.4)
+  ctx.lineTo(x + wide / 2 + d, y - wallH - 2.4 - d * 0.5)
+  ctx.lineTo(x + wide / 2 + d, y - wallH + 0.2 - d * 0.5)
+  ctx.lineTo(x + wide / 2, y - wallH + 0.2)
+  ctx.closePath(); ctx.fill()
+
+  roof(ctx, x, y - wallH - 2.4, wide, 13, dark ? 'thatch' : 'thatch', 0.2, 0.42)
+
+  doorArch(ctx, x, y, 7.5, 11, !dark)
+  windowSlot(ctx, x - wide * 0.31, y - 8.5, 4.2, 4.2, false)
+  windowSlot(ctx, x + wide * 0.31, y - 8.5, 4.2, 4.2, false)
+
+  // the little arched vent hood over the door, catching the light
+  ctx.fillStyle = THATCH_LIT
+  ctx.beginPath(); ctx.ellipse(x - wide * 0.06, y - wallH - 7.5, 3.4, 2.6, 0, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = THATCH_SHADE
+  ctx.beginPath(); ctx.ellipse(x - wide * 0.06, y - wallH - 7.5, 3.4, 2.6, 0, Math.PI * 1.05, Math.PI * 1.45); ctx.fill()
+  ctx.fillStyle = '#C8A23A'
+  ctx.beginPath(); ctx.ellipse(x - wide * 0.06, y - wallH - 7.1, 1.9, 1.5, 0, Math.PI, 0); ctx.fill()
+
+  // The stack rises THROUGH the roof slope: started above the ridge it simply
+  // hangs in the air behind the building.
+  chimney(ctx, x + wide * 0.38, y - wallH - 9, 4.4, 11)
+  chimneySmoke(ctx, x + wide * 0.38, y - wallH - 21, t, e.seed)
 }
 
 export function drawBarracks(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {
