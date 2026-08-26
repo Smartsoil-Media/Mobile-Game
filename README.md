@@ -272,6 +272,11 @@ of yours is being hurt, and a horn for the age turning over.
   off-camera, and never plays anything standing in the fog.
 - Repeats are throttled per sound and pitch-drifted a few percent, so twenty
   villagers chopping in step sound like a village rather than a machine gun.
+- Every sample is levelled onto a common reference when it decodes. Recordings
+  arrive at wildly different levels and no encoder setting reliably fixes that
+  for a file dropped in by hand, so the engine measures what it actually got.
+  The per-sound gains in `MIX` are then free to mean what they say — how loud a
+  chop is *relative to* a boulder — rather than compensating for hot sources.
 - The handbell above the minimap hushes everything, and remembers.
 
 The sim never touches the audio engine — it appends a name and a position to

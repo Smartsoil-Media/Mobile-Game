@@ -43,9 +43,21 @@ const FALLBACK = { gain: 0.4, gap: 0.1, cap: 3 }
 const MAX_VOICES = 12 // a hard ceiling so a big battle can't turn to mud
 const STORE = 'bramblewick.audio'
 
+// Where every sample should sit once loaded. Recordings arrive at wildly
+// different levels — a wide stereo take folded to mono can land 6 dB under a
+// close-mic'd mono one — and no encoder setting reliably fixes that for a file
+// someone drops in by hand. So the engine measures what it actually decoded and
+// trims each sample onto a common reference. MIX below is then free to mean
+// what it says: how loud a chop should be RELATIVE to a boulder, not a
+// correction for how hot the source happened to be.
+const REFERENCE_PEAK = 0.85
+const TRIM_MIN = 0.4 // don't pull down a hot sample too far
+const TRIM_MAX = 3.2 // and don't haul a quiet one up into its own noise floor
+
 let ctx: AudioContext | null = null
 let master: GainNode | null = null
 let buffers: Record<string, AudioBuffer> = {}
+const trim: Record<string, number> = {}
 let ready = false
 let decoding = false
 const voices: Record<string, Voice[]> = {}
@@ -109,10 +121,23 @@ async function decodeAll(): Promise<void> {
         if (p && typeof p.then === 'function') p.then(res, rej)
       })
       buffers[name] = buf
+      trim[name] = levelTrim(buf)
     } catch { /* one bad sample shouldn't cost us the rest */ }
   }
   decoding = false
   ready = true
+}
+
+// One stride over the buffer is plenty to tell a hot sample from a quiet one.
+function levelTrim(b: AudioBuffer): number {
+  const ch = b.getChannelData(0)
+  let peak = 0
+  for (let i = 0; i < ch.length; i += 7) {
+    const v = ch[i] < 0 ? -ch[i] : ch[i]
+    if (v > peak) peak = v
+  }
+  if (peak < 0.02) return 1 // near-silent: leave it be rather than amplify hiss
+  return Math.max(TRIM_MIN, Math.min(TRIM_MAX, REFERENCE_PEAK / peak))
 }
 
 /** Tell the mixer what the camera can see, so sound follows the eye. */
@@ -174,7 +199,7 @@ export function sfx(name: SfxName | string, opts: SfxOpts = {}): void {
       tail = p
     }
     const gain = ctx.createGain()
-    gain.gain.value = mix.gain * space * (opts.gain ?? 1)
+    gain.gain.value = mix.gain * space * (opts.gain ?? 1) * (trim[name] ?? 1)
     tail.connect(gain)
     gain.connect(master)
     live++
@@ -210,14 +235,15 @@ export function heardSfx(): string[] { return heard.slice() }
 export function clearHeard(): void { heard.length = 0 }
 
 /** What each decoded sample actually contains — length and peak level. */
-export function sfxProbe(): { name: string; dur: number; peak: number }[] {
+export function sfxProbe(): { name: string; dur: number; peak: number; trim: number; levelled: number }[] {
   return Object.keys(buffers).map(name => {
     const b = buffers[name]
     const ch = b.getChannelData(0)
     let peak = 0
     // one pass over a stride is plenty to tell sound from silence
     for (let i = 0; i < ch.length; i += 7) peak = Math.max(peak, Math.abs(ch[i]))
-    return { name, dur: b.duration, peak }
+    const t = trim[name] ?? 1
+    return { name, dur: b.duration, peak, trim: t, levelled: peak * t }
   })
 }
 
