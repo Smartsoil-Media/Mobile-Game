@@ -2317,8 +2317,20 @@ if (afterToggle !== 0) throw new Error('tapping a selected villager did not dese
 if (!(await page3.isHidden('#dock'))) throw new Error('dock still visible after deselect')
 
 await page3.waitForTimeout(500)
-await page3.tap('#game', { position: villTap })
-await page3.tap('#game', { position: villTap })
+// Dispatch the pair straight at the touchscreen. page.tap() re-runs Playwright's
+// actionability checks each call, and that overhead grows with frame time — it
+// was eating most of the 350ms double-tap window and making this fail on nothing
+// but render cost. The thing under test is two touches close together, which is
+// exactly what this does.
+{
+  const box = await page3.evaluate(() => {
+    const r = document.getElementById('game').getBoundingClientRect()
+    return { x: r.left, y: r.top }
+  })
+  const tx = box.x + villTap.x, ty = box.y + villTap.y
+  await page3.touchscreen.tap(tx, ty)
+  await page3.touchscreen.tap(tx, ty)
+}
 await page3.waitForTimeout(250)
 const crew = await page3.evaluate(() => {
   const g = window.__game.state

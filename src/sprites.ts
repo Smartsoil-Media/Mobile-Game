@@ -103,7 +103,14 @@ function agedWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 export const SUN_X = 0.42 // how far a shadow slides right, per unit of height
 export const SUN_Y = 0.20 // ...and down
 
+// Buildings draw their shadow and worn earth in the ground pass, where those
+// things actually lie flat. While one is being painted this is switched off so
+// they don't get a second, upright set on top.
+let decals = true
+export function setDecals(on: boolean): void { decals = on }
+
 export function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  if (!decals) return
   // two stacked ellipses: a wide soft penumbra and a tighter contact patch, so
   // the object looks planted instead of floating on a decal
   ctx.fillStyle = 'rgba(44, 54, 36, 0.22)'
@@ -190,13 +197,111 @@ const WALLS: Record<Mat, [string, string, string]> = {
 // The trodden earth a building sits in — softens the join to the grass so
 // nothing looks pasted onto the meadow.
 export function plot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {
-  // Two offset scuffs rather than one ring — a clean ellipse under every
-  // building read as a spotlight, which is exactly what worn ground doesn't
-  // look like.
-  ctx.fillStyle = 'rgba(112, 96, 70, 0.085)'
-  ctx.beginPath(); ctx.ellipse(x, y + 1, w * 0.46, w * 0.155, 0, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = 'rgba(126, 110, 82, 0.065)'
-  ctx.beginPath(); ctx.ellipse(x - w * 0.11, y - 1, w * 0.3, w * 0.1, 0.3, 0, Math.PI * 2); ctx.fill()
+  if (!decals) return
+  // kept for anything that still wants a quick scuff; buildings get the real
+  // treatment from groundDecal(), drawn flat on the ground where it belongs
+  ctx.fillStyle = 'rgba(112, 96, 70, 0.08)'
+  ctx.beginPath(); ctx.ellipse(x, y + 1, w * 0.4, w * 0.14, 0, 0, Math.PI * 2); ctx.fill()
+}
+
+// Worn earth and a cast shadow, drawn in GROUND space so both lie flat in the
+// tilted plane. Drawn inside the sprite they stood upright with the walls,
+// which is exactly why they read as decals pasted under the building instead
+// of ground the building is standing on.
+//
+// The dirt is a seeded wobbly ring rather than an ellipse: a clean oval repeated
+// under every building is the most obviously artificial thing on the map.
+function wobbleRing(ctx: CanvasRenderingContext2D, cx: number, cy: number,
+                    r: number, seed: number, squash: number): void {
+  ctx.beginPath()
+  const N = 14
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2
+    // three offset sines make a lumpy radius that never repeats around the ring
+    const k = 1
+      + Math.sin(a * 3 + seed) * 0.13
+      + Math.sin(a * 5 - seed * 1.7) * 0.08
+      + Math.sin(a * 2 + seed * 0.6) * 0.06
+    const px = cx + Math.cos(a) * r * k
+    const py = cy + Math.sin(a) * r * k * squash
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+}
+
+// Buildings don't move, so their shadow and worn earth are the same paths every
+// frame — about fifty of them per building. Bake each distinct one once and blit
+// it instead; identical buildings share a bake. This is the same trick as the
+// tree cache, and for the same reason: the gesture tests start dropping drag
+// samples once a frame goes much past twenty milliseconds.
+const DECAL_CACHE = new Map<string, { c: HTMLCanvasElement; ox: number; oy: number }>()
+
+export function groundDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
+                            tall: number): void {
+  const key = `${e.kind}:${e.seed % 12}:${Math.round(foot)}:${Math.round(tall)}`
+  let hit = DECAL_CACHE.get(key)
+  if (!hit) {
+    if (DECAL_CACHE.size > 160) { paintDecal(ctx, e, foot, tall); return }
+    const pad = Math.ceil(foot * 1.7 + tall * 1.4 + 12)
+    const c = document.createElement('canvas')
+    c.width = pad * 2
+    c.height = pad * 2
+    const g = c.getContext('2d')
+    if (!g) { paintDecal(ctx, e, foot, tall); return }
+    g.translate(pad, pad)
+    paintDecal(g, { ...e, x: 0, y: 0 } as Ent, foot, tall)
+    hit = { c, ox: pad, oy: pad }
+    DECAL_CACHE.set(key, hit)
+  }
+  ctx.drawImage(hit.c, e.x - hit.ox, e.y - hit.oy)
+}
+
+function paintDecal(ctx: CanvasRenderingContext2D, e: Ent, foot: number,
+                    tall: number): void {
+  const seed = (e.seed % 1000) * 0.017
+  const x = e.x, y = e.y
+
+  // Worn earth first, then the shadow on top of it — the other way round and
+  // the dirt washes the shadow out to nothing.
+  //
+  // It has to be browner and darker than the grass it sits in. Too pale and it
+  // reads as a halo of light around the building rather than ground that has
+  // been walked bare.
+  ctx.fillStyle = 'rgba(124, 101, 66, 0.26)'
+  wobbleRing(ctx, x, y + foot * 0.12, foot * 0.78, seed, 0.70); ctx.fill()
+  ctx.fillStyle = 'rgba(112, 92, 62, 0.20)'
+  wobbleRing(ctx, x - foot * 0.14, y - foot * 0.04, foot * 0.55, seed * 2.3 + 1, 0.68); ctx.fill()
+  ctx.fillStyle = 'rgba(136, 114, 78, 0.16)'
+  wobbleRing(ctx, x + foot * 0.2, y + foot * 0.24, foot * 0.36, seed * 3.1 + 2, 0.66); ctx.fill()
+  // loose scuffs that break the outline, so the worn ground doesn't stop on a
+  // clean edge the way a decal does
+  for (let i = 0; i < 6; i++) {
+    const a = seed * 4 + i * 2.39
+    const d = foot * (0.66 + ((i * 37 + e.seed) % 45) / 100)
+    ctx.fillStyle = i % 2 ? 'rgba(120, 98, 64, 0.15)' : 'rgba(104, 86, 58, 0.11)'
+    ctx.beginPath()
+    ctx.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.64,
+      foot * (0.13 + (i % 3) * 0.05), foot * 0.08, a, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // The shadow the building throws: a sheared footprint lying along the ground
+  // away from the sun, not a blob parked underneath it.
+  const sx = tall * SUN_X * 1.9, sy = tall * SUN_Y * 1.9
+  const f = foot * 0.72
+  ctx.fillStyle = 'rgba(38, 46, 32, 0.30)'
+  ctx.beginPath()
+  ctx.moveTo(x - f * 0.9, y + f * 0.42)
+  ctx.lineTo(x + f, y + f * 0.42)
+  ctx.lineTo(x + f + sx, y + f * 0.42 + sy)
+  ctx.lineTo(x - f * 0.5 + sx, y + f * 0.42 + sy)
+  ctx.closePath()
+  ctx.fill()
+  // a tighter core where the wall meets the ground
+  ctx.fillStyle = 'rgba(34, 42, 28, 0.22)'
+  ctx.beginPath()
+  ctx.ellipse(x + f * 0.12, y + f * 0.3, f * 0.92, f * 0.34, 0, 0, Math.PI * 2)
+  ctx.fill()
 }
 
 // A wall block standing on the ground: the face we look at, plus a shaded
@@ -263,32 +368,49 @@ export function timberFrame(ctx: CanvasRenderingContext2D, x: number, y: number,
 // front slope, so that face carries the courses and the gable ends show as
 // small returns either side.
 export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
-                     w: number, rise: number, mat: RoofMat = 'tile', over = 0.12): void {
+                     w: number, rise: number, mat: RoofMat = 'tile', over = 0.12,
+                     depth = 0.22): void {
   const [shade, mid, lit] = ROOFS[mat]
   const ow = w * (1 + over)
   const ridge = yEaves - rise
-  // gable return on the shaded side
+  // The gable end at the shaded side. It has to sit on the wall's own return —
+  // same depth, same rise — or it reads as a flap peeling off the back of the
+  // building rather than the end of a roof.
+  // Hipped, not gabled. A gable end is a triangle standing in a plane the
+  // camera barely sees, so it reads as a fin stuck on the back of the roof.
+  // Hipping it means every face slopes inward off the eaves and the whole roof
+  // stays one solid mass with nothing poking out past the walls.
+  const d = w * depth
+  const rhw = ow * 0.30 // the ridge is shorter than the eaves — that's the hip
+  // the shaded hip on the sun-away end, tucked back along the wall's return
   ctx.fillStyle = shade
   ctx.beginPath()
   ctx.moveTo(x + ow / 2, yEaves)
-  ctx.lineTo(x + ow / 2 + w * 0.13, yEaves - rise * 0.42)
-  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
+  ctx.lineTo(x + ow / 2 + d * 0.55, yEaves - d * 0.3)
+  ctx.lineTo(x + rhw, ridge)
   ctx.closePath(); ctx.fill()
-  // the front slope
+  // the front slope: wide at the eaves, drawn in to the ridge
   ctx.fillStyle = mid
   ctx.beginPath()
   ctx.moveTo(x - ow / 2, yEaves)
   ctx.lineTo(x + ow / 2, yEaves)
-  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
-  ctx.lineTo(x - ow / 2 + w * 0.02, ridge)
+  ctx.lineTo(x + rhw, ridge)
+  ctx.lineTo(x - rhw, ridge)
+  ctx.closePath(); ctx.fill()
+  // the lit hip on the sun side
+  ctx.fillStyle = lit
+  ctx.beginPath()
+  ctx.moveTo(x - ow / 2, yEaves)
+  ctx.lineTo(x - rhw, ridge)
+  ctx.lineTo(x - ow / 2 + d * 0.3, yEaves - d * 0.18)
   ctx.closePath(); ctx.fill()
   // sun down the left of the slope, shade down the right
   ctx.save()
   ctx.beginPath()
   ctx.moveTo(x - ow / 2, yEaves)
   ctx.lineTo(x + ow / 2, yEaves)
-  ctx.lineTo(x + ow / 2 - w * 0.02, ridge)
-  ctx.lineTo(x - ow / 2 + w * 0.02, ridge)
+  ctx.lineTo(x + rhw, ridge)
+  ctx.lineTo(x - rhw, ridge)
   ctx.closePath(); ctx.clip()
   ctx.globalAlpha = 0.5
   ctx.fillStyle = lit
@@ -304,7 +426,7 @@ export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
     ctx.beginPath()
     for (let i = 1; i < 14; i++) {
       const px = x - ow / 2 + (ow / 14) * i
-      ctx.moveTo(px, yEaves); ctx.lineTo(px + w * 0.012, ridge)
+      ctx.moveTo(px, yEaves); ctx.lineTo(x - rhw + (rhw * 2 / 14) * i, ridge)
     }
     ctx.stroke()
     // straw lies in courses too, just softer than tile
@@ -317,7 +439,7 @@ export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
     }
     ctx.stroke()
     ctx.fillStyle = lit
-    ctx.beginPath(); ctx.ellipse(x, ridge + 1, ow * 0.5, rise * 0.10, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(x, ridge + 1, rhw, rise * 0.10, 0, 0, Math.PI * 2); ctx.fill()
   } else {
     // tile or slate courses, tightening toward the ridge
     ctx.strokeStyle = 'rgba(38, 26, 20, 0.26)'
@@ -327,12 +449,12 @@ export function roof(ctx: CanvasRenderingContext2D, x: number, yEaves: number,
     for (let i = 1; i < rows; i++) {
       const k = i / rows
       const ry = yEaves - rise * k
-      const hw = (ow / 2) * (1 - 0.02 * k)
+      const hw = ow / 2 + (rhw - ow / 2) * k // courses narrow toward the ridge
       ctx.moveTo(x - hw, ry); ctx.lineTo(x + hw, ry)
     }
     ctx.stroke()
     ctx.fillStyle = lit
-    ctx.fillRect(x - ow / 2 + w * 0.02, ridge - 1.6, ow - w * 0.04, 2.2) // ridge cap
+    ctx.fillRect(x - rhw, ridge - 1.6, rhw * 2, 2.2) // ridge cap
   }
   // eaves shadow cast onto the wall below
   ctx.fillStyle = 'rgba(40, 32, 24, 0.22)'
@@ -2020,19 +2142,21 @@ function tunic(ctx: CanvasRenderingContext2D, cx: number, by: number, hw: number
   tunicPath(ctx, cx, by, hw)
   ctx.fillStyle = fill
   ctx.fill()
-  ctx.save()
-  tunicPath(ctx, cx, by, hw)
-  ctx.clip()
-  ctx.globalAlpha = 0.42
+  // The lit and shaded sides are narrower copies of the same tunic, nudged left
+  // and right, so they sit inside the silhouette on their own. Clipping to the
+  // body would be tidier but costs a clip() per unit per frame, and that shows
+  // up in the frame budget once there is a crowd on screen.
+  ctx.globalAlpha = 0.4
   ctx.fillStyle = shade
-  ctx.fillRect(cx + hw * 0.1, by - 12, hw * 1.2, 24)
+  tunicPath(ctx, cx + hw * 0.36, by, hw * 0.62)
+  ctx.fill()
   if (lit) {
-    ctx.globalAlpha = 0.3
+    ctx.globalAlpha = 0.28
     ctx.fillStyle = lit
-    ctx.fillRect(cx - hw * 1.2, by - 12, hw * 0.62, 24)
+    tunicPath(ctx, cx - hw * 0.44, by, hw * 0.52)
+    ctx.fill()
   }
   ctx.globalAlpha = 1
-  ctx.restore()
 }
 
 // A head, with the same light on it. No eyes: two dots at this size read as a
@@ -2043,15 +2167,14 @@ function headBall(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   r *= 0.88
   ctx.fillStyle = SKIN
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
-  ctx.save()
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip()
-  ctx.globalAlpha = 0.5
+  // the shaded side is simply the right half of the same disc — no clip needed
+  ctx.globalAlpha = 0.45
   ctx.fillStyle = SKIN_SHADE
-  ctx.fillRect(cx + r * 0.15, cy - r, r, r * 2)
-  ctx.globalAlpha = 0.35
-  ctx.fillRect(cx - r, cy - r, r * 2, r * 0.5) // brow shadow under hat or helm
+  ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2); ctx.fill()
+  // and the brow shadow is the top cap of it
+  ctx.globalAlpha = 0.3
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.fill()
   ctx.globalAlpha = 1
-  ctx.restore()
 }
 
 function unitBase(ctx: CanvasRenderingContext2D, e: Ent, t: number): { bx: number; by: number; walk: number } {

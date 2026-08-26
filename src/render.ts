@@ -5,7 +5,7 @@ import { inWater } from './nav'
 import {
   drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCrag, drawCroc, drawTC, drawHouse, drawBarracks,
   drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawSite,
-  drawWall, drawGate,
+  drawWall, drawGate, groundDecal, setDecals,
   drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep,
   drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
@@ -18,22 +18,35 @@ let fogCanvas: HTMLCanvasElement | null = null
 
 // Fog overlay drawn from a tiny grid canvas, scaled up so the bilinear
 // filtering gives soft cloudy edges. Cosy deep-forest dark, not pure black.
+let fogImg: ImageData | null = null
+let fogSeenT = -1
+
 function drawFog(ctx: CanvasRenderingContext2D, g: Game): void {
   const { w, h, explored, visible } = g.fog
-  if (!fogCanvas) {
+  if (!fogCanvas || fogCanvas.width !== w || fogCanvas.height !== h) {
     fogCanvas = document.createElement('canvas')
     fogCanvas.width = w
     fogCanvas.height = h
+    fogImg = null
+    fogSeenT = -1
   }
   const fctx = fogCanvas.getContext('2d')!
-  const img = fctx.createImageData(w, h)
-  const d = img.data
-  for (let i = 0; i < w * h; i++) {
-    const o = i * 4
-    d[o] = 74; d[o + 1] = 86; d[o + 2] = 82
-    d[o + 3] = explored[i] ? (visible[i] ? 0 : 112) : 244
+  // Vision is recomputed four times a second, but this ran every frame —
+  // allocating a fresh ImageData and walking every cell sixty times a second to
+  // produce the same picture fifteen times over. g.visionT counts down and is
+  // reset on each recompute, so it going UP is the tell that the fog actually
+  // moved and the bitmap is worth rebuilding.
+  if (!fogImg || g.visionT > fogSeenT) {
+    if (!fogImg) fogImg = fctx.createImageData(w, h)
+    const d = fogImg.data
+    for (let i = 0; i < w * h; i++) {
+      const o = i * 4
+      d[o] = 74; d[o + 1] = 86; d[o + 2] = 82
+      d[o + 3] = explored[i] ? (visible[i] ? 0 : 112) : 244
+    }
+    fctx.putImageData(fogImg, 0, 0)
   }
-  fctx.putImageData(img, 0, 0)
+  fogSeenT = g.visionT
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(fogCanvas, 0, 0, w, h, 0, 0, w * 32, h * 32)
 }
@@ -378,25 +391,6 @@ function drawDecor(ctx: CanvasRenderingContext2D, g: Game, view: View): void {
 
 // worn earth under the village: buildings press a ring of trodden dirt into
 // the grass, so a settlement reads as lived-in rather than dropped-on
-function drawWornEarth(ctx: CanvasRenderingContext2D, g: Game): void {
-  for (const e of g.ents) {
-    if (!isBuilding(e) || !e.complete) continue
-    if (e.kind === 'wall' || e.kind === 'gate' || e.kind === 'farm') continue
-    const f = BUILDINGS[e.kind].foot
-    ctx.fillStyle = 'rgba(197, 174, 126, 0.42)'
-    ctx.beginPath()
-    ctx.ellipse(e.x, e.y + e.r * 0.32, f * 1.35, f * 0.8, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = 'rgba(172, 148, 100, 0.4)'
-    for (let i = 0; i < 4; i++) {
-      const a = e.seed * 0.7 + i * 1.7
-      ctx.beginPath()
-      ctx.ellipse(e.x + Math.cos(a) * f * 1.05, e.y + e.r * 0.32 + Math.sin(a) * f * 0.55, 4, 2.4, a, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }
-}
-
 // a few butterflies looping lazily over the meadow — pure ambience
 function drawButterflies(ctx: CanvasRenderingContext2D, g: Game, time: number): void {
   const anchors = [
@@ -502,7 +496,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   drawZones(ctx, g, view)
   drawStreams(ctx, g, time)
   drawDecor(ctx, g, view)
-  drawWornEarth(ctx, g)
+  // Shadows and trodden earth for every standing building, laid down here in
+  // ground space so they lie flat in the tilted plane and read as ground the
+  // building stands on rather than a decal pasted under it.
+  for (const e of g.ents) {
+    if (!isBuilding(e) || e.kind === 'wall' || e.kind === 'gate' || e.kind === 'farm') continue
+    if (g.fog.explored[fogIndex(g, e.x, e.y)] !== 1) continue
+    const bd = BUILDINGS[e.kind]
+    const k = bd.art ? bd.foot / bd.art : 1
+    groundDecal(ctx, e, bd.foot * 0.62, (e.complete === false ? 14 : 34) * k)
+  }
 
   // selection rings under everything else
   for (const id of g.selection) {
@@ -559,6 +562,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     // the footprint changes the sprite scales about its ground point to match,
     // rather than every building being redrawn by hand at a new size.
     const bd = isBuilding(e) ? BUILDINGS[e.kind] : undefined
+    if (bd) setDecals(false)
     if (bd?.art && bd.art !== bd.foot) {
       const k = bd.foot / bd.art
       ctx.translate(e.x, e.y)
@@ -619,6 +623,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
       rrFill(ctx, e.x - w / 2, y, Math.max(2, w * (e.hp / e.maxHp)), 3, 1.5)
     }
+    setDecals(true)
     ctx.restore()
   }
 
