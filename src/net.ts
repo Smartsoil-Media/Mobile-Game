@@ -108,7 +108,9 @@ const mySums = new Map<number, number>() // our fingerprint at the top of each t
 let tick = 0
 let sentThrough = -1
 let stalledSince = 0
-export let desync: number | null = null // the turn the two worlds parted, if they did
+let desync: number | null = null // the turn the two worlds parted, if they did
+export function desyncedAt(): number | null { return desync }
+export function linkDropped(): boolean { return link?.dropped ?? false }
 
 export function resetNet(): void {
   schedule.clear()

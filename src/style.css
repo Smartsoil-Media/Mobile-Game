@@ -181,6 +181,26 @@ html, body {
   to { opacity: 1; transform: none; }
 }
 
+/* the one line multiplayer ever needs to say: we are waiting, or we have lost
+   them. Sits under the pills, out of the way of the meadow. */
+#net-note {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 74px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  background: rgba(90, 70, 50, 0.92);
+  color: var(--cream);
+  border-radius: 999px;
+  padding: 6px 15px;
+  font-size: 12.5px;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#net-note.hidden { display: none; }
+#net-note.bad { background: rgba(150, 58, 58, 0.94); }
+
 /* ---- bottom dock ---- */
 #dock {
   position: absolute;
@@ -652,6 +672,24 @@ button.cmd.ghost {
   border-color: var(--honey-dark, #C98F2B);
   background: #FFF3D9;
 }
+.code-box {
+  appearance: none;
+  width: 100%;
+  background: #FFF9EC;
+  border: 2.5px solid var(--cream-edge);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  resize: none;
+  word-break: break-all;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.code-box:focus { outline: none; border-color: var(--honey-dark, #C98F2B); background: #FFF3D9; }
+
 .map-cards {
   display: flex;
   flex-direction: column;
@@ -787,8 +825,27 @@ button.cmd.ghost {
   /* the tighter gap would let the coming-soon badge sit on the Solo button */
   #menu-multi { margin-top: 11px; }
   .name-field { padding: 8px 12px; font-size: 16px; }
+  .code-box { font-size: 10px; padding: 6px 8px; }
   .menu-note { font-size: 11px; }
-  .map-cards { flex-direction: row; }
+  .code-box {
+  appearance: none;
+  width: 100%;
+  background: #FFF9EC;
+  border: 2.5px solid var(--cream-edge);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  resize: none;
+  word-break: break-all;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.code-box:focus { outline: none; border-color: var(--honey-dark, #C98F2B); background: #FFF3D9; }
+
+.map-cards { flex-direction: row; }
   .map-card { padding: 8px 11px 9px; }
   .map-card b { font-size: 15px; }
   .map-card small { font-size: 10.5px; line-height: 1.28; }

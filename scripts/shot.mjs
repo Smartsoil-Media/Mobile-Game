@@ -3204,6 +3204,86 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.6) the whole thing, for real: two browsers, a live WebRTC data channel,
+// and a match played through the lobby exactly as a person would — host walks
+// the menu, copies an invite, the guest pastes it and copies a reply, the host
+// pastes that back, and the meadow opens on both.
+{
+  const seat = async name => {
+    const pg = await browser.newPage({ viewport: { width: 844, height: 390 }, hasTouch: true })
+    pg.on('pageerror', e => console.log(name, 'PAGE:', e.message))
+    await pg.goto('file://' + resolve('dist/index.html') + '?map=classic')
+    await pg.waitForFunction(() => !!window.__game)
+    await pg.evaluate(() => window.__game.allowPortrait())
+    return pg
+  }
+  const H = await seat('host'), G = await seat('guest')
+  await H.fill('#login-name', 'Host'); await H.tap('#login-go'); await H.waitForTimeout(150)
+  await H.tap('#menu-multi'); await H.waitForTimeout(150)
+  await H.tap('#mp-host'); await H.waitForTimeout(150)
+  await H.tap('#map-next'); await H.waitForTimeout(150)
+  await H.tap('#play-btn')
+  await H.waitForFunction(() => document.getElementById('invite-code').value.length > 40, { timeout: 20000 })
+  const invite = await H.evaluate(() => document.getElementById('invite-code').value)
+
+  await G.fill('#login-name', 'Guest'); await G.tap('#login-go'); await G.waitForTimeout(150)
+  await G.tap('#menu-multi'); await G.waitForTimeout(150)
+  await G.tap('#mp-join'); await G.waitForTimeout(150)
+  await G.fill('#join-code', invite)
+  await G.tap('#join-go')
+  await G.waitForFunction(() => document.getElementById('join-reply').value.length > 40, { timeout: 20000 })
+  const reply = await G.evaluate(() => document.getElementById('join-reply').value)
+  console.log('handshake: invite', invite.length, 'chars, reply', reply.length, 'chars')
+  // it has to be short enough that a person will actually send it in a message
+  if (invite.length > 1200 || reply.length > 1200)
+    throw new Error(`the handshake is too long to paste: ${invite.length}/${reply.length}`)
+
+  await H.fill('#invite-reply', reply)
+  await H.tap('#invite-go')
+  const inGame = pg => pg.evaluate(() => window.__game.state.started &&
+    document.getElementById('start-overlay').classList.contains('hidden'))
+  for (let i = 0; i < 80; i++) {
+    if (await inGame(H) && await inGame(G)) break
+    await new Promise(r => setTimeout(r, 250))
+  }
+  if (!(await inGame(H)) || !(await inGame(G))) throw new Error('the two never met')
+  await new Promise(r => setTimeout(r, 2500))
+  // an order from each side has to show up on the other machine
+  await H.evaluate(() => {
+    const g = window.__game.state
+    const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager').slice(0, 2).map(e => e.id)
+    window.__game.issueCmd({ t: 'unit', p: 0, ids: v, v: 'move', x: 900, y: 900 })
+  })
+  await G.evaluate(() => {
+    const g = window.__game.state
+    const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
+    window.__game.issueCmd({ t: 'bldg', p: 1, b: tc.id, v: 'train', kind: 'villager' })
+  })
+  await new Promise(r => setTimeout(r, 2500))
+  const look = pg => pg.evaluate(() => {
+    const g = window.__game.state
+    return {
+      ...window.__game.netState(), me: g.me, civs: g.civs.join('/'),
+      marching: g.ents.filter(e => e.team === 0 && e.kind === 'villager' && e.tx !== undefined).length,
+      queued: g.ents.filter(e => e.team === 1).reduce((n, e) => n + (e.queue?.length ?? 0), 0),
+      home: !!g.ents.find(e => e.team === g.me && e.kind === 'towncenter' &&
+        Math.abs(e.x - g.camera.x) < 400 && Math.abs(e.y - g.camera.y) < 400),
+    }
+  })
+  const host = await look(H), guest = await look(G)
+  console.log('live match — host:', host)
+  console.log('live match — guest:', guest)
+  if (host.me !== 0 || guest.me !== 1) throw new Error('the two ended up on the same side of the board')
+  if (host.civs !== guest.civs) throw new Error('they disagree about who is playing whom')
+  if (host.desync !== null || guest.desync !== null) throw new Error('a live match desynced')
+  if (!host.home || !guest.home) throw new Error('a match should open on your own town')
+  if (guest.marching < 2) throw new Error("the host's march never crossed the wire")
+  if (host.queued < 1) throw new Error("the guest's recruit never crossed the wire")
+  if (Math.abs(host.tick - guest.tick) > 12)
+    throw new Error(`the two games drifted apart in time: ${host.tick} vs ${guest.tick}`)
+  await H.close(); await G.close()
+}
+
 // 18.65) lockstep: two real games, one world, orders the only thing crossing
 // between them. Both pages run the whole simulation; the test relays packets
 // and drives the ticks by hand, because comparing two games that are each on
@@ -3480,9 +3560,19 @@ if (!(await pageF.isVisible('#menu-home'))) throw new Error('main menu missing')
 const greeting = await pageF.evaluate(() => document.getElementById('menu-greeting')?.textContent ?? '')
 console.log('greeting:', greeting)
 if (!greeting.includes('Rowan')) throw new Error('the menu should greet you by name, got ' + greeting)
-const soonBadge = await pageF.evaluate(() =>
-  document.querySelector('#menu-multi .soon-badge')?.textContent ?? '')
-if (!soonBadge.includes('soon')) throw new Error('multiplayer should wear a coming-soon badge')
+// multiplayer is real now — the button leads to the lobby rather than a badge
+if (await pageF.evaluate(() => !!document.querySelector('#menu-multi .soon-badge')))
+  throw new Error('multiplayer is playable — it should not still wear a coming-soon badge')
+await pageF.tap('#menu-multi')
+await pageF.waitForTimeout(200)
+const lobby = await pageF.evaluate(() => ({
+  shown: !document.getElementById('menu-mp')?.classList.contains('hidden'),
+  ways: ['mp-host', 'mp-join'].filter(id => !!document.getElementById(id)),
+}))
+console.log('lobby:', lobby)
+if (!lobby.shown || lobby.ways.length !== 2) throw new Error('the lobby should offer hosting and joining')
+await pageF.tap('#mp-back')
+await pageF.waitForTimeout(200)
 await pageF.tap('#menu-solo')
 await pageF.waitForTimeout(200)
 // the map picker: Crocodile Crossing is the home meadow and comes selected

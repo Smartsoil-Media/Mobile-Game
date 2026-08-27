@@ -4,10 +4,11 @@ import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
   CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
-  BANNERS, BANNER_MAX, LION_BANNER, Beast, MAPS,
+  BANNERS, BANNER_MAX, LION_BANNER, Beast, MAPS, MapSpec,
   isUnit, isBuilding, isSiege, canBanner, mustBanner, Formation} from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex, resetGame } from './world'
-import { issue } from './net'
+import { issue, setLink, resetNet, linked, linkDropped, desyncedAt, stalledFor, Link } from './net'
+import { invite, join, Invite } from './rtc'
 import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove, beginMuster, cancelMuster, clearMuster } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
@@ -225,6 +226,98 @@ let playerName = ''
 
 const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
 
+// The only thing a match ever has to say out loud: that we are waiting on the
+// other player, or that we have lost them. A pause of under a second is normal
+// on any connection and is not worth mentioning.
+function netNote(g: Game): void {
+  const note = el2('net-note')
+  if (!linked()) { note.classList.add('hidden'); return }
+  const gone = linkDropped()
+  const split = desyncedAt()
+  const waited = stalledFor(performance.now())
+  const say = split !== null
+    ? 'The two meadows have drifted apart — this match cannot go on.'
+    : gone
+      ? 'Lost them. Check the connection and start again.'
+      : waited > 0.8 ? 'Waiting for the other player…' : ''
+  note.textContent = say
+  note.classList.toggle('hidden', !say)
+  note.classList.toggle('bad', split !== null || gone)
+}
+
+// ---- the lobby ----
+// Hosting and joining, with the handshake done by passing two codes between
+// the players however they like. Everything here is arranging the meeting; the
+// moment a channel opens it hands over to beginMatch and the menu is done.
+
+const el2 = (id: string): HTMLElement => document.getElementById(id)!
+const val = (id: string): string => (el2(id) as HTMLTextAreaElement).value
+const setVal = (id: string, v: string): void => { (el2(id) as HTMLTextAreaElement).value = v }
+
+async function toClipboard(text: string, note: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    el2(note).textContent = 'Copied — send it over.'
+  } catch {
+    // a browser that won't hand out the clipboard still lets you select it
+    el2(note).textContent = 'Select the code above and copy it.'
+  }
+}
+
+/**
+ * Deal the agreed world, sit the player on their side and hand the wire to the
+ * scheduler. From here the match is running and the lobby is out of the way.
+ */
+export function beginMatch(g: Game, canvas: HTMLCanvasElement, me: number, them: number,
+                           seed: number, civs: CivId[], link: Link): void {
+  resetGame(g, seed ? { seed } : undefined)
+  resetNet()
+  g.me = me
+  g.civs = civs
+  g.ai.enabled = false // two players; nobody needs a third
+  setLink(link)
+  // open on your own town rather than wherever the map generator left the view
+  const home = g.ents.find(e => e.team === me && e.kind === 'towncenter')
+  if (home) { g.camera.x = home.x; g.camera.y = home.y }
+  clampCamera(g, canvas)
+  g.started = true
+  el2('start-overlay').classList.add('hidden')
+  toast(g, `${CIVS[civs[1 - me]].name} take the field against you.`)
+}
+
+async function openInvite(g: Game, canvas: HTMLCanvasElement, civ: CivId, map: MapSpec): Promise<void> {
+  step2('menu-invite')
+  setVal('invite-code', '')
+  el2('invite-status').textContent = 'Finding your address…'
+  // A rolled map would have to travel in the invite; the named grounds only
+  // need their seed, which is what the code carries.
+  const seed = map.seed === null ? ((Date.now() >>> 0) || 1) : map.seed
+  let inv: Invite
+  try {
+    inv = await invite(seed, civ)
+  } catch {
+    el2('invite-status').textContent = 'This browser will not open a direct connection.'
+    return
+  }
+  hosting = inv
+  setVal('invite-code', inv.code)
+  el2('invite-status').textContent = 'Send the invite, then paste their reply.'
+  void inv.wait().then(link => {
+    beginMatch(g, canvas, 0, 1, seed, [civ, civ === 'english' ? 'french' : 'english'], link)
+  }).catch(() => { el2('invite-status').textContent = 'Could not reach them — try again.' })
+}
+
+function openJoin(): void {
+  step2('menu-join')
+  setVal('join-code', '')
+  setVal('join-reply', '')
+  el2('join-reply-wrap').classList.add('hidden')
+  el2('join-status').textContent = ''
+}
+
+let hosting: Invite | null = null
+let step2: (id: string) => void = () => {}
+
 export function initUI(g: Game): void {
   const canvas = document.getElementById('game') as HTMLCanvasElement
   // the blue grab-everything button anchors the bottom of the army panel;
@@ -320,10 +413,12 @@ export function initUI(g: Game): void {
   const nameField = el('login-name') as HTMLInputElement
   nameField.value = stored
 
-  const CARDS = ['menu-login', 'menu-home', 'menu-map-screen', 'menu-solo-screen']
+  const CARDS = ['menu-login', 'menu-home', 'menu-mp', 'menu-invite', 'menu-join',
+    'menu-map-screen', 'menu-solo-screen']
   const step = (id: string): void => {
     for (const c of CARDS) el(c).classList.toggle('hidden', c !== id)
   }
+  step2 = step
 
   const signIn = (name: string): void => {
     playerName = name.trim().slice(0, 18)
@@ -359,12 +454,17 @@ export function initUI(g: Game): void {
   mapList.insertAdjacentHTML('afterend',
     '<div class="menu-note">\u{1F5FA} More meadows are being surveyed</div>')
 
-  el('menu-solo').addEventListener('click', () => step('menu-map-screen'))
-  el('map-back').addEventListener('click', () => step('menu-home'))
+  el('menu-solo').addEventListener('click', () => { mpRole = null; step('menu-map-screen') })
+  el('menu-multi').addEventListener('click', () => step('menu-mp'))
+  el('mp-back').addEventListener('click', () => step('menu-home'))
+  el('mp-host').addEventListener('click', () => { mpRole = 'host'; step('menu-map-screen') })
+  el('mp-join').addEventListener('click', () => { mpRole = 'guest'; openJoin() })
+  el('map-back').addEventListener('click', () => step(mpRole ? 'menu-mp' : 'menu-home'))
   el('map-next').addEventListener('click', () => step('menu-solo-screen'))
   el('menu-back').addEventListener('click', () => step('menu-map-screen'))
 
   // ---- banner and difficulty, then out into the meadow ----
+  let mpRole: 'host' | 'guest' | null = null
   let civPick: CivId = 'english'
   document.querySelectorAll<HTMLButtonElement>('.civ-card').forEach(cardEl => {
     cardEl.addEventListener('click', () => {
@@ -381,6 +481,7 @@ export function initUI(g: Game): void {
     })
   })
   el('play-btn').addEventListener('click', () => {
+    if (mpRole === 'host') { void openInvite(g, canvas, civPick, mapPick) ; return }
     // The world was dealt at boot, before you picked a map. Deal it again if
     // the ground you chose isn't the ground under your feet — a fresh roll
     // always counts as different, which is the point of it.
@@ -397,6 +498,31 @@ export function initUI(g: Game): void {
     g.started = true
     el('start-overlay').classList.add('hidden')
     toast(g, `${CIVS[g.civs[1]].name} raise their banner across the meadow.`)
+  })
+  // ---- the code-swapping buttons ----
+  el('invite-copy').addEventListener('click', () => void toClipboard(val('invite-code'), 'invite-status'))
+  el('invite-back').addEventListener('click', () => { hosting?.close(); hosting = null; step('menu-mp') })
+  el('invite-go').addEventListener('click', () => {
+    const reply = val('invite-reply').trim()
+    if (!reply) { el('invite-status').textContent = 'Paste their reply first.'; return }
+    if (!hosting) { el('invite-status').textContent = 'Start the invite again.'; return }
+    el('invite-status').textContent = 'Knocking…'
+    hosting.accept(reply)
+  })
+  el('join-back').addEventListener('click', () => step('menu-mp'))
+  el('join-copy').addEventListener('click', () => void toClipboard(val('join-reply'), 'join-status'))
+  el('join-go').addEventListener('click', () => {
+    const code = val('join-code').trim()
+    if (!code) { el('join-status').textContent = 'Paste their invite first.'; return }
+    el('join-status').textContent = 'Reading the invite…'
+    void join(code, 'french').then(async j => {
+      setVal('join-reply', j.reply)
+      el('join-reply-wrap').classList.remove('hidden')
+      el('join-status').textContent = 'Send this back and the meadow opens.'
+      const hostCiv = (j.hostCiv === 'french' ? 'french' : 'english') as CivId
+      const link = await j.wait()
+      beginMatch(g, canvas, 1, 0, j.seed, [hostCiv, hostCiv === 'english' ? 'french' : 'english'], link)
+    }).catch(() => { el('join-status').textContent = 'That code did not make sense — check it and try again.' })
   })
   el('replay-btn').addEventListener('click', () => location.reload())
 }
@@ -1082,6 +1208,7 @@ export function syncUI(g: Game): void {
   // The HUD belongs to a game in progress. Reading it off g.started here means
   // every way in — the menu, a replay, the test hook — gets it right.
   document.body.classList.toggle('playing', g.started)
+  netNote(g)
   iconCiv = g.civs[g.me] ?? 'english'
   iconTeam = g.me
   const p = pop(g, g.me)

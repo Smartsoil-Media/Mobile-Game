@@ -7,7 +7,7 @@ import { render } from './render'
 import { attachInput, clampCamera, selectArmy, snapPlace, commandMove, beginMuster, plantMuster } from './input'
 import * as sprites from './sprites'
 import { record as recordCmds, applyCmd, issue as issueCmd, stepOne, setLink, resetNet,
-  matchTick, matchTurn, desync, Cmd } from './net'
+  matchTick, matchTurn, desyncedAt, Cmd } from './net'
 import { initUI, syncUI } from './ui'
 import { unlockAudio, listenFrom, drainSfx, sfx, setMuted, setVolume, audioReady, muted, heardSfx, clearHeard, sfxProbe } from './audio'
 
@@ -148,7 +148,7 @@ requestAnimationFrame(frame)
     w.__outbox = outbox
     w.__deliver = p => { inbox.set(p.turn, { cmds: p.cmds, sum: p.sum }) }
   },
-  netState() { return { tick: matchTick(), turn: matchTurn(), desync } },
+  netState() { return { tick: matchTick(), turn: matchTurn(), desync: desyncedAt() } },
   /**
    * Step the match by hand, up to `n` ticks, stopping early if we are waiting
    * on the other player. Comparing two games that are both running on their own

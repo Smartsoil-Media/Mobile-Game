@@ -239,8 +239,7 @@ Four cards, in order:
    greet you next time and put you on the victory card; the sim never
    reads it. *Wander in unnamed* skips it. Real accounts land with
    multiplayer.
-2. **How you're playing** — **Solo**, or **Multiplayer** wearing a *coming
-   soon* badge (a ranked trophy ladder arrives with it).
+2. **How you're playing** — **Solo**, or **Multiplayer** (see below).
 3. **Where you're playing** — the map picker. **Crocodile Crossing** is the
    home meadow: the handcrafted map, a winding stream with three shallow
    fords, crocodiles in the reeds, and woods packed tight enough to wall a
@@ -262,6 +261,49 @@ meadow behind the cards and no HUD until there's a village to report on
 it). The *turn sideways* screen in portrait is the same field, and so is
 everything outside the playfield — including the strip beyond a notched
 phone's viewport — so no pale band shows along an edge.
+
+## Multiplayer
+
+Two phones, no server, nothing to pay for. **Host a game** and you get a short
+code; send it to your friend however you like — a message, a chat, read aloud
+across the room. They paste it into **Join a game**, get a code back, and you
+paste that in. The two phones then talk to each other **directly** over a
+WebRTC data channel. The handshake is about **300 characters**, which fits in a
+text message; the browser's own offer blob is nearer 2KB of boilerplate that is
+identical on every machine, so the code carries only the handful of fields that
+differ, deflated and base64'd.
+
+**How it stays honest.** Both phones run the whole simulation. Nothing but
+*orders* crosses the wire — never positions, never health — so a match costs a
+few hundred bytes a minute and there is no server deciding anything.
+
+That only works if the two simulations agree exactly, which is why the
+simulation is deterministic down to the last bit:
+
+- Every roll that moves the world comes off a seeded stream (`rnd(g)`), not
+  `Math.random`. Particles and sound cues still use `Math.random` — nothing
+  reads them back, and they are left out of the fingerprint.
+- IEEE-754 pins down `+ - * /` and `Math.sqrt` exactly. It does **not** pin
+  down `Math.hypot`, `sin`, `cos` or `atan2`, which can disagree in the last
+  bit between JavaScript engines — which is to say between an iPhone and an
+  Android. So the simulation spells out the ones it needs and quantises the
+  rest. Movement never used trigonometry to begin with.
+- Time is cut into **turns of six ticks**. Each machine seals its orders,
+  sends them for a turn two ahead, and runs the turn now starting. That lead
+  lets a packet cross without either side stopping dead; when it hasn't
+  arrived the tick simply doesn't run — a stall, not a guess, because a guess
+  is how the worlds part.
+- Every packet carries a **fingerprint** of the sender's world. If the two ever
+  disagree the match says so plainly rather than quietly playing two different
+  games.
+
+**What it can't do yet.** A STUN server tells each side how it looks from
+outside, which gets through most home routers. Two phones both on mobile
+networks behind carrier-grade NAT need a relay, and a relay needs a server —
+the thing this whole approach avoids. There is no reconnect: lose the channel
+and the match is over. And nothing stops a modified client from cheating, which
+is what an authoritative server would be for. The order layer is the same
+either way, so that upgrade is a transport swap rather than a rewrite.
 
 ## Two hosts, told apart at a glance
 

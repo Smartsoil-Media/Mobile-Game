@@ -12,6 +12,7 @@
     <div class="pill pill-tap" id="p-pop"><span class="top" id="t-pop"><b id="pop-n">3/5</b></span><span class="sub" id="s-pop"><b id="idle-n">0</b>&nbsp;idle</span></div>
   </div>
   <div id="toasts"></div>
+  <div id="net-note" class="hidden"></div>
   <div id="info-card" class="hidden"></div>
   <div id="army-panel"></div>
   <div id="prod-panel"></div>
@@ -37,9 +38,41 @@
       <h1>Choose a game</h1>
       <p>Gather, build, age up through landmarks, and march your little soldiers on the enemy town hall before their village outgrows yours.</p>
       <button class="big-btn" id="menu-solo">Solo</button>
-      <button class="big-btn menu-locked" id="menu-multi" aria-disabled="true">Multiplayer<span class="soon-badge">coming soon</span></button>
-      <div class="menu-note">&#x1F3C6; Ranked ladder arrives with multiplayer</div>
+      <button class="big-btn" id="menu-multi">Multiplayer</button>
+      <div class="menu-note">&#x1F3C6; Ranked ladder arrives with accounts</div>
       <button class="menu-back" id="home-back">&#8249; not you?</button>
+    </div>
+    <div class="card hidden" id="menu-mp">
+      <div class="tagline">Two villages</div>
+      <h1>Play a friend</h1>
+      <p>No server and no account &mdash; the two phones talk to each other directly. You swap one code each to introduce them.</p>
+      <button class="big-btn" id="mp-host">Host a game</button>
+      <button class="big-btn" id="mp-join">Join a game</button>
+      <button class="menu-back" id="mp-back">&#8249; back</button>
+    </div>
+    <div class="card hidden" id="menu-invite">
+      <div class="tagline">Step one &mdash; send this over</div>
+      <h1>Your invite</h1>
+      <textarea id="invite-code" class="code-box" readonly rows="2" aria-label="Your invite code"></textarea>
+      <button class="big-btn" id="invite-copy">Copy invite</button>
+      <p>Step two &mdash; paste what they send back:</p>
+      <textarea id="invite-reply" class="code-box" rows="2" placeholder="Their reply" aria-label="Their reply"></textarea>
+      <button class="big-btn" id="invite-go">Open the gate</button>
+      <div class="menu-note" id="invite-status">Gathering your address&hellip;</div>
+      <button class="menu-back" id="invite-back">&#8249; back</button>
+    </div>
+    <div class="card hidden" id="menu-join">
+      <div class="tagline">Someone sent you a code</div>
+      <h1>Join a game</h1>
+      <textarea id="join-code" class="code-box" rows="2" placeholder="Paste their invite" aria-label="Their invite"></textarea>
+      <button class="big-btn" id="join-go">Accept</button>
+      <div id="join-reply-wrap" class="hidden">
+        <p>Send this back to them:</p>
+        <textarea id="join-reply" class="code-box" readonly rows="2" aria-label="Your reply"></textarea>
+        <button class="big-btn" id="join-copy">Copy reply</button>
+      </div>
+      <div class="menu-note" id="join-status"></div>
+      <button class="menu-back" id="join-back">&#8249; back</button>
     </div>
     <div class="card hidden" id="menu-map-screen">
       <div class="tagline">Choose your ground</div>
