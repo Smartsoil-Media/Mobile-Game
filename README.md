@@ -264,14 +264,27 @@ phone's viewport — so no pale band shows along an edge.
 
 ## Multiplayer
 
-Two phones, no server, nothing to pay for. **Host a game** and you get a short
-code; send it to your friend however you like — a message, a chat, read aloud
-across the room. They paste it into **Join a game**, get a code back, and you
-paste that in. The two phones then talk to each other **directly** over a
-WebRTC data channel. The handshake is about **300 characters**, which fits in a
-text message; the browser's own offer blob is nearer 2KB of boilerplate that is
-identical on every machine, so the code carries only the handful of fields that
-differ, deflated and base64'd.
+Two phones, no server, nothing to pay for. **Host a game** and you get a
+**link**. Send it however you like — a message, a chat, a thread. Your friend
+**taps it**: the game opens, reads the invite out of the fragment, joins, and
+hands them a link to send back. You tap that one, and you're both in the
+meadow. Nobody types anything.
+
+The link is about 360 characters, which fits in a text message. The browser's
+own offer blob is nearer 2KB of SDP boilerplate that is identical on every
+machine, so the code carries only the handful of fields that actually differ —
+ice-ufrag, ice-pwd, the DTLS fingerprint as bare hex, the setup role and the
+candidates — deflated and base64'd, and the other side writes the boilerplate
+back out from a template. The code rides in the URL **fragment**, which browsers
+never send to the server hosting the page, so an invite is never logged
+anywhere. Both paste boxes still take a bare code if you'd rather.
+
+Because an invite is just a link, **anywhere people can post text is a lobby** —
+a group chat, a Discord channel, a thread. Post yours, someone taps it, they
+post their reply link back, you tap that. There's no "looking for a game" board
+yet: a board would have to carry replies *back* to the right host, which is
+shared mutable state, which is a server. Worth building when finding a stranger
+is the bottleneck; not before.
 
 **How it stays honest.** Both phones run the whole simulation. Nothing but
 *orders* crosses the wire — never positions, never health — so a match costs a
@@ -297,7 +310,9 @@ simulation is deterministic down to the last bit:
   disagree the match says so plainly rather than quietly playing two different
   games.
 
-**What it can't do yet.** A STUN server tells each side how it looks from
+**What it can't do yet.** An invite is tied to a live page — the host has to
+stay on the invite screen until their friend taps the link, because the offer
+belongs to an open connection. A STUN server tells each side how it looks from
 outside, which gets through most home routers. Two phones both on mobile
 networks behind carrier-grade NAT need a relay, and a relay needs a server —
 the thing this whole approach avoids. There is no reconnect: lose the channel

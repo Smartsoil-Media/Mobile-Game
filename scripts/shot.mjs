@@ -3204,6 +3204,55 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.55) an invite is a link, and tapping it is the whole of joining. The guest
+// never sees the menu: the code rides in the fragment, the game reads it, takes
+// itself to the join card and accepts. What comes back is a link too, so the
+// host taps rather than pastes.
+{
+  const at = async (name, url) => {
+    const pg = await browser.newPage({ viewport: { width: 844, height: 390 }, hasTouch: true })
+    pg.on('pageerror', e => console.log(name, 'PAGE:', e.message))
+    await pg.goto(url)
+    await pg.waitForFunction(() => !!window.__game)
+    await pg.evaluate(() => window.__game.allowPortrait())
+    return pg
+  }
+  const base = 'file://' + resolve('dist/index.html') + '?map=classic'
+  const H = await at('host', base)
+  await H.fill('#login-name', 'Host'); await H.tap('#login-go'); await H.waitForTimeout(150)
+  await H.tap('#menu-multi'); await H.waitForTimeout(150)
+  await H.tap('#mp-host'); await H.waitForTimeout(150)
+  await H.tap('#map-next'); await H.waitForTimeout(150)
+  await H.tap('#play-btn')
+  await H.waitForFunction(() => document.getElementById('invite-code').value.length > 40, { timeout: 20000 })
+  const inviteLink = await H.evaluate(() => document.getElementById('invite-code').value)
+  console.log('invite link:', inviteLink.length, 'chars')
+  if (!inviteLink.includes('#lfg=')) throw new Error('an invite should be a link people can tap')
+
+  // the guest does nothing but open it
+  const G = await at('guest', inviteLink)
+  await G.waitForFunction(() => document.getElementById('join-reply').value.length > 40, { timeout: 25000 })
+  const replyLink = await G.evaluate(() => document.getElementById('join-reply').value)
+  if (!replyLink.includes('#reply=')) throw new Error('the reply should be a link too')
+  if (await G.evaluate(() => location.hash))
+    throw new Error('the code should be cleared from the address bar once read')
+
+  // and the host can paste the whole link, not just the code inside it
+  await H.fill('#invite-reply', replyLink)
+  await H.tap('#invite-go')
+  const inGame = pg => pg.evaluate(() => window.__game.state.started &&
+    document.getElementById('start-overlay').classList.contains('hidden'))
+  for (let i = 0; i < 80; i++) {
+    if (await inGame(H) && await inGame(G)) break
+    await new Promise(r => setTimeout(r, 250))
+  }
+  if (!(await inGame(H)) || !(await inGame(G))) throw new Error('tapping an invite link did not start a match')
+  const sides = await Promise.all([H, G].map(pg => pg.evaluate(() => window.__game.state.me)))
+  console.log('joined by link — sides:', sides)
+  if (sides[0] !== 0 || sides[1] !== 1) throw new Error('the link put them on the wrong sides')
+  await H.close(); await G.close()
+}
+
 // 18.6) the whole thing, for real: two browsers, a live WebRTC data channel,
 // and a match played through the lobby exactly as a person would — host walks
 // the menu, copies an invite, the guest pastes it and copies a reply, the host

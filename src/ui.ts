@@ -250,7 +250,24 @@ function netNote(g: Game): void {
 // the players however they like. Everything here is arranging the meeting; the
 // moment a channel opens it hands over to beginMatch and the menu is done.
 
+// ---- invites as links ----
+// A 300-character blob is something you paste; a link is something you tap.
+// Same code either way — it rides in the fragment, which never leaves the
+// browser for the server hosting the page.
 const el2 = (id: string): HTMLElement => document.getElementById(id)!
+
+function linkFor(kind: 'lfg' | 'reply', code: string): string {
+  const base = location.href.split('#')[0]
+  return `${base}#${kind}=${code}`
+}
+
+/** Pull a code out of whatever was handed over: a bare code or a whole link. */
+export function codeFrom(text: string): { kind: 'lfg' | 'reply' | null; code: string } {
+  const t = text.trim()
+  const m = t.match(/#(lfg|reply)=([A-Za-z0-9_-]+)/)
+  if (m) return { kind: m[1] as 'lfg' | 'reply', code: m[2] }
+  return { kind: null, code: t.replace(/\s+/g, '') }
+}
 const val = (id: string): string => (el2(id) as HTMLTextAreaElement).value
 const setVal = (id: string, v: string): void => { (el2(id) as HTMLTextAreaElement).value = v }
 
@@ -300,8 +317,8 @@ async function openInvite(g: Game, canvas: HTMLCanvasElement, civ: CivId, map: M
     return
   }
   hosting = inv
-  setVal('invite-code', inv.code)
-  el2('invite-status').textContent = 'Send the invite, then paste their reply.'
+  setVal('invite-code', linkFor('lfg', inv.code))
+  el2('invite-status').textContent = 'Send the link, then paste what they send back.'
   void inv.wait().then(link => {
     beginMatch(g, canvas, 0, 1, seed, [civ, civ === 'english' ? 'french' : 'english'], link)
   }).catch(() => { el2('invite-status').textContent = 'Could not reach them — try again.' })
@@ -500,10 +517,11 @@ export function initUI(g: Game): void {
     toast(g, `${CIVS[g.civs[1]].name} raise their banner across the meadow.`)
   })
   // ---- the code-swapping buttons ----
-  el('invite-copy').addEventListener('click', () => void toClipboard(val('invite-code'), 'invite-status'))
+  el('invite-copy').addEventListener('click', () =>
+    void toClipboard(val('invite-code'), 'invite-status'))
   el('invite-back').addEventListener('click', () => { hosting?.close(); hosting = null; step('menu-mp') })
   el('invite-go').addEventListener('click', () => {
-    const reply = val('invite-reply').trim()
+    const reply = codeFrom(val('invite-reply')).code
     if (!reply) { el('invite-status').textContent = 'Paste their reply first.'; return }
     if (!hosting) { el('invite-status').textContent = 'Start the invite again.'; return }
     el('invite-status').textContent = 'Knocking…'
@@ -512,11 +530,11 @@ export function initUI(g: Game): void {
   el('join-back').addEventListener('click', () => step('menu-mp'))
   el('join-copy').addEventListener('click', () => void toClipboard(val('join-reply'), 'join-status'))
   el('join-go').addEventListener('click', () => {
-    const code = val('join-code').trim()
+    const code = codeFrom(val('join-code')).code
     if (!code) { el('join-status').textContent = 'Paste their invite first.'; return }
     el('join-status').textContent = 'Reading the invite…'
     void join(code, 'french').then(async j => {
-      setVal('join-reply', j.reply)
+      setVal('join-reply', linkFor('reply', j.reply))
       el('join-reply-wrap').classList.remove('hidden')
       el('join-status').textContent = 'Send this back and the meadow opens.'
       const hostCiv = (j.hostCiv === 'french' ? 'french' : 'english') as CivId
@@ -524,6 +542,26 @@ export function initUI(g: Game): void {
       beginMatch(g, canvas, 1, 0, j.seed, [hostCiv, hostCiv === 'english' ? 'french' : 'english'], link)
     }).catch(() => { el('join-status').textContent = 'That code did not make sense — check it and try again.' })
   })
+  // ---- arriving by link ----
+  // Someone tapped an invite. Skip the whole menu, take their code and get
+  // straight to the one thing they have to do: send the reply back.
+  const arrived = codeFrom(location.hash)
+  if (arrived.kind === 'lfg' && arrived.code) {
+    history.replaceState(null, '', location.href.split('#')[0])
+    mpRole = 'guest'
+    signIn(stored) // they can name themselves later; they came here to play
+    openJoin()
+    setVal('join-code', arrived.code)
+    el('join-status').textContent = 'Invite read — one tap and you are in.'
+    // let the card paint before the browser goes off gathering addresses
+    setTimeout(() => el('join-go').click(), 60)
+  } else if (arrived.kind === 'reply' && arrived.code) {
+    // the host tapped the reply their friend sent back
+    history.replaceState(null, '', location.href.split('#')[0])
+    el('invite-status').textContent =
+      'That is a reply — open your invite again and paste it there.'
+  }
+
   el('replay-btn').addEventListener('click', () => location.reload())
 }
 
