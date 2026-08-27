@@ -1,7 +1,8 @@
 // World creation and shared queries/helpers.
 import {
   Game, Ent, Kind, Cost, Pt, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
-  CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
+  CHAMPS, TECHS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP, AGE_NAMES,
+  LEVY_SPEAR_COST, LEVY_SPEAR_TIME, SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H, LION_BANNER,
   dist, isUnit, isBuilding, isResource, mustBanner, BANNER_MAX, Formation, rnd, rndInt, dcos, dsin, q,
 } from './data'
@@ -532,6 +533,62 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
   return best
 }
 
+// ---- what a building can be asked to do ----
+// These used to live in the dock, checking and paying on the spot. They moved
+// here because in a match they run on both phones from the same order: the
+// checks have to happen the same way on each, and only the player who gave the
+// order should be told why it failed.
+
+export function trainAt(g: Game, b: Ent, kind: Kind, tell = true): boolean {
+  const team = b.team
+  const s = UNITS[kind]
+  if (!s) return false
+  const say = (m: string): false => { if (tell) toast(g, m); return false }
+  const ageReq = unitAgeReq(g, team, kind)
+  if (ageReq > g.age[team]) return say(`Reach the ${AGE_NAMES[ageReq]} first!`)
+  // the King's Barracks musters its spear levy for a pittance;
+  // the School of Cavalry saddles knights at a chevalier's discount
+  const levy = b.kind === 'kingsbarracks' && kind === 'spearman'
+  const school = b.kind === 'cavalryschool' && kind === 'knight'
+  const cost = levy ? LEVY_SPEAR_COST : school ? SCHOOL_KNIGHT_COST : s.cost
+  const time = levy ? LEVY_SPEAR_TIME : school ? SCHOOL_KNIGHT_TIME : s.time
+  const p = pop(g, team)
+  let queued = 0
+  for (const e of g.ents) if (e.team === team && e.queue) queued += e.queue.length
+  if (p.used + queued >= p.cap) return say('Population full — build a House!')
+  if (!canAfford(g, team, cost)) {
+    const r = g.res[team]
+    return say(
+      r.food < cost.food ? 'Not enough food — forage berries or work a farm!' :
+      r.gold < cost.gold ? 'Not enough gold — mine some!' :
+      r.stone < cost.stone ? 'Not enough stone — quarry some!' :
+      'Not enough wood!')
+  }
+  if ((b.queue?.length ?? 0) >= 5) return say('Training queue is full.')
+  pay(g, team, cost)
+  b.queue!.push({ kind, t: time, total: time })
+  g.uiDirty = true
+  return true
+}
+
+export function researchAt(g: Game, b: Ent, id: ChampId | TechId, tell = true): boolean {
+  const team = b.team
+  const say = (m: string): false => { if (tell) toast(g, m); return false }
+  const champ = (CHAMPS as Record<string, { name: string; cost: Cost; time: number }>)[id]
+  const tech = (TECHS as Record<string, { name: string; cost: Cost; time: number }>)[id]
+  const spec = champ ?? tech
+  if (!spec) return false
+  const need = champ ? 3 : 2
+  if (g.age[team] < need) return say(`Reach the ${AGE_NAMES[need]} first!`)
+  if (b.research) return false
+  if (champ ? g.champs[team][id as ChampId] : g.techs[team][id as TechId]) return false
+  if (!canAfford(g, team, spec.cost)) return say(`Not enough for ${spec.name}.`)
+  pay(g, team, spec.cost)
+  b.research = { id, t: spec.time, total: spec.time }
+  g.uiDirty = true
+  return true
+}
+
 export function ringBell(g: Game, tc: Ent): void {
   let called = 0
   for (const v of g.ents) {
@@ -720,9 +777,14 @@ export function wallsUnderGate(g: Game, x: number, y: number): Ent[] {
 // the run of posts a dragged wall line would place, flagged buildable or not.
 // Posts sit evenly along the true line (no per-post grid snap), so diagonal
 // fences run straight instead of stair-stepping.
+// The ghost line the dock is showing — your own drag, so it reads the placement
+// state directly. The order that follows names its two ends instead.
 export function wallLinePoints(g: Game): { x: number; y: number; ok: boolean }[] {
   if (!g.placePos || !g.placeEnd) return []
-  const a = g.placePos, b = g.placeEnd
+  return wallLineBetween(g, g.placePos, g.placeEnd)
+}
+
+export function wallLineBetween(g: Game, a: Pt, b: Pt): { x: number; y: number; ok: boolean }[] {
   const steps = Math.max(1, Math.round(dist(a.x, a.y, b.x, b.y) / PLACE_SNAP))
   const pts: { x: number; y: number; ok: boolean }[] = []
   for (let i = 0; i <= steps; i++) {

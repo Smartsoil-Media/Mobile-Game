@@ -6,6 +6,7 @@ import { update } from './sim'
 import { render } from './render'
 import { attachInput, clampCamera, selectArmy, snapPlace, commandMove, beginMuster, plantMuster } from './input'
 import * as sprites from './sprites'
+import { record as recordCmds, applyCmd, issue as issueCmd, Cmd } from './net'
 import { initUI, syncUI } from './ui'
 import { unlockAudio, listenFrom, drainSfx, sfx, setMuted, setVolume, audioReady, muted, heardSfx, clearHeard, sfxProbe } from './audio'
 
@@ -108,6 +109,10 @@ requestAnimationFrame(frame)
   sprites,
   // ---- determinism, which multiplayer stands or falls on ----
   checksum() { return checksum(g) },
+  // ---- the command layer ----
+  recordCmds(on: boolean) { return recordCmds(on) },
+  applyCmd(c: Cmd) { applyCmd(g, c) },
+  issueCmd(c: Cmd) { issueCmd(g, c) },
   // what the LOCAL player can see of a spot — dark, remembered, or lit
   fogAt(x: number, y: number) {
     const i = fogIndex(g, x, y)

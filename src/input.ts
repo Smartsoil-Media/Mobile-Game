@@ -1,6 +1,9 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, LION_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING, len,} from './data'
-import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, LION_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING, len, Pt,} from './data'
+// net.ts imports back from here; both sides are function declarations, so the
+// cycle resolves cleanly at load and only matters at call time.
+import { issue } from './net'
+import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, wallLineBetween, farmTaken } from './world'
 
 export interface PointerState {
   pointers: Map<number, { x: number; y: number }>
@@ -164,40 +167,42 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
   }
 }
 
-export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
+export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number,
+                                 team = g.me, ids?: number[], angle?: number, tell = true): boolean {
   const b = BUILDINGS[kind]
-  if ((b.age ?? 1) > g.age[g.me]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
+  const say = (m: string): false => { if (tell) toast(g, m); return false }
+  if ((b.age ?? 1) > g.age[team]) return say(`Reach the ${AGE_NAMES[b.age ?? 1]} first!`)
   const lm = LANDMARKS[kind as LandmarkKind]
   if (lm) {
-    if (lm.civ !== g.civs[g.me]) { toast(g, 'That landmark belongs to another banner.'); return false }
-    if (g.age[g.me] >= lm.toAge) { toast(g, `The ${AGE_NAMES[lm.toAge]} is already yours.`); return false }
-    if (lm.toAge !== g.age[g.me] + 1) { toast(g, `Reach the ${AGE_NAMES[lm.toAge - 1]} first!`); return false }
-    if (g.ents.some(e => e.team === g.me && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
-      toast(g, 'A landmark is already rising.')
-      return false
+    if (lm.civ !== g.civs[team]) return say('That landmark belongs to another banner.')
+    if (g.age[team] >= lm.toAge) return say(`The ${AGE_NAMES[lm.toAge]} is already yours.`)
+    if (lm.toAge !== g.age[team] + 1) return say(`Reach the ${AGE_NAMES[lm.toAge - 1]} first!`)
+    if (g.ents.some(e => e.team === team && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
+      return say('A landmark is already rising.')
     }
   }
-  if (kind === 'wall') return tryPlaceWall(g)
-  if (!canAfford(g, g.me, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
-  if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
-  let villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === g.me)
+  if (!canAfford(g, team, b.cost)) return say(`Not enough resources for a ${b.name}.`)
+  if (!canPlaceAt(g, kind, x, y)) return say("Can't build there — the ground is blocked.")
+  // The crew is named in the order, not read off whatever happens to be
+  // selected: the other player's selection is none of our business.
+  let villagers = crewFor(g, team, ids)
   if (!villagers.length && lm) {
     // landmarks are begun from the Town Hall — round up the nearest spare hands
     villagers = g.ents
-      .filter(e => e.team === g.me && e.kind === 'villager' && !e.hidden && e.state !== 'build')
+      .filter(e => e.team === team && e.kind === 'villager' && !e.hidden && e.state !== 'build')
       .sort((a, b2) => dist(a.x, a.y, x, y) - dist(b2.x, b2.y, x, y))
       .slice(0, 2)
   }
-  if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
-  pay(g, g.me, b.cost)
+  if (!villagers.length) return say('Select a villager first.')
+  pay(g, team, b.cost)
   clearSpent(g, kind, x, y) // sweep away the stumps and rubble underneath
-  const site = spawn(g, kind, 0, x, y, false)
+  const site = spawn(g, kind, team, x, y, false)
   if (kind === 'gate') {
-    site.angle = g.placeAngle
+    site.angle = angle ?? 0
     // the gate is set INTO the fence: the posts it swallows come down, and
     // their timber goes back in the pile
     for (const post of wallsUnderGate(g, x, y)) {
-      g.res[g.me].wood += BUILDINGS.wall.cost.wood
+      g.res[team].wood += BUILDINGS.wall.cost.wood
       const i = g.ents.indexOf(post)
       if (i >= 0) g.ents.splice(i, 1)
       g.byId.delete(post.id)
@@ -205,44 +210,71 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
     g.navDirty = true
   }
   commandBuild(g, villagers, site)
-  cue(g, 'place', x, y)
-  g.placing = null
-  g.placePos = null
-  g.placeEnd = null
+  if (tell) cue(g, 'place', x, y)
+  if (team === g.me) {
+    g.placing = null
+    g.placePos = null
+    g.placeEnd = null
+  }
   g.uiDirty = true
   return true
 }
 
+// The villagers an order names, or — for an order of our own that named none —
+// whoever is selected. Never anyone of the wrong colour.
+function crewFor(g: Game, team: number, ids?: number[]): Ent[] {
+  if (ids) {
+    return ids.map(i => g.byId.get(i))
+      .filter((e): e is Ent => !!e && e.team === team && e.kind === 'villager')
+  }
+  return selectedEnts(g).filter(e => e.kind === 'villager' && e.team === team)
+}
+
 // place the whole dragged line of palisade posts at once
-function tryPlaceWall(g: Game): boolean {
+export function tryPlaceWall(g: Game, a: Pt, b2: Pt, team = g.me, ids?: number[], tell = true): boolean {
   const b = BUILDINGS.wall
-  const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === g.me)
-  if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
-  const pts = wallLinePoints(g).filter(p => p.ok)
-  if (!pts.length) { toast(g, "Can't build there — the ground is blocked."); return false }
+  const say = (m: string): false => { if (tell) toast(g, m); return false }
+  const villagers = crewFor(g, team, ids)
+  if (!villagers.length) return say('Select a villager first.')
+  const pts = wallLineBetween(g, a, b2).filter(p => p.ok)
+  if (!pts.length) return say("Can't build there — the ground is blocked.")
   let placed = 0
   let first: Ent | null = null
   for (const p of pts) {
-    if (!canAfford(g, g.me, b.cost)) break
+    if (!canAfford(g, team, b.cost)) break
     if (!canPlaceAt(g, 'wall', p.x, p.y)) continue // earlier posts may crowd a later spot
-    pay(g, g.me, b.cost)
+    pay(g, team, b.cost)
     clearSpent(g, 'wall', p.x, p.y)
-    const site = spawn(g, 'wall', 0, p.x, p.y, false)
+    const site = spawn(g, 'wall', team, p.x, p.y, false)
     if (!first) first = site
     placed++
   }
-  if (!placed) { toast(g, 'Not enough wood for the fence.'); return false }
-  if (placed < pts.length) toast(g, 'The wood ran out partway along the fence.')
+  if (!placed) return say('Not enough wood for the fence.')
+  if (placed < pts.length && tell) toast(g, 'The wood ran out partway along the fence.')
   commandBuild(g, villagers, first!)
-  cue(g, 'place', first!.x, first!.y)
-  g.placing = null
-  g.placePos = null
-  g.placeEnd = null
+  if (tell) cue(g, 'place', first!.x, first!.y)
+  if (team === g.me) {
+    g.placing = null
+    g.placePos = null
+    g.placeEnd = null
+  }
   g.uiDirty = true
   return true
 }
 
 // ---- Tap resolution ----
+// A tap decides WHAT to ask for; these turn that into an order on the wire.
+// Nothing in handleTap reaches into the world any more.
+function order(g: Game, us: Ent[], v: 'attack' | 'gather' | 'build' | 'garrison' | 'relic' | 'enshrine', target: Ent): void {
+  if (!us.length) return
+  issue(g, { t: 'unit', p: g.me, ids: us.map(u => u.id), v, target: target.id })
+}
+
+function moveOrder(g: Game, us: Ent[], x: number, y: number): void {
+  if (!us.length) return
+  issue(g, { t: 'unit', p: g.me, ids: us.map(u => u.id), v: 'move', x, y })
+}
+
 
 const DOUBLE_TAP_MS = 350
 const GROUP_RADIUS = 170
@@ -255,7 +287,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   // planting a muster flag: one tap on the grass sets it and the mode is done
   if (g.mustering !== null) {
-    plantMuster(g, g.mustering, x, y)
+    issue(g, { t: 'host', p: g.me, v: 'muster', banner: g.mustering, x, y })
     return
   }
 
@@ -320,7 +352,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (hit && hit.team === g.me && isBuilding(hit) && hit.complete === false) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
-      commandBuild(g, villagers, hit)
+      order(g, villagers, 'build', hit)
       return
     }
   }
@@ -338,10 +370,10 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
         while (fi < fields.length && farmTaken(g, fields[fi], villagers)) fi++
         if (fi >= fields.length) {
           toast(g, 'Every field has its farmer — plant another farm.')
-          commandMove(g, villagers.slice(vi), hit.x + 46, hit.y + 40)
+          moveOrder(g, villagers.slice(vi), hit.x + 46, hit.y + 40)
           break
         }
-        commandGather(g, [villagers[vi]], fields[fi])
+        order(g, [villagers[vi]], 'gather', fields[fi])
         fi++
       }
       return
@@ -352,12 +384,9 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (hit && hit.team === g.me && isBuilding(hit) && hit.complete && hit.hp < hit.maxHp) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
-      commandBuild(g, villagers, hit)
+      order(g, villagers, 'build', hit)
       if (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') {
-        for (const u of myUnits.filter(e => e.kind !== 'villager')) {
-          u.state = 'garrison'
-          u.targetId = hit.id
-        }
+        order(g, myUnits.filter(e => e.kind !== 'villager'), 'garrison', hit)
       }
       return
     }
@@ -367,20 +396,14 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   if (hit && hit.team === g.me && (hit.kind === 'church' || hit.kind === 'ministry') && hit.complete) {
     const carriers = myUnits.filter(m => m.kind === 'monk' && m.relicId !== undefined)
     if (carriers.length) {
-      for (const m of carriers) {
-        m.state = 'enshrine'
-        m.targetId = hit.id
-      }
+      order(g, carriers, 'enshrine', hit)
       return
     }
   }
 
   // units tap one of your watchtowers (or a fortress landmark): climb inside
   if (hit && hit.team === g.me && (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') && hit.complete && myUnits.length) {
-    for (const u of myUnits) {
-      u.state = 'garrison'
-      u.targetId = hit.id
-    }
+    order(g, myUnits, 'garrison', hit)
     return
   }
 
@@ -397,38 +420,35 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     const villagers = myUnits.filter(e => e.kind === 'villager')
     const monks = myUnits.filter(e => e.kind === 'monk')
     const soldiers = myUnits.filter(e => e.kind !== 'villager' && e.kind !== 'monk')
-    if (hit && hit.team === 1) {
+    if (hit && hit.team >= 0 && hit.team !== g.me) {
       // monks carry no weapon — they walk along while the others fight
-      commandAttack(g, myUnits.filter(e => e.kind !== 'monk'), hit)
-      if (monks.length) commandMove(g, monks, x, y)
+      order(g, myUnits.filter(e => e.kind !== 'monk'), 'attack', hit)
+      if (monks.length) moveOrder(g, monks, x, y)
       return
     }
     // a wayside relic: only a monk may lift it
     if (hit && hit.kind === 'relic') {
       const freeHands = monks.filter(m => m.relicId === undefined)
       if (freeHands.length) {
-        for (const m of freeHands) {
-          m.state = 'fetchrelic'
-          m.targetId = hit.id
-        }
+        order(g, freeHands, 'relic', hit)
       } else {
         if (!monks.length) toast(g, 'Only a monk may carry a relic — train one at a Church.')
-        commandMove(g, myUnits, x, y)
+        moveOrder(g, myUnits, x, y)
       }
       return
     }
     // a live crocodile: soldiers put it to the sword, villagers hunt it
     if (hit && hit.kind === 'croc' && hit.hp > 0) {
-      if (soldiers.length) commandAttack(g, soldiers, hit)
-      if (villagers.length) commandGather(g, villagers, hit)
+      if (soldiers.length) order(g, soldiers, 'attack', hit)
+      if (villagers.length) order(g, villagers, 'gather', hit)
       return
     }
     if (hit && isResource(hit)) {
-      if (villagers.length) commandGather(g, villagers, hit)
-      if (soldiers.length) commandMove(g, soldiers, x, y)
+      if (villagers.length) order(g, villagers, 'gather', hit)
+      if (soldiers.length) moveOrder(g, soldiers, x, y)
       return
     }
-    commandMove(g, myUnits, x, y)
+    moveOrder(g, myUnits, x, y)
     return
   }
 
@@ -448,9 +468,9 @@ function nearestSourceFor(g: Game, v: Ent, res: ResKind): Ent | null {
 
 // HUD pill tap: put one more villager on this resource — idle hands first,
 // then borrow from whichever other line has the most workers
-export function sendVillagerToResource(g: Game, res: ResKind): void {
-  const vills = g.ents.filter(e => e.team === g.me && e.kind === 'villager' && !e.hidden)
-  if (!vills.length) { toast(g, 'No villagers yet — train some at the Town Hall.'); return }
+export function sendVillagerToResource(g: Game, res: ResKind, team = g.me, tell = true): void {
+  const vills = g.ents.filter(e => e.team === team && e.kind === 'villager' && !e.hidden)
+  if (!vills.length) { if (tell) toast(g, 'No villagers yet — train some at the Town Hall.'); return }
   let pick: Ent | null = null
   const idle = vills.filter(v => v.state === 'idle')
   if (idle.length) {
@@ -474,11 +494,11 @@ export function sendVillagerToResource(g: Game, res: ResKind): void {
     }
     if (busiest) pick = groups[busiest]![groups[busiest]!.length - 1]
   }
-  if (!pick) { toast(g, 'Every villager is busy building or fighting.'); return }
+  if (!pick) { if (tell) toast(g, 'Every villager is busy building or fighting.'); return }
   const src = nearestSourceFor(g, pick, res)
   if (!src) {
     const names: Record<ResKind, string> = { wood: 'trees', food: 'food', gold: 'gold', stone: 'stone' }
-    toast(g, `No ${names[res]} left to gather.`)
+    if (tell) toast(g, `No ${names[res]} left to gather.`)
     return
   }
   commandGather(g, [pick], src)
@@ -571,32 +591,31 @@ export function cancelMuster(g: Game): void {
   g.uiDirty = true
 }
 
-export function plantMuster(g: Game, banner: number, x: number, y: number, team = g.me): void {
+export function plantMuster(g: Game, banner: number, x: number, y: number, team = g.me, tell = true): void {
   const w = g.world
   g.muster[team][banner] = {
     x: Math.max(20, Math.min(w.w - 20, x)),
     y: Math.max(20, Math.min(w.h - 20, y)),
   }
-  g.mustering = null
-  cue(g, 'place', x, y)
-  toast(g, `${BANNERS[banner].name} will muster here.`)
+  if (team === g.me) g.mustering = null
+  if (tell) { cue(g, 'place', x, y); toast(g, `${BANNERS[banner].name} will muster here.`) }
   g.uiDirty = true
 }
 
-export function clearMuster(g: Game, banner: number, team = g.me): void {
+export function clearMuster(g: Game, banner: number, team = g.me, tell = true): void {
   g.muster[team][banner] = null
-  g.mustering = null
-  toast(g, `${BANNERS[banner].name} musters at its halls again.`)
+  if (team === g.me) g.mustering = null
+  if (tell) toast(g, `${BANNERS[banner].name} musters at its halls again.`)
   g.uiDirty = true
 }
 
 // raise the next banner in the roll and hand it whatever is selected
-export function raiseBanner(g: Game, units: Ent[], team = g.me): void {
-  if (g.banners[team] >= BANNER_MAX) { toast(g, 'Every banner is already flying.'); return }
+export function raiseBanner(g: Game, units: Ent[], team = g.me, tell = true): void {
+  if (g.banners[team] >= BANNER_MAX) { if (tell) toast(g, 'Every banner is already flying.'); return }
   const banner = g.banners[team]++
   if (units.length) assignBanner(g, units, banner) // a hall may raise one with nobody yet
-  g.activeBanner = banner
-  toast(g, `${BANNERS[banner].name} rides out — the Lion no longer counts them.`)
+  if (team === g.me) g.activeBanner = banner
+  if (tell) toast(g, `${BANNERS[banner].name} rides out — the Lion no longer counts them.`)
   g.uiDirty = true
 }
 

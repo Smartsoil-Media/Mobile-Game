@@ -7,6 +7,7 @@ import {
   BANNERS, BANNER_MAX, LION_BANNER, Beast, MAPS,
   isUnit, isBuilding, isSiege, canBanner, mustBanner, Formation} from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex, resetGame } from './world'
+import { issue } from './net'
 import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove, beginMuster, cancelMuster, clearMuster } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
@@ -244,7 +245,7 @@ export function initUI(g: Game): void {
   for (const r of ['wood', 'food', 'gold', 'stone'] as ResKind[]) {
     el(`s-${r}`).insertAdjacentHTML('afterbegin', MINI_VILL)
     // tapping a resource pill puts one more villager on that resource
-    el(`p-${r}`).addEventListener('click', () => sendVillagerToResource(g, r))
+    el(`p-${r}`).addEventListener('click', () => issue(g, { t: 'work', p: g.me, res: r }))
   }
   el('p-pop').addEventListener('click', () => cycleIdleVillager(g, canvas))
 
@@ -410,32 +411,28 @@ function queueLen(g: Game): number {
   return n
 }
 
-function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk' | 'mangonel' | 'trebuchet'): void {
-  const s = UNITS[kind]
-  const ageReq = unitAgeReq(g, g.me, kind)
-  if (ageReq > g.age[g.me]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
-  // the King's Barracks musters its spear levy for a pittance;
-  // the School of Cavalry saddles knights at a chevalier's discount
-  const levy = b.kind === 'kingsbarracks' && kind === 'spearman'
-  const school = b.kind === 'cavalryschool' && kind === 'knight'
-  const trainCost = levy ? LEVY_SPEAR_COST : school ? SCHOOL_KNIGHT_COST : s.cost
-  const trainTime = levy ? LEVY_SPEAR_TIME : school ? SCHOOL_KNIGHT_TIME : s.time
-  const p = pop(g, g.me)
-  if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
-  if (!canAfford(g, g.me, trainCost)) {
-    const r = g.res[g.me]
-    const missing =
-      r.food < trainCost.food ? 'Not enough food — forage berries or work a farm!' :
-      r.gold < trainCost.gold ? 'Not enough gold — mine some!' :
-      r.stone < trainCost.stone ? 'Not enough stone — quarry some!' :
-      'Not enough wood!'
-    toast(g, missing)
-    return
+// The tick on the placement dock: turn the ghost into an order. A wall is one
+// order for the whole dragged line, not one per post.
+function placeFromDock(g: Game): void {
+  if (!g.placing || !g.placePos) return
+  const ids = selectedEnts(g)
+    .filter(e => e.kind === 'villager' && e.team === g.me).map(e => e.id)
+  if (g.placing === 'wall') {
+    if (!g.placeEnd) return
+    issue(g, { t: 'wall', p: g.me, a: { ...g.placePos }, b: { ...g.placeEnd }, ids })
+  } else {
+    issue(g, {
+      t: 'place', p: g.me, kind: g.placing, x: g.placePos.x, y: g.placePos.y,
+      angle: g.placing === 'gate' ? g.placeAngle : undefined, ids,
+    })
   }
-  if ((b.queue?.length ?? 0) >= 5) { toast(g, 'Training queue is full.'); return }
-  pay(g, g.me, trainCost)
-  b.queue!.push({ kind, t: trainTime, total: trainTime })
-  g.uiDirty = true
+}
+
+// Everything below raises an ORDER rather than reaching into the world. Solo
+// that happens on the spot; in a match it crosses to the other phone and both
+// run it on the same tick. See net.ts.
+function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk' | 'mangonel' | 'trebuchet'): void {
+  issue(g, { t: 'bldg', p: g.me, b: b.id, v: 'train', kind })
 }
 
 interface IconBtn {
@@ -570,14 +567,7 @@ function researchDock(g: Game, dock: HTMLElement, b: Ent): void {
     const spec = TECHS[id]
     dock.appendChild(iconButton(
       { cmd: `research-${id}`, label: `Research ${spec.name} — ${spec.blurb}`, icon: TECH_ICON[id], cost: spec.cost, locked: g.age[g.me] < 2 },
-      () => {
-        if (g.age[g.me] < 2) { toast(g, 'Reach the Feudal Age first!'); return }
-        if (b.research || g.techs[g.me][id]) return
-        if (!canAfford(g, g.me, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
-        pay(g, g.me, spec.cost)
-        b.research = { id, t: spec.time, total: spec.time }
-        g.uiDirty = true
-      }))
+      () => issue(g, { t: 'bldg', p: g.me, b: b.id, v: 'research', id })))
   }
 }
 
@@ -590,14 +580,7 @@ function champDock(g: Game, dock: HTMLElement, b: Ent): void {
   const spec = CHAMPS[id]
   dock.appendChild(iconButton(
     { cmd: `champ-${id}`, label: `${spec.name} — ${spec.blurb}`, icon: ICON.crown, cost: spec.cost, locked: g.age[g.me] < 3 },
-    () => {
-      if (g.age[g.me] < 3) { toast(g, 'Reach the Castle Age first!'); return }
-      if (b.research || g.champs[g.me][id]) return
-      if (!canAfford(g, g.me, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
-      pay(g, g.me, spec.cost)
-      b.research = { id, t: spec.time, total: spec.time }
-      g.uiDirty = true
-    }))
+    () => issue(g, { t: 'bldg', p: g.me, b: b.id, v: 'research', id })))
 }
 
 function updateAffordability(g: Game): void {
@@ -811,7 +794,7 @@ function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
         label: kind === 'line' ? 'Form a line across the advance' : 'Bunch up shoulder to shoulder',
         icon: formationIcon(kind) },
       () => {
-        g.formation[g.me][owner] = kind
+        issue(g, { t: 'host', p: g.me, v: 'formation', banner: owner, f: kind })
         toast(g, kind === 'line'
           ? `${BANNERS[owner].name} forms a line.`
           : `${BANNERS[owner].name} bunches up.`)
@@ -820,7 +803,8 @@ function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
         if (moving.length > 1) {
           let tx = 0, ty = 0
           for (const u of moving) { tx += u.tx!; ty += u.ty! }
-          commandMove(g, moving, tx / moving.length, ty / moving.length)
+          issue(g, { t: 'unit', p: g.me, ids: moving.map(u => u.id), v: 'move',
+            x: tx / moving.length, y: ty / moving.length })
         }
         g.uiDirty = true
       }))
@@ -846,7 +830,7 @@ function musterDock(g: Game, dock: HTMLElement, b: Ent): void {
       dock.appendChild(iconButton(
         { cmd: 'muster-clear', label: `${spec.name} musters at its halls again`,
           icon: musterIcon('#B9B1A2', '#8E877A', true) },
-        () => clearMuster(g, banner)))
+        () => issue(g, { t: 'host', p: g.me, v: 'unmuster', banner })))
     }
     return
   }
@@ -879,7 +863,7 @@ function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
     dock.appendChild(iconButton(
       { cmd: `recruit-to-${i}`, label: `Send recruits to ${BANNERS[i].name}`, icon: bannerIcon(i, 38) },
       () => {
-        b.recruitBanner = i
+        issue(g, { t: 'bldg', p: g.me, b: b.id, v: 'recruit', banner: i })
         bannerPick = false
         toast(g, `${BUILDINGS[b.kind].name}: recruits ride under ${BANNERS[i].name}.`)
         g.uiDirty = true
@@ -889,8 +873,8 @@ function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
     dock.appendChild(iconButton(
       { cmd: 'recruit-to-new', label: 'Raise a new banner for these recruits', icon: bannerIcon(g.banners[g.me], 38) },
       () => {
-        b.recruitBanner = g.banners[g.me]
-        raiseBanner(g, [])
+        issue(g, { t: 'bldg', p: g.me, b: b.id, v: 'recruit', banner: g.banners[g.me] })
+        issue(g, { t: 'host', p: g.me, v: 'raise' })
         bannerPick = false
         g.uiDirty = true
       }))
@@ -1192,7 +1176,7 @@ export function syncUI(g: Game): void {
       { cmd: 'confirm', label: `Place ${b.name}`, icon: `<span class="tick">✓</span>`, cost: b.cost,
         badge: g.placing === 'wall' ? '×1' : undefined },
       () => {
-        if (g.placePos) tryPlaceBuilding(g, g.placing!, g.placePos.x, g.placePos.y)
+        if (g.placePos) placeFromDock(g)
       })
     dock.appendChild(tick)
   } else if (first && first.kind === 'towncenter' && first.complete) {
@@ -1235,11 +1219,11 @@ export function syncUI(g: Game): void {
       if (garrison > 0) {
         dock.appendChild(iconButton(
           { cmd: 'doors', label: 'Open the doors — back to work!', icon: ICON.bell, badge: `×${garrison}` },
-          () => openDoors(g, first)))
+          () => issue(g, { t: 'bldg', p: g.me, b: first.id, v: 'doors' })))
       } else {
         dock.appendChild(iconButton(
           { cmd: 'bell', label: 'Ring the bell — shelter villagers', icon: ICON.bell },
-          () => ringBell(g, first)))
+          () => issue(g, { t: 'bldg', p: g.me, b: first.id, v: 'bell' })))
       }
       }
   } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill' ||
@@ -1264,7 +1248,7 @@ export function syncUI(g: Game): void {
   } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === g.me && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
-      () => openDoors(g, first)))
+      () => issue(g, { t: 'bldg', p: g.me, b: first.id, v: 'doors' })))
   } else if (first && (first.kind === 'barracks' || first.kind === 'kingsbarracks') && first.complete && first.team === g.me) {
     const levy = first.kind === 'kingsbarracks'
     dock.appendChild(iconButton(

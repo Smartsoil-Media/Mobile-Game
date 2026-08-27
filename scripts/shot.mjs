@@ -3204,6 +3204,52 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.7) every order has to survive being written down. In a solo game an order
+// is applied on the spot and it would never matter; in a match it goes on the
+// wire as JSON, and anything that cannot make that trip — an entity handed over
+// instead of its id, an undefined where a number belongs — would work perfectly
+// right up until the first game against someone else.
+{
+  await page3.evaluate(() => window.__game.recordCmds(true))
+  const tc = await page3.evaluate(() => {
+    const g = window.__game.state
+    g.res[g.me].wood = 900; g.res[g.me].food = 900; g.res[g.me].gold = 400; g.res[g.me].stone = 400
+    const t = g.ents.find(e => e.team === g.me && e.kind === 'towncenter')
+    window.__game.select(t.id)
+    g.uiDirty = true
+    return { id: t.id, x: t.x, y: t.y }
+  })
+  await page3.waitForTimeout(250)
+  await page3.tap('[data-cmd="train-villager"]')       // a building order
+  await page3.waitForTimeout(200)
+  await page3.evaluate(({ id, x, y }) => {
+    const g = window.__game.state
+    const v = g.ents.filter(e => e.team === g.me && e.kind === 'villager' && !e.hidden)
+    g.selection = v.slice(0, 2).map(e => e.id)
+    // a march, a gather and a repair, straight through the order layer
+    window.__game.issueCmd({ t: 'unit', p: g.me, ids: g.selection, v: 'move', x: x + 90, y: y + 90 })
+    const tree = g.ents.find(e => e.kind === 'tree')
+    window.__game.issueCmd({ t: 'unit', p: g.me, ids: g.selection, v: 'gather', target: tree.id })
+    window.__game.issueCmd({ t: 'host', p: g.me, v: 'formation', banner: 0, f: 'line' })
+    window.__game.issueCmd({ t: 'work', p: g.me, res: 'wood' })
+    g.uiDirty = true
+  }, tc)
+  await page3.waitForTimeout(250)
+  const cmds = await page3.evaluate(() => window.__game.recordCmds(false))
+  console.log('orders raised:', cmds.map(c => `${c.t}/${c.v ?? c.kind ?? c.res}`).join(' '))
+  if (cmds.length < 5) throw new Error('expected the dock to raise orders, got ' + cmds.length)
+  for (const c of cmds) {
+    const trip = JSON.parse(JSON.stringify(c))
+    if (JSON.stringify(trip) !== JSON.stringify(c))
+      throw new Error('an order did not survive the wire: ' + JSON.stringify(c))
+    if (typeof c.p !== 'number') throw new Error('an order must say who gave it: ' + JSON.stringify(c))
+    for (const [k, v] of Object.entries(c)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && !('x' in v))
+        throw new Error(`order ${c.t} is carrying an object on ${k} — send its id instead`)
+    }
+  }
+}
+
 // 18.75) the other chair. Multiplayer seats one player on each side, so the
 // whole HUD has to work for team 1 as well: their resources, their roster,
 // their fog. Nothing here is about the network — it is about the game being
