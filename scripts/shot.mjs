@@ -3204,6 +3204,84 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.65) lockstep: two real games, one world, orders the only thing crossing
+// between them. Both pages run the whole simulation; the test relays packets
+// and drives the ticks by hand, because comparing two games that are each on
+// their own clock compares them at different ticks and tells you nothing.
+{
+  const seat = async (me, them) => {
+    const pg = await browser.newPage({ viewport: { width: 844, height: 390 }, hasTouch: true })
+    await pg.goto('file://' + resolve('dist/index.html') + '?map=classic')
+    await pg.waitForFunction(() => !!window.__game)
+    await pg.evaluate(() => window.__game.allowPortrait())
+    await pg.evaluate(([m, t]) => {
+      window.__game.sit(m, t, 4242)
+      window.__game.state.speed = 0 // the test is the only thing moving time
+    }, [me, them])
+    return pg
+  }
+  const A = await seat(0, 1), B = await seat(1, 0)
+  const relay = async () => {
+    for (const [from, to] of [[A, B], [B, A]]) {
+      const out = await from.evaluate(() => window.__outbox.splice(0))
+      for (const pkt of out) await to.evaluate(q => window.__deliver(q), pkt)
+    }
+  }
+  for (let turn = 0; turn < 30; turn++) {
+    if (turn === 3) await A.evaluate(() => {
+      const g = window.__game.state
+      const v = g.ents.filter(e => e.team === 0 && e.kind === 'villager').slice(0, 2).map(e => e.id)
+      window.__game.issueCmd({ t: 'unit', p: 0, ids: v, v: 'move', x: 700, y: 700 })
+    })
+    if (turn === 5) await B.evaluate(() => {
+      const g = window.__game.state
+      const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
+      window.__game.issueCmd({ t: 'bldg', p: 1, b: tc.id, v: 'train', kind: 'villager' })
+    })
+    await relay()
+    await A.evaluate(() => window.__game.stepMatch(6))
+    await B.evaluate(() => window.__game.stepMatch(6))
+    await relay()
+  }
+  const read = pg => pg.evaluate(() => {
+    const g = window.__game.state
+    return {
+      ...window.__game.netState(), sum: window.__game.checksum(),
+      vills: [0, 1].map(t => g.ents.filter(e => e.team === t && e.kind === 'villager').length),
+      queued: [0, 1].map(t => g.ents.filter(e => e.team === t).reduce((n, e) => n + (e.queue?.length ?? 0), 0)),
+      marching: g.ents.filter(e => e.team === 0 && e.kind === 'villager' && e.tx !== undefined).length,
+    }
+  })
+  const host = await read(A), guest = await read(B)
+  console.log('lockstep:', { tick: [host.tick, guest.tick], sum: [host.sum, guest.sum] })
+  if (host.tick !== guest.tick) throw new Error(`the two games are on different ticks: ${host.tick} vs ${guest.tick}`)
+  if (host.sum !== guest.sum) throw new Error('two worlds, one match: the fingerprints disagree')
+  if (host.desync !== null || guest.desync !== null) throw new Error('a desync was flagged during a clean match')
+  // and the orders actually crossed: the host's march is visible on the guest's
+  // machine, the guest's recruit on the host's
+  if (guest.marching < 2) throw new Error("the host's march never reached the guest")
+  if (host.queued[1] + host.vills[1] <= 3) throw new Error("the guest's recruit never reached the host")
+
+  // the alarm has to bite. Change one world behind the other's back — exactly
+  // what a lost order or a stray Math.random would do — and the next exchange
+  // of fingerprints must notice.
+  await A.evaluate(() => window.__game.applyCmd({
+    t: 'bldg', p: 0, v: 'train', kind: 'villager',
+    b: window.__game.state.ents.find(e => e.team === 0 && e.kind === 'towncenter').id,
+  }))
+  for (let turn = 0; turn < 6; turn++) {
+    await relay()
+    await A.evaluate(() => window.__game.stepMatch(6))
+    await B.evaluate(() => window.__game.stepMatch(6))
+    await relay()
+  }
+  const after = [(await read(A)).desync, (await read(B)).desync]
+  console.log('desync alarm after a world was nudged:', after)
+  if (after[0] === null && after[1] === null)
+    throw new Error('the two worlds parted and neither noticed')
+  await A.close(); await B.close()
+}
+
 // 18.7) every order has to survive being written down. In a solo game an order
 // is applied on the spot and it would never matter; in a match it goes on the
 // wire as JSON, and anything that cannot make that trip — an entity handed over

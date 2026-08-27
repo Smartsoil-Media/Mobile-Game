@@ -16,6 +16,8 @@ import {
   sendVillagerToResource, raiseBanner, plantMuster, clearMuster, commandGather,
 } from './input'
 import { trainAt, researchAt, ringBell, openDoors } from './world'
+import { update } from './sim'
+import { checksum } from './data'
 
 /** Orders to a handful of units. */
 export interface UnitCmd {
@@ -100,10 +102,30 @@ export const TURN_LEAD = 2
 /** Orders waiting for their turn to come round, ours and theirs alike. */
 const schedule = new Map<number, Cmd[]>()
 let pending: Cmd[] = [] // ours, for the turn currently being filled
+const filed = new Set<number>() // turns whose incoming packet we have already used
+const mySums = new Map<number, number>() // our fingerprint at the top of each turn
+
+let tick = 0
+let sentThrough = -1
+let stalledSince = 0
+export let desync: number | null = null // the turn the two worlds parted, if they did
 
 export function resetNet(): void {
   schedule.clear()
+  filed.clear()
+  mySums.clear()
   pending = []
+  tick = 0
+  sentThrough = -1
+  stalledSince = 0
+  desync = null
+}
+
+export function matchTick(): number { return tick }
+export function matchTurn(): number { return Math.floor(tick / TURN_TICKS) }
+/** How long we have been waiting on the other player, in seconds. */
+export function stalledFor(now: number): number {
+  return stalledSince ? (now - stalledSince) / 1000 : 0
 }
 
 /**
@@ -138,6 +160,59 @@ export function fileTurn(turn: number, cmds: Cmd[], from: number): void {
 }
 
 export function forgetTurn(turn: number): void { schedule.delete(turn) }
+
+/**
+ * One tick of a match, or of a solo game. Returns false when we cannot step
+ * because the other player's orders for this turn have not arrived — the
+ * caller simply doesn't advance, and tries again next frame.
+ *
+ * Time is cut into turns of TURN_TICKS. At the top of each turn we seal
+ * whatever we have been asked to do, send it off for a turn TURN_LEAD ahead,
+ * and run the orders that were sealed for the turn now starting. That lead is
+ * what lets a packet cross the wire without either machine stopping dead.
+ */
+export function stepOne(g: Game, step: number, now: number): boolean {
+  if (!link) { update(g, step); tick++; return true }
+  const turn = Math.floor(tick / TURN_TICKS)
+  if (tick % TURN_TICKS === 0) {
+    // seal and send our orders for a turn a little way ahead
+    const target = turn + TURN_LEAD
+    if (target > sentThrough) {
+      const mine = takePending()
+      const sum = checksum(g)
+      mySums.set(turn, sum)
+      fileTurn(target, mine, g.me)
+      link.send(target, mine, sum)
+      sentThrough = target
+    }
+    // and wait for theirs before running this one
+    if (turn >= TURN_LEAD) {
+      const packet = link.inbox.get(turn)
+      if (!packet) {
+        if (!stalledSince) stalledSince = now
+        return false
+      }
+      stalledSince = 0
+      if (!filed.has(turn)) {
+        filed.add(turn)
+        fileTurn(turn, packet.cmds, link.them)
+        // Their fingerprint was taken at the top of turn (turn - TURN_LEAD),
+        // which is a moment we also have a note of. If those disagree the two
+        // worlds have already parted and nothing after this is worth playing.
+        const at = turn - TURN_LEAD
+        const ours = mySums.get(at)
+        if (desync === null && ours !== undefined && packet.sum !== ours) desync = at
+        mySums.delete(at)
+        link.inbox.delete(turn)
+      }
+    }
+    for (const c of turnCmds(turn)) applyCmd(g, c)
+    forgetTurn(turn)
+  }
+  update(g, step)
+  tick++
+  return true
+}
 
 // ---- applying an order ----
 
