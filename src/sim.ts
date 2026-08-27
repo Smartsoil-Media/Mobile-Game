@@ -11,7 +11,8 @@ import {
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
   TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
-  dist, isUnit, isBuilding, isResource, isSiege, mustBanner, cue, FORMATION_SPACING,
+  dist, len, isUnit, isBuilding, isResource, isSiege, mustBanner, cue, FORMATION_SPACING,
+  rnd, dcos, dsin,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { lineClear, findPath, inWater, streamDist } from './nav'
@@ -31,7 +32,7 @@ export function puff(g: Game, x: number, y: number, color: string, n = 4, kind: 
 }
 
 function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
-  const dGoal = Math.hypot(tx - e.x, ty - e.y)
+  const dGoal = len(tx - e.x, ty - e.y)
   if (dGoal < 3) return true
   const team = e.team === 1 ? 1 : 0
 
@@ -63,7 +64,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   const direct = aimX === tx && aimY === ty
 
   const dx = aimX - e.x, dy = aimY - e.y
-  const d = Math.hypot(dx, dy) || 1
+  const d = len(dx, dy) || 1
   let dirX = dx / d, dirY = dy / d
 
   // steering: if the stretch just ahead runs into a building, slide along its
@@ -93,7 +94,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
   }
   if (block) {
     const ox = e.x - block.x, oy = e.y - block.y
-    const ol = Math.hypot(ox, oy) || 1
+    const ol = len(ox, oy) || 1
     const nx = ox / ol, ny = oy / ol
     // pick a side once and stick with it until the way is clear
     if (!e.avoidSide) e.avoidSide = (dirX * -oy + dirY * ox) >= 0 ? 1 : -1
@@ -101,7 +102,7 @@ function moveToward(g: Game, e: Ent, tx: number, ty: number, speed: number, dt: 
     // tangent around the obstacle, blended slightly outward so we don't hug the wall
     dirX = -ny * side + nx * 0.35
     dirY = nx * side + ny * 0.35
-    const dl = Math.hypot(dirX, dirY) || 1
+    const dl = len(dirX, dirY) || 1
     dirX /= dl; dirY /= dl
   } else {
     e.avoidSide = undefined
@@ -280,7 +281,7 @@ function updateVillager(g: Game, e: Ent, dt: number): void {
           } else if (res!.kind === 'deer') {
             // startled: a short bolt away from the hunter, then it tires
             const dx = res!.x - e.x, dy = res!.y - e.y
-            const d = Math.hypot(dx, dy) || 1
+            const d = len(dx, dy) || 1
             res!.tx = res!.x + (dx / d) * 55
             res!.ty = res!.y + (dy / d) * 55
             res!.fleeT = 0.7
@@ -453,18 +454,18 @@ function updateDeer(g: Game, e: Ent, dt: number): void {
   } else {
     e.scanT = (e.scanT ?? 0) - dt
     if (e.scanT <= 0) {
-      e.scanT = 3 + Math.random() * 4
+      e.scanT = 3 + rnd(g) * 4
       const stranger = nearest(g, e.x, e.y, o => isUnit(o) && !o.hidden, 55)
       if (stranger) {
         // a wary hop away — short, because deer tire and hunters don't
         const dx = e.x - stranger.x, dy = e.y - stranger.y
-        const d = Math.hypot(dx, dy) || 1
+        const d = len(dx, dy) || 1
         e.tx = e.x + (dx / d) * 48
         e.ty = e.y + (dy / d) * 48
         e.fleeT = 0.6
       } else {
-        e.tx = (e.homeX ?? e.x) + (Math.random() - 0.5) * 110
-        e.ty = (e.homeY ?? e.y) + (Math.random() - 0.5) * 90
+        e.tx = (e.homeX ?? e.x) + (rnd(g) - 0.5) * 110
+        e.ty = (e.homeY ?? e.y) + (rnd(g) - 0.5) * 90
       }
     }
     if (e.tx !== undefined && moveToward(g, e, e.tx, e.ty!, DEER_AMBLE, dt)) {
@@ -475,7 +476,7 @@ function updateDeer(g: Game, e: Ent, dt: number): void {
   for (const o of g.ents) {
     if (o === e || o.kind !== 'deer' || o.hp <= 0) continue
     const dx = e.x - o.x, dy = e.y - o.y
-    const d = Math.hypot(dx, dy)
+    const d = len(dx, dy)
     const min = 26
     if (d > 0.001 && d < min) {
       e.x += (dx / d) * (min - d) * 0.5
@@ -490,7 +491,7 @@ function updateDeer(g: Game, e: Ent, dt: number): void {
 // water the grid marks as blocked (its whole world is a short leash anyway)
 function crocStep(e: Ent, tx: number, ty: number, speed: number, dt: number): boolean {
   const dx = tx - e.x, dy = ty - e.y
-  const d = Math.hypot(dx, dy)
+  const d = len(dx, dy)
   if (d < 3) return true
   const step = Math.min(speed * dt, d)
   e.x += (dx / d) * step
@@ -519,7 +520,7 @@ function updateCroc(g: Game, e: Ent, dt: number): void {
       if ((t.kind === 'villager' || t.kind === 'scout' || t.kind === 'monk') && t.targetId !== e.id) {
         // the bitten bolt for safety (hunters committed to the fight stay in it)
         const dx = t.x - e.x, dy = t.y - e.y
-        const dl = Math.hypot(dx, dy) || 1
+        const dl = len(dx, dy) || 1
         t.state = 'move'
         t.tx = t.x + (dx / dl) * 120
         t.ty = t.y + (dy / dl) * 120
@@ -545,10 +546,10 @@ function updateCroc(g: Game, e: Ent, dt: number): void {
     e.scanT = 0.4
     const prey = nearest(g, e.x, e.y, o => isUnit(o) && !isSiege(o) && !o.hidden, CROC_AGGRO) // timber isn't food
     if (prey) { e.targetId = prey.id; return }
-    if (e.tx === undefined && Math.random() < 0.25) {
+    if (e.tx === undefined && rnd(g) < 0.25) {
       // a lazy drift about the lair
-      e.tx = (e.homeX ?? e.x) + (Math.random() - 0.5) * 70
-      e.ty = (e.homeY ?? e.y) + (Math.random() - 0.5) * 55
+      e.tx = (e.homeX ?? e.x) + (rnd(g) - 0.5) * 70
+      e.ty = (e.homeY ?? e.y) + (rnd(g) - 0.5) * 55
     }
   }
   if (e.tx !== undefined && crocStep(e, e.tx, e.ty!, CROC_SPEED * 0.45, dt)) {
@@ -617,10 +618,10 @@ function updateSoldier(g: Game, e: Ent, dt: number): void {
           if (wall) { e.state = 'attack'; e.targetId = wall.id; e.resume = null }
         } else if (e.kind === 'scout' && e.team === 1) {
           // the enemy scout roams the meadow
-          e.scanT = 2 + Math.random() * 3
+          e.scanT = 2 + rnd(g) * 3
           e.state = 'move'
-          e.tx = 100 + Math.random() * (g.world.w - 200)
-          e.ty = 100 + Math.random() * (g.world.h - 200)
+          e.tx = 100 + rnd(g) * (g.world.w - 200)
+          e.ty = 100 + rnd(g) * (g.world.h - 200)
         } else {
           e.scanT = 0.5
         }
@@ -715,9 +716,9 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
         for (let i = 0; i < arrows; i++) {
           const t = inRangeFoes[i % Math.min(inRangeFoes.length, 4)]
           g.projectiles.push({
-            x: e.x + (Math.random() - 0.5) * 30, y: e.y - e.r * 0.9,
+            x: e.x + (rnd(g) - 0.5) * 30, y: e.y - e.r * 0.9,
             targetId: t.id, tx: t.x, ty: t.y,
-            speed: 250 + Math.random() * 40, dmg: ARROW_DMG, team: e.team,
+            speed: 250 + rnd(g) * 40, dmg: ARROW_DMG, team: e.team,
           })
           g.arrowsFired++
         }
@@ -785,9 +786,9 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
         for (let i = 0; i < arrows; i++) {
           const t = foes[i % Math.min(foes.length, 4)]
           g.projectiles.push({
-            x: e.x + (Math.random() - 0.5) * 24, y: e.y - e.r * 1.4,
+            x: e.x + (rnd(g) - 0.5) * 24, y: e.y - e.r * 1.4,
             targetId: t.id, tx: t.x, ty: t.y,
-            speed: 265 + Math.random() * 30, dmg: KEEP_DMG, team: e.team,
+            speed: 265 + rnd(g) * 30, dmg: KEEP_DMG, team: e.team,
           })
           g.arrowsFired++
         }
@@ -799,9 +800,9 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
   q.t -= dt
   if (q.t <= 0) {
     e.queue.shift()
-    const a = Math.random() * Math.PI * 2
+    const a = rnd(g) * Math.PI * 2
     const d = e.r + 18
-    const u = spawn(g, q.kind, e.team, e.x + Math.cos(a) * d, e.y + Math.abs(Math.sin(a)) * d + 6)
+    const u = spawn(g, q.kind, e.team, e.x + dcos(a) * d, e.y + Math.abs(dsin(a)) * d + 6)
     // recruits ride under whatever banner this hall flies (monks still swear to none)
     if (e.team === 0 && e.recruitBanner !== undefined && mustBanner(u)) u.banner = e.recruitBanner
     // and then walk straight to that banner's muster flag, if one is planted
@@ -837,7 +838,7 @@ function musterSlot(g: Game, banner: number, flag: { x: number; y: number }): { 
   // stagger alternate rings so nobody stands directly behind the man in front
   const a = ((k - start) / n) * Math.PI * 2 + (ring % 2 === 0 ? Math.PI / n : 0)
   const rd = FORMATION_SPACING * ring * 0.92
-  return { x: flag.x + Math.cos(a) * rd, y: flag.y + Math.sin(a) * rd }
+  return { x: flag.x + dcos(a) * rd, y: flag.y + dsin(a) * rd }
 }
 
 function killEnt(g: Game, e: Ent): void {
@@ -847,9 +848,9 @@ function killEnt(g: Game, e: Ent): void {
       if (v.hidden && v.insideId === e.id) {
         v.hidden = false
         v.insideId = undefined
-        const a = Math.random() * Math.PI * 2
-        v.x = e.x + Math.cos(a) * (e.r + 20)
-        v.y = e.y + Math.sin(a) * (e.r * 0.6) + 16
+        const a = rnd(g) * Math.PI * 2
+        v.x = e.x + dcos(a) * (e.r + 20)
+        v.y = e.y + dsin(a) * (e.r * 0.6) + 16
         resumeJob(g, v)
       }
     }
@@ -861,9 +862,9 @@ function killEnt(g: Game, e: Ent): void {
     if (rl.heldBy === e.id) { rl.heldBy = undefined; rl.x = e.x; rl.y = e.y }
     if (rl.shrineId === e.id) {
       rl.shrineId = undefined
-      const a = Math.random() * Math.PI * 2
-      rl.x = e.x + Math.cos(a) * (e.r + 16)
-      rl.y = e.y + Math.sin(a) * (e.r * 0.6) + 14
+      const a = rnd(g) * Math.PI * 2
+      rl.x = e.x + dcos(a) * (e.r + 16)
+      rl.y = e.y + dsin(a) * (e.r * 0.6) + 14
     }
   }
   if (e.kind === 'tree' || isBuilding(e)) g.navDirty = true // terrain changed
@@ -895,7 +896,7 @@ function separation(g: Game): void {
       const b = units[j]
       if (a.state === 'gather' && b.state === 'gather') continue // workers nestle at a busy bush
       const dx = b.x - a.x, dy = b.y - a.y
-      const d = Math.hypot(dx, dy)
+      const d = len(dx, dy)
       const min = a.r + b.r
       if (d > 0.001 && d < min) {
         // walkers shoulder through a crowd: whoever is standing still steps aside
@@ -924,7 +925,7 @@ function separation(g: Game): void {
       if (doorway && o.kind === 'wall' && o.team === a.team) continue
       if ((o.kind === 'wall' || o.kind === 'gate') && !o.complete && (o.progress ?? 0) <= 0) continue // unstarted fence pegs
       const dx = a.x - o.x, dy = a.y - o.y
-      const d = Math.hypot(dx, dy)
+      const d = len(dx, dy)
       const min = a.r + o.r * 0.85
       if (d > 0.001 && d < min) {
         a.x += (dx / d) * (min - d)
@@ -955,7 +956,7 @@ function separation(g: Game): void {
         }
       }
       const dx = a.x - cx, dy = a.y - cy
-      const dl = Math.hypot(dx, dy) || 1
+      const dl = len(dx, dy) || 1
       const out = s.w / 2 + a.r * 0.5 + 4
       a.x = cx + (dx / dl) * out
       a.y = cy + (dy / dl) * out
@@ -1000,7 +1001,7 @@ export function update(g: Game, dt: number): void {
     const t = p.kind === 'boulder' ? undefined : g.byId.get(p.targetId)
     if (t && !t.hidden) { p.tx = t.x; p.ty = t.y - 6 } // arrows home; boulders fall where they were aimed
     const dx = p.tx - p.x, dy = p.ty - p.y
-    const d = Math.hypot(dx, dy)
+    const d = len(dx, dy)
     const step = p.speed * dt
     if (d <= step + 4) {
       g.projectiles.splice(g.projectiles.indexOf(p), 1)

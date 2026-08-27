@@ -1,5 +1,5 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
-import { Game, Kind, Buildable, Ent, BUILDINGS } from './data'
+import { Game, Kind, Buildable, Ent, BUILDINGS, checksum } from './data'
 import { createGame, spawn, canPlaceAt, placementCells, gateSnap, wallsUnderGate } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
@@ -106,4 +106,22 @@ requestAnimationFrame(frame)
   setVolume(v: number) { setVolume(v) },
   // the sprite kit itself, so a contact sheet can draw every unit side by side
   sprites,
+  // ---- determinism, which multiplayer stands or falls on ----
+  checksum() { return checksum(g) },
+  /**
+   * Deal a fresh world from `seed`, step it `ticks` times with nobody touching
+   * it, and report the fingerprint every `every` ticks. Two calls with the same
+   * seed must give the same list — on this machine, on the other player's, and
+   * on any browser either of them happens to be using.
+   */
+  trace(seed: number, ticks = 600, every = 100) {
+    const t = createGame({ seed })
+    t.started = true
+    const out: number[] = []
+    for (let i = 1; i <= ticks; i++) {
+      update(t, 1 / 30)
+      if (i % every === 0) out.push(checksum(t))
+    }
+    return out
+  },
 }

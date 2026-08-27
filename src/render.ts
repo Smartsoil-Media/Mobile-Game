@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, CivId, BUILDINGS, BANNERS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, CivId, BUILDINGS, BANNERS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding, len,} from './data'
 import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
@@ -227,10 +227,10 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
     for (const s of g.streams) {
       for (let i = 0; i + 1 < s.pts.length; i++) {
         const p = s.pts[i], q = s.pts[i + 1]
-        const d = Math.hypot(x - (p.x + q.x) / 2, y - (p.y + q.y) / 2)
+        const d = len(x - (p.x + q.x) / 2, y - (p.y + q.y) / 2)
         if (d < best) {
           best = d
-          const dl = Math.hypot(q.x - p.x, q.y - p.y) || 1
+          const dl = len(q.x - p.x, q.y - p.y) || 1
           tx = (q.x - p.x) / dl; ty = (q.y - p.y) / dl
         }
       }
@@ -323,12 +323,12 @@ function drawStreams(ctx: CanvasRenderingContext2D, g: Game, time: number): void
   for (const s of g.streams) {
     for (let i = 2; i + 1 < s.pts.length; i += 3) {
       const p = s.pts[i], q = s.pts[i + 1]
-      const dl = Math.hypot(q.x - p.x, q.y - p.y) || 1
+      const dl = len(q.x - p.x, q.y - p.y) || 1
       const nx = -(q.y - p.y) / dl, ny = (q.x - p.x) / dl
       const side = i % 2 ? 1 : -1
       const bx = p.x + nx * side * (s.w / 2 + 10)
       const by = p.y + ny * side * (s.w / 2 + 10)
-      if (g.fords.some(f => Math.hypot(bx - f.x, by - f.y) < f.r + 30)) continue
+      if (g.fords.some(f => len(bx - f.x, by - f.y) < f.r + 30)) continue
       reedClump(bx, by, i)
     }
   }
@@ -656,7 +656,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       continue
     }
     const dx = p.tx - p.x, dy = p.ty - p.y
-    const d = Math.hypot(dx, dy) || 1
+    const d = len(dx, dy) || 1
     const nx = dx / d, ny = dy / d
     ctx.strokeStyle = '#6F5238'
     ctx.lineWidth = 2

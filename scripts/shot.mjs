@@ -3204,6 +3204,33 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.8) determinism, which multiplayer stands or falls on. Same seed, same
+// number of ticks, same fingerprint — twice on one page, and again on a page
+// that knows nothing about the first. If this ever goes red, two players
+// stepping the same orders would drift apart and the match would be a lie.
+{
+  const other = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true })
+  await other.goto('file://' + resolve('dist/index.html') + '?map=classic')
+  await other.evaluate(() => window.__game.allowPortrait())
+  for (const seed of [7, 2026]) {
+    const runA = await page3.evaluate(s2 => window.__game.trace(s2, 900, 150), seed)
+    const runB = await page3.evaluate(s2 => window.__game.trace(s2, 900, 150), seed)
+    const runC = await other.evaluate(s2 => window.__game.trace(s2, 900, 150), seed)
+    console.log(`determinism (seed ${seed}):`, runA.join(' '))
+    if (runA.length !== 6) throw new Error('the trace should report six checkpoints')
+    if (JSON.stringify(runA) !== JSON.stringify(runB))
+      throw new Error(`seed ${seed} did not replay in the same page`)
+    if (JSON.stringify(runA) !== JSON.stringify(runC))
+      throw new Error(`seed ${seed} did not replay in a fresh page`)
+  }
+  // and the fingerprint has to be worth something: a different seed must move it
+  const s7 = await page3.evaluate(() => window.__game.trace(7, 900, 150))
+  const s8 = await page3.evaluate(() => window.__game.trace(8, 900, 150))
+  if (JSON.stringify(s7) === JSON.stringify(s8))
+    throw new Error('the checksum is blind — two different worlds hash the same')
+  await other.close()
+}
+
 // 18.85) the two hosts must actually look different. Draw each unit under both
 // banners onto a scratch canvas and count how much of the inked area disagrees
 // — a cheap way to catch a civ tell being lost to a refactor.

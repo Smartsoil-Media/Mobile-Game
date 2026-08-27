@@ -3,7 +3,7 @@
 // line is blocked — open-meadow walking stays exactly as it always was, and
 // the local steering slide still handles fine detail and moving obstacles.
 // The payoff: a forest pocket is finally ONE obstacle, not a trap of trunks.
-import { Game, Ent, dist, isBuilding } from './data'
+import { Game, Ent, dist, isBuilding, len,} from './data'
 
 export const NAV_CELL = 32
 
@@ -128,7 +128,7 @@ export function lineClear(g: Game, team: number, x0: number, y0: number, x1: num
   slack = 70, maxDist = Infinity): boolean {
   if (g.navDirty || !g.nav) rebuildNav(g)
   const bit = bitFor(team)
-  const d = Math.hypot(x1 - x0, y1 - y0)
+  const d = len(x1 - x0, y1 - y0)
   const usable = Math.min(d - slack, maxDist)
   if (usable <= 0) return true
   const steps = Math.ceil(usable / 12)

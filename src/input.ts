@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, LION_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING} from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, LION_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING, len,} from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -124,7 +124,7 @@ export function commandMove(g: Game, units: Ent[], x: number, y: number): void {
   for (const u of units) { cx += u.x; cy += u.y }
   cx /= n; cy /= n
   const dx = x - cx, dy = y - cy
-  const d = Math.hypot(dx, dy) || 1
+  const d = len(dx, dy) || 1
   const ux = dx / d, uy = dy / d
 
   const slots = formationSlots(n, x, y, ux, uy, formationOf(g, units))
@@ -630,7 +630,7 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
       }
     } else if (ps.pointers.size === 2) {
       const [a, b] = [...ps.pointers.values()]
-      ps.pinchDist = Math.hypot(b.x - a.x, b.y - a.y)
+      ps.pinchDist = len(b.x - a.x, b.y - a.y)
       ps.panning = true // two fingers never tap
     }
   })
@@ -643,7 +643,7 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
 
     if (ps.pointers.size === 2) {
       const [a, b] = [...ps.pointers.values()]
-      const d = Math.hypot(b.x - a.x, b.y - a.y)
+      const d = len(b.x - a.x, b.y - a.y)
       if (ps.pinchDist > 0) {
         const factor = d / ps.pinchDist
         g.camera.zoom = Math.max(0.4, Math.min(1.6, g.camera.zoom * factor))
@@ -653,7 +653,7 @@ export function attachInput(g: Game, canvas: HTMLCanvasElement): void {
       return
     }
 
-    if (!ps.panning && Math.hypot(ev.clientX - ps.downX, ev.clientY - ps.downY) > 12) {
+    if (!ps.panning && len(ev.clientX - ps.downX, ev.clientY - ps.downY) > 12) {
       ps.panning = true
     }
     if (ps.panning) {

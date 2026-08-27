@@ -3,7 +3,7 @@ import {
   Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H, LION_BANNER,
-  dist, isUnit, isBuilding, isResource, mustBanner, BANNER_MAX, Formation,
+  dist, isUnit, isBuilding, isResource, mustBanner, BANNER_MAX, Formation, rnd, rndInt, dcos, dsin, q,
 } from './data'
 import { inWater } from './nav'
 
@@ -23,7 +23,9 @@ function mulberry(seed: number) {
 export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, complete = true): Ent {
   const e: Ent = {
     id: g.nextId++, kind, team, x, y, r: 12, hp: 1, maxHp: 1,
-    seed: Math.floor(Math.random() * 1e9),
+    // even the cosmetic seed is rolled off the shared stream: it rides on the
+    // entity, so a checksum that covers entities has to be able to trust it
+    seed: rndInt(g, 1e9),
   }
   if (kind === 'crag') {
     // bare rock: pure terrain, sized by whoever raises it
@@ -39,8 +41,8 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
       e.hp = e.maxHp = s.hp + CHAMPS[champ].hp // born a champion
     }
     if (team === 0 && mustBanner(e)) e.banner = LION_BANNER
-    e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = Math.random() * 0.3
-    e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = Math.random() * Math.PI * 2
+    e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = rnd(g) * 0.3
+    e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = rnd(g) * Math.PI * 2
     e.resume = null
   } else if (isBuilding(e)) {
     const s = BUILDINGS[kind]
@@ -57,10 +59,10 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
       // wildlife starts alive; brought down, it lingers as a quiet bundle
       e.hp = e.maxHp = kind === 'croc' ? CROC_HP : DEER_HP
       e.homeX = x; e.homeY = y
-      e.scanT = Math.random() * 3
+      e.scanT = rnd(g) * 3
       e.cd = 0
-      e.face = Math.random() < 0.5 ? -1 : 1
-      e.phase = Math.random() * Math.PI * 2
+      e.face = rnd(g) < 0.5 ? -1 : 1
+      e.phase = rnd(g) * Math.PI * 2
     }
   }
   g.ents.push(e)
@@ -115,7 +117,11 @@ export function createGame(opts?: { seed?: number }): Game {
     nav: null, navDirty: true, navWater: null,
     mapSeed: random ? ((opts!.seed! | 0) || 1) : 0,
     streams: [], fords: [],
-    placeAngle: 0, toasts: [], pings: [], taps: [], banners: 1,
+    placeAngle: 0, toasts: [], pings: [], taps: [],
+    // The simulation's stream, seeded off the map so a rematch on the same
+    // ground still plays out differently — and so both players start level.
+    rng: (random ? ((opts!.seed! | 0) || 1) : 20260819) ^ 0x5BF03635,
+    banners: 1,
     formation: Array.from({ length: BANNER_MAX }, () => 'bunch' as Formation),
     muster: Array.from({ length: BANNER_MAX }, () => null),
     mustering: null,
@@ -557,7 +563,7 @@ export function openDoors(g: Game, b: Ent): void {
     if (v.hidden && v.insideId === b.id) {
       v.hidden = false
       v.insideId = undefined
-      const a = Math.random() * Math.PI * 2
+      const a = rnd(g) * Math.PI * 2
       v.x = b.x + Math.cos(a) * (b.r + 18)
       v.y = b.y + Math.abs(Math.sin(a)) * (b.r * 0.7) + 14
       resumeJob(g, v)

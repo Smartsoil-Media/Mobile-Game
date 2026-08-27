@@ -162,6 +162,7 @@ export interface Game {
   toasts: { text: string; t: number }[]
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
+  rng: number // the simulation's random stream — see rnd()
   banners: number // how many banners are raised (1 = just the Lion)
   formation: Formation[] // per banner: how its companies stand when they march
   muster: (Pt | null)[] // per banner: where its recruits walk once they are raised
@@ -468,9 +469,97 @@ export const TEAM_COLOR = [
   { main: '#C4746B', dark: '#9E574F', pale: '#DBA49D' },
 ]
 
+// ---- deterministic arithmetic ----
+// Two phones running the same match must reach bit-identical answers, or the
+// worlds drift apart and the game is over. IEEE-754 pins down +, -, *, / and
+// Math.sqrt exactly; it does NOT pin down Math.hypot, sin, cos or atan2, which
+// may differ in the last bit between JavaScript engines. So the simulation
+// spells out the ones it needs and never calls the ones it doesn't.
+
 export function dist(ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax, dy = by - ay
-  return Math.hypot(dx, dy)
+  return Math.sqrt(dx * dx + dy * dy) // NOT Math.hypot: that one is engine-defined
+}
+
+export function len(dx: number, dy: number): number {
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+/** Snap to a 1/1024 grid, killing any last-bit disagreement before it is stored. */
+export function q(v: number): number {
+  return Math.round(v * 1024) / 1024
+}
+
+// Sine and cosine, quantised on the way out. Only used to scatter things around
+// a point — never in the movement path, which works on plain vector arithmetic.
+export function dcos(a: number): number { return q(Math.cos(a)) }
+export function dsin(a: number): number { return q(Math.sin(a)) }
+
+/**
+ * The simulation's own random stream (mulberry32). Every roll that changes the
+ * world comes from here, so the same seed and the same orders give the same
+ * game. Particles and sound may still use Math.random(): nothing reads them
+ * back, and they are left out of the checksum for exactly that reason.
+ */
+export function rnd(g: Game): number {
+  g.rng = (g.rng + 0x6D2B79F5) | 0
+  let t = Math.imul(g.rng ^ (g.rng >>> 15), 1 | g.rng)
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+
+/** An integer in [0, n). */
+export function rndInt(g: Game, n: number): number {
+  return Math.floor(rnd(g) * n)
+}
+
+// A stable number per kind, so the checksum can fold the kind in without
+// depending on where a string happens to sit in memory.
+const KIND_CODE = new Map<Kind, number>()
+;([
+  'villager', 'swordsman', 'spearman', 'archer', 'scout', 'knight', 'monk',
+  'mangonel', 'trebuchet',
+  'towncenter', 'house', 'barracks', 'archeryrange', 'stable', 'lumbercamp',
+  'miningcamp', 'mill', 'farm', 'watchtower', 'wall', 'gate',
+  'church', 'ministry', 'siegeworkshop',
+  'abbeymill', 'kingsbarracks', 'guildhall', 'whitekeep',
+  'chamberofcommerce', 'cavalryschool', 'royalvineyard', 'redpalace',
+  'tree', 'goldmine', 'berrybush', 'stonequarry', 'deer', 'crag', 'croc', 'relic',
+] as Kind[]).forEach((k, i) => KIND_CODE.set(k, i + 1))
+
+/**
+ * A fingerprint of everything the two players must agree on. Deliberately does
+ * NOT cover particles, sound cues, the camera, the selection or `heading` —
+ * those are local decoration, and folding them in would report a desync every
+ * time one player looked somewhere else.
+ */
+export function checksum(g: Game): number {
+  let h = 0x811c9dc5
+  const mix = (n: number): void => { h = Math.imul(h ^ (n | 0), 0x01000193) >>> 0 }
+  mix(g.ents.length)
+  mix(g.rng)
+  mix(Math.round(g.t * 30))
+  for (const r of g.res) {
+    mix(Math.round(r.wood)); mix(Math.round(r.food))
+    mix(Math.round(r.gold)); mix(Math.round(r.stone))
+  }
+  for (const a of g.age) mix(a)
+  for (const e of g.ents) {
+    mix(e.id)
+    mix(KIND_CODE.get(e.kind) ?? 0)
+    mix(e.team)
+    mix(Math.round(e.x * 64))
+    mix(Math.round(e.y * 64))
+    mix(Math.round(e.hp * 64))
+    mix(Math.round((e.progress ?? 0) * 1024))
+    mix(Math.round((e.carry ?? 0) * 64))
+    mix(Math.round((e.amount ?? 0) * 64))
+    mix(e.banner ?? -1)
+    mix(e.queue?.length ?? 0)
+    mix(e.hidden ? 1 : 0)
+    mix(e.complete === false ? 2 : 1)
+  }
+  return h >>> 0
 }
 
 export function isUnit(e: Ent): boolean {

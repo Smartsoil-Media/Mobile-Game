@@ -5,8 +5,7 @@ import {
   Game, Ent, Cost, ResKind, ChampId, TechId, LandmarkKind, UNITS, BUILDINGS, CHAMPS, TECHS, LANDMARKS,
   SOURCE_OF, POP_MAX, NO_COST, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME,
-  dist, isUnit, isBuilding, snapTiles,
-} from './data'
+  dist, isUnit, isBuilding, snapTiles, rnd, dcos, dsin,} from './data'
 import { spawn, nearest, pop, canAfford, canPlaceAt, pay, gatherResOf, farmTaken, unitAgeReq } from './world'
 
 // how sharply the rival village plays, by chosen difficulty
@@ -47,10 +46,10 @@ function tryPlace(g: Game, kind: AIPlaceable, tc: Ent): Ent | null {
   // tiles across needs far more daylight than a house does, and hunting for it
   // in the same narrow band the small buildings use simply fails.
   for (let tries = 0; tries < 90; tries++) {
-    const a = Math.random() * Math.PI * 2
-    const d = tc.r + b.foot + 30 + Math.random() * (130 + b.foot * 2.4)
+    const a = rnd(g) * Math.PI * 2
+    const d = tc.r + b.foot + 30 + rnd(g) * (130 + b.foot * 2.4)
     // the rival village builds on the same lattice, so its streets line up too
-    const { x, y } = snapTiles(tc.x + Math.cos(a) * d, tc.y + Math.sin(a) * d, b.tiles)
+    const { x, y } = snapTiles(tc.x + dcos(a) * d, tc.y + dsin(a) * d, b.tiles)
     if (!canPlaceAt(g, kind, x, y)) continue
     pay(g, 1, b.cost)
     return spawn(g, kind, 1, x, y, false)
@@ -313,7 +312,7 @@ export function updateEnemyAI(g: Game, dt: number): void {
       opts.push({ kind: 'knight', w: (french ? 2.4 : 0.8) + 1.2 * foe.archer })
     }
     if (!opts.length) return null
-    let roll = Math.random() * opts.reduce((s, o) => s + o.w, 0)
+    let roll = rnd(g) * opts.reduce((s, o) => s + o.w, 0)
     for (const o of opts) { roll -= o.w; if (roll <= 0) return o.kind }
     return opts[opts.length - 1].kind
   }
@@ -347,8 +346,8 @@ export function updateEnemyAI(g: Game, dt: number): void {
     if (target) {
       for (const s of idleSoldiers) {
         s.state = 'attackmove'
-        s.tx = target.x + (Math.random() - 0.5) * 80
-        s.ty = target.y + (Math.random() - 0.5) * 80
+        s.tx = target.x + (rnd(g) - 0.5) * 80
+        s.ty = target.y + (rnd(g) - 0.5) * 80
         s.resume = null
       }
       g.ai.attacking = true
