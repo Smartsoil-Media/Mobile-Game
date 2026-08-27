@@ -272,7 +272,7 @@ whatever the game is actually being played as.
 
 | | The English | The French |
 |---|---|---|
-| Archer | the **longbow** — a yew stave as tall as the man, drawn to the ear, arrows in a bag at the hip | the **crossbow** — a short thick prod on a tiller, held at the shoulder, a **pavise** slung on the back |
+| Archer | the **longbow** — a yew stave as tall as the man, drawn to the ear, arrows in a bag at the hip | the **crossbow** — a short thick prod on a tiller, held at the shoulder, a spanning hook on the belt and stubby bolts across the back |
 | Spearman | kettle hat, round wooden buckler, plain ash spear | nasal helm over a mail coif, fleur buckler, a pennon under the spearhead |
 | Swordsman | kettle hat, **heater shield** under the cross | closed helm, **kite shield** strewn with the fleur, a longer blade |
 | Knight | flat-topped **great helm**, heater and cross, plain caparison | crested **bascinet** with the visor down, kite and fleur, a caparison sewn with them and a pennon on the lance |

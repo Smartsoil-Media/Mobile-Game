@@ -2892,9 +2892,9 @@ export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, c
 // them — a back quiver is a later idea, and it reads as a crossbowman anyway.
 //
 // France fields the CROSSBOW: a short thick bow lying across a tiller, held at
-// the shoulder like a gun, with a pavise slung on the back to shelter behind
-// while he cranks the next bolt. Two silhouettes you can tell apart across the
-// whole meadow, which is the point.
+// the shoulder like a gun, with a spanning hook on the belt to haul the string
+// back and a quiver of stubby bolts across his back. Two silhouettes you can
+// tell apart across the whole meadow, which is the point.
 export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
@@ -2909,12 +2909,17 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.beginPath(); ctx.ellipse(bx + 3.4, e.y + 4 - walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
 
   if (!eng) {
-    // the pavise, a door of a shield slung across his back
-    ctx.fillStyle = c.dark
-    rr(ctx, bx - f * 9.5 - 3.4, by - 12, 6.8, 17, 2.4); ctx.fill()
-    ctx.fillStyle = c.main
-    rr(ctx, bx - f * 9.5 - 2.6, by - 11.4, 5.2, 15.8, 2); ctx.fill()
-    fleur(ctx, bx - f * 9.5, by - 4, 5, '#FBF3E4')
+    // a quiver of bolts across the back — short, fat and stubby, nothing like
+    // the long shafts an English bag carries
+    ctx.save()
+    ctx.translate(bx - f * 6.4, by - 3.5)
+    ctx.rotate(f * -0.3)
+    ctx.fillStyle = '#6F5238'
+    rr(ctx, -2.4, -4.5, 4.8, 9.5, 2); ctx.fill()
+    ctx.fillStyle = STEEL_DARK
+    ctx.beginPath(); ctx.arc(-0.9, -4.4, 1, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(1.2, -4.8, 1, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
   }
 
   tunic(ctx, bx, by, 6, c.main, c.dark, c.pale)
@@ -3027,11 +3032,11 @@ export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
     ctx.moveTo(6.4, -9.4)
     ctx.quadraticCurveTo(13.4, 0, 6.4, 9.4)
     ctx.stroke()
-    ctx.strokeStyle = STEEL
-    ctx.lineWidth = 1.2
+    ctx.strokeStyle = STEEL // just a catchlight along the top limb, not a repaint
+    ctx.lineWidth = 0.9
     ctx.beginPath()
-    ctx.moveTo(6.4, -9.4)
-    ctx.quadraticCurveTo(12.6, -3, 10.6, 0)
+    ctx.moveTo(7, -8.6)
+    ctx.quadraticCurveTo(11.4, -5, 12.2, -2.4)
     ctx.stroke()
     // the string: hauled back to the nut when spanned, slack out at the tips
     ctx.strokeStyle = '#F4E4C6'
