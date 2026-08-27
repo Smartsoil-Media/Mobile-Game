@@ -263,6 +263,37 @@ it). The *turn sideways* screen in portrait is the same field, and so is
 everything outside the playfield — including the strip beyond a notched
 phone's viewport — so no pale band shows along an edge.
 
+## Two hosts, told apart at a glance
+
+The same seven kinds of person fight for both sides, but not in the same kit —
+you should be able to read which village a soldier belongs to without checking
+his colour. The civ reaches the sprite at draw time (`civOf`), so it is always
+whatever the game is actually being played as.
+
+| | The English | The French |
+|---|---|---|
+| Archer | the **longbow** — a yew stave as tall as the man, drawn to the ear, arrows in a bag at the hip | the **crossbow** — a short thick prod on a tiller, held at the shoulder, a **pavise** slung on the back |
+| Spearman | kettle hat, round wooden buckler, plain ash spear | nasal helm over a mail coif, fleur buckler, a pennon under the spearhead |
+| Swordsman | kettle hat, **heater shield** under the cross | closed helm, **kite shield** strewn with the fleur, a longer blade |
+| Knight | flat-topped **great helm**, heater and cross, plain caparison | crested **bascinet** with the visor down, kite and fleur, a caparison sewn with them and a pennon on the lance |
+| Scout | a hunting **horn** on a baldric | a short lance flying the company's **pennon** |
+| Villager | a straw hat against the sun | a **chaperon** — the rolled hood with a tail down the back |
+| Monk | the same both sides | — one church, one habit |
+
+The two archers are the point of the exercise: a longbow and a crossbow share
+almost nothing in outline, so a bowline reads as English or French from right
+across the meadow. The playtest measures it — every unit's two versions must
+differ over at least 8% of their inked pixels, and the archer over 25%.
+
+Siege engines are left alone on purpose: a mangonel is a mangonel whoever
+builds it.
+
+Every soldier now has **arms**. Weapons used to float beside the body; a sleeve
+from the shoulder and a knuckle on the grip is the whole difference between a
+soldier holding a spear and a spear that happens to be nearby. `npm run units`
+draws the contact sheet the art was tuned against — every unit, both civs,
+idle, attacking and championed.
+
 ## Ages & Landmarks
 
 You start in the **Dark Age** (spearmen only; the archery range, stable,

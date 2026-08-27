@@ -1,5 +1,5 @@
 // Cosy storybook sprites, all drawn with canvas vector shapes.
-import { Ent, TEAM_COLOR, BANNERS, LION_BANNER, TILT } from './data'
+import { Ent, CivId, TEAM_COLOR, BANNERS, LION_BANNER, TILT } from './data'
 
 // The original storybook palette, retuned to the meadow's new naturalistic
 // light. Keeping the names means everything still drawn the old way — fences,
@@ -2479,10 +2479,124 @@ function unitBase(ctx: CanvasRenderingContext2D, e: Ent, t: number): { bx: numbe
   return { bx: e.x, by: e.y - bob, walk: moving ? walk : 0 }
 }
 
-export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+// ---- soldier's kit ----
+// Steel, and the two ways a face is covered. Everything here is drawn from a
+// centre point so a unit can move its head without the helm needing new numbers.
+const STEEL = '#C7CCD4'
+const STEEL_LIT = '#E4E8EE'
+const STEEL_DARK = '#8E959F'
+const MAIL = '#9BA3AD'
+
+// An arm from the shoulder to the grip, with a hand on the end. Weapons used to
+// float beside the body; a sleeve and a knuckle is the whole difference between
+// a soldier holding a spear and a spear happening to be nearby.
+function arm(ctx: CanvasRenderingContext2D, sx: number, sy: number, hx: number, hy: number,
+             sleeve: string, bend = 0): void {
+  ctx.strokeStyle = sleeve
+  ctx.lineWidth = 2.8
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(sx, sy)
+  // a touch of elbow, pushed perpendicular to the reach
+  const mx = (sx + hx) / 2, my = (sy + hy) / 2
+  const dx = hx - sx, dy = hy - sy
+  const len = Math.hypot(dx, dy) || 1
+  ctx.quadraticCurveTo(mx - (dy / len) * bend, my + (dx / len) * bend, hx, hy)
+  ctx.stroke()
+  ctx.fillStyle = SKIN
+  ctx.beginPath(); ctx.arc(hx, hy, 1.9, 0, Math.PI * 2); ctx.fill()
+}
+
+// The English war hat: a shallow dome under a wide brim, worn over an open
+// face. Cheap, sensible, and unmistakable at ten pixels.
+function kettleHat(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number,
+                   band?: string): void {
+  ctx.fillStyle = STEEL
+  ctx.beginPath(); ctx.arc(cx, cy - 1, r * 0.82, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = STEEL_LIT
+  ctx.beginPath(); ctx.arc(cx - r * 0.22, cy - 1.4, r * 0.5, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = STEEL_DARK
+  ctx.beginPath(); ctx.ellipse(cx, cy - 0.4, r * 1.14, r * 0.36, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = STEEL
+  ctx.beginPath(); ctx.ellipse(cx, cy - 1.1, r * 1.1, r * 0.33, 0, 0, Math.PI * 2); ctx.fill()
+  if (band) {
+    ctx.strokeStyle = band; ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.78, cy - 1.9); ctx.lineTo(cx + r * 0.78, cy - 1.9); ctx.stroke()
+  }
+}
+
+// The French helm: a rounded skull with a nose bar down the face and a mail
+// drape at the neck. Closed where the kettle hat is open.
+function nasalHelm(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, f: number,
+                   band?: string): void {
+  ctx.fillStyle = MAIL // the coif, showing under the helm at the jaw
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2.6, r * 0.94, r * 0.72, 0, 0, Math.PI); ctx.fill()
+  ctx.fillStyle = STEEL
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.98, Math.PI * 0.96, Math.PI * 2.04); ctx.fill()
+  ctx.fillStyle = STEEL_LIT
+  ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - 0.3, r * 0.56, Math.PI, Math.PI * 1.75); ctx.fill()
+  ctx.fillStyle = STEEL_DARK
+  rr(ctx, cx - r * 0.98, cy - 1.4, r * 1.96, 1.9, 0.9); ctx.fill()
+  // the nasal, down the front of the face
+  ctx.fillStyle = STEEL
+  rr(ctx, cx + f * 0.9 - 0.9, cy - 1, 1.8, r * 1.15, 0.8); ctx.fill()
+  if (band) {
+    ctx.strokeStyle = band; ctx.lineWidth = 1.4
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.9, cy - 2.4); ctx.lineTo(cx + r * 0.9, cy - 2.4); ctx.stroke()
+  }
+}
+
+// A flat-topped heater, tapering to a point: the English foot shield, worn with
+// a cross. `s` is its height.
+function heaterShield(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, f: number,
+                      main: string, dark: string): void {
+  const w = s * 0.78
+  ctx.fillStyle = main
+  ctx.beginPath()
+  ctx.moveTo(cx - w / 2, cy - s / 2)
+  ctx.lineTo(cx + w / 2, cy - s / 2)
+  ctx.quadraticCurveTo(cx + w / 2, cy + s * 0.24, cx, cy + s / 2)
+  ctx.quadraticCurveTo(cx - w / 2, cy + s * 0.24, cx - w / 2, cy - s / 2)
+  ctx.closePath()
+  ctx.fill()
+  ctx.strokeStyle = dark; ctx.lineWidth = 1.2; ctx.stroke()
+  // the cross the English fight under
+  ctx.strokeStyle = '#FBF3E4'; ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - s * 0.4); ctx.lineTo(cx, cy + s * 0.3)
+  ctx.moveTo(cx - w * 0.32, cy - s * 0.1); ctx.lineTo(cx + w * 0.32, cy - s * 0.1)
+  ctx.stroke()
+  void f
+}
+
+// A kite, long and curved: the French shield, strewn with a fleur.
+function kiteShield(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, f: number,
+                    main: string, dark: string): void {
+  const w = s * 0.62
+  ctx.fillStyle = main
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - s / 2)
+  ctx.quadraticCurveTo(cx + w / 2, cy - s * 0.34, cx + w * 0.44, cy + s * 0.1)
+  ctx.quadraticCurveTo(cx + w * 0.26, cy + s / 2, cx, cy + s / 2)
+  ctx.quadraticCurveTo(cx - w * 0.26, cy + s / 2, cx - w * 0.44, cy + s * 0.1)
+  ctx.quadraticCurveTo(cx - w / 2, cy - s * 0.34, cx, cy - s / 2)
+  ctx.closePath()
+  ctx.fill()
+  ctx.strokeStyle = dark; ctx.lineWidth = 1.2; ctx.stroke()
+  fleur(ctx, cx, cy + s * 0.06, s * 0.34, '#FBF3E4')
+  void f
+}
+
+// Your hands. Both villages farm the same way, so the tell is what they put on
+// their heads: an English straw hat against the sun, a French chaperon — the
+// rolled hood with a tail down the back that every peasant in a Book of Hours
+// is wearing.
+export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  const eng = civ === 'english'
+  const working = e.state === 'gather' || e.state === 'build'
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   // feet
@@ -2490,14 +2604,43 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.5, e.y + 4 + walk * 1.2, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.5, e.y + 4 - walk * 1.2, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill()
-  // body: rounded tunic in team color
+  // the far arm swings behind the body
+  arm(ctx, bx - f * 2, by - 4.4, bx - f * 7.6, by + (working ? -1 : 1.8), c.dark, 1.2)
+  // body: rounded tunic in team color, with an apron over it
   tunic(ctx, bx, by, 6.5, c.main, c.dark, c.pale)
+  ctx.globalAlpha = 0.42 // a work apron, tied wide across the hips
+  ctx.fillStyle = '#E4D3B4'
+  ctx.beginPath()
+  ctx.moveTo(bx - 5.2, by + 0.6)
+  ctx.lineTo(bx + 5.2, by + 0.6)
+  ctx.quadraticCurveTo(bx + 5, by + 5.8, bx, by + 6.6)
+  ctx.quadraticCurveTo(bx - 5, by + 5.8, bx - 5.2, by + 0.6)
+  ctx.closePath(); ctx.fill()
+  ctx.globalAlpha = 1
   // head
   headBall(ctx, bx, by - 11, 6)
-  // straw hat
-  ctx.fillStyle = '#E8C97A'
-  ctx.beginPath(); ctx.ellipse(bx, by - 14.5, 8, 3, 0, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(bx, by - 15.5, 4.4, Math.PI, 0); ctx.fill()
+  if (eng) {
+    // straw hat: a shallow crown on a soft brim
+    ctx.fillStyle = '#D8B45E'
+    ctx.beginPath(); ctx.ellipse(bx, by - 14.1, 7.6, 2.8, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#E8C97A'
+    ctx.beginPath(); ctx.ellipse(bx, by - 14.8, 7.4, 2.6, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(bx, by - 15.4, 4.4, Math.PI, 0); ctx.fill()
+    ctx.fillStyle = '#C79E4A'
+    ctx.beginPath(); ctx.arc(bx, by - 15.4, 4.4, Math.PI * 1.5, Math.PI * 2); ctx.fill()
+  } else {
+    // chaperon: a rolled hood with a tail hanging down the back
+    ctx.fillStyle = '#8E4B3A'
+    ctx.beginPath()
+    ctx.moveTo(bx - f * 4.4, by - 14)
+    ctx.quadraticCurveTo(bx - f * 10, by - 12, bx - f * 8.6, by - 5)
+    ctx.quadraticCurveTo(bx - f * 6.4, by - 9.6, bx - f * 3.6, by - 12)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#A85B45'
+    ctx.beginPath(); ctx.arc(bx, by - 13.4, 6.2, Math.PI * 0.92, Math.PI * 2.08); ctx.fill()
+    ctx.fillStyle = '#C06A50'
+    ctx.beginPath(); ctx.ellipse(bx, by - 14.8, 6.4, 2.4, 0, 0, Math.PI * 2); ctx.fill()
+  }
   // a single soft eye-line rather than two dots — enough to say which
   // way the face is turned without reading as a doll
   ctx.globalAlpha = 0.5
@@ -2527,20 +2670,22 @@ export function drawVillager(ctx: CanvasRenderingContext2D, e: Ent, t: number): 
     }
   }
   // working swing: little axe/pick bob when gathering or building
-  if (e.state === 'gather' || e.state === 'build') {
+  if (working) {
     const swing = Math.sin(t * 10 + (e.phase ?? 0)) * 0.9
+    arm(ctx, bx + f * 2.4, by - 4.6, bx + f * 7, by - 3, c.main, -1.4)
     ctx.save()
     ctx.translate(bx + f * 7, by - 3)
     ctx.rotate(f * (0.5 + swing * 0.55))
     ctx.strokeStyle = WOOD; ctx.lineWidth = 2.2
     ctx.beginPath(); ctx.moveTo(0, 3); ctx.lineTo(0, -7); ctx.stroke()
-    ctx.fillStyle = '#C7CCD4'
+    ctx.fillStyle = STEEL
     rr(ctx, -1, -10, f * 5.5, 3.6, 1.6); ctx.fill()
     ctx.restore()
+  } else {
+    arm(ctx, bx + f * 2.4, by - 4.4, bx + f * 7.4, by + 1.8, c.main, -1.2)
   }
   ctx.restore()
 }
-
 export function drawMonk(ctx: CanvasRenderingContext2D, e: Ent, t: number, carrying = false): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
@@ -2603,194 +2748,322 @@ export function drawMonk(ctx: CanvasRenderingContext2D, e: Ent, t: number, carry
   ctx.restore()
 }
 
-export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
+// The tough one. England gives him a kettle hat and a heater shield under the
+// cross; France a closed helm and a kite strewn with the fleur.
+export function drawSwordsman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  const eng = civ === 'english'
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
   const striking = e.state === 'attack' && (e.cd ?? 0) > UNITS_CD_SWORD - 0.25
   const lunge = striking ? f * 3 : 0
-  // feet
   legs(ctx, bx, e.y + 4.4, by, 3.8, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.8, e.y + 4.4 + walk * 1.2, 2.8, 2, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.8, e.y + 4.4 - walk * 1.2, 2.8, 2, 0, 0, Math.PI * 2); ctx.fill()
-  // body
-  tunic(ctx, bx + lunge, by, 7.5, c.main, c.dark, c.pale)
-  // belt
+  const cx = bx + lunge
+  arm(ctx, cx - f * 2.4, by - 5.4, cx - f * 6.8, by - 2, c.dark, 1.4)
+  tunic(ctx, cx, by, 7.5, c.main, c.dark, c.pale)
+  // a mail collar over the shoulders — he is the one who stands in the way
+  ctx.fillStyle = MAIL
+  ctx.beginPath(); ctx.ellipse(cx, by - 6.4, 7.2, 3, 0, Math.PI, Math.PI * 2); ctx.fill()
   ctx.fillStyle = c.dark
-  rr(ctx, bx - 7 + lunge, by + 0.5, 14, 3, 1.5); ctx.fill()
-  // head + round helmet
-  headBall(ctx, bx + lunge, by - 12, 6.2)
-  ctx.fillStyle = '#C7CCD4'
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 13.5, 6.4, Math.PI * 0.98, Math.PI * 2.02); ctx.fill()
-  ctx.fillStyle = '#AEB4BF'
-  rr(ctx, bx - 6.6 + lunge, by - 14.2, 13.2, 2.4, 1.2); ctx.fill()
-  // plume — champions wear the gold
-  ctx.fillStyle = champ ? '#E9B44C' : c.main
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 19.5, champ ? 3.1 : 2.6, 0, Math.PI * 2); ctx.fill()
-  // a single soft eye-line rather than two dots — enough to say which
-  // way the face is turned without reading as a doll
+  rr(ctx, cx - 7, by + 0.5, 14, 3, 1.5); ctx.fill() // belt
+  headBall(ctx, cx, by - 12, 6.2)
+  if (eng) kettleHat(ctx, cx, by - 14.6, 6.6, champ ? '#E9B44C' : undefined)
+  else nasalHelm(ctx, cx, by - 13.8, 6.4, f, champ ? '#E9B44C' : undefined)
+  // champions wear the gold at the crown
+  if (champ) {
+    ctx.fillStyle = '#E9B44C'
+    ctx.beginPath(); ctx.arc(cx, by - (eng ? 21 : 20.4), 2.6, 0, Math.PI * 2); ctx.fill()
+  }
   ctx.globalAlpha = 0.5
   ctx.strokeStyle = '#5A4632'
   ctx.lineWidth = 1.1
   ctx.beginPath()
-  ctx.moveTo(bx + f * 2 + lunge, by - 11)
-  ctx.lineTo(bx + f * 4.6 + lunge, by - 11)
+  ctx.moveTo(cx + f * 2, by - 11)
+  ctx.lineTo(cx + f * 4.6, by - 11)
   ctx.stroke()
   ctx.globalAlpha = 1
-  // round shield on the off-hand side
-  ctx.fillStyle = c.dark
-  ctx.beginPath(); ctx.arc(bx - f * 7.5 + lunge, by - 2, 5.4, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = '#FBF3E4'
-  ctx.beginPath(); ctx.arc(bx - f * 7.5 + lunge, by - 2, 2, 0, Math.PI * 2); ctx.fill()
-  // sword
+  // the shield, on the arm already reaching for it
+  if (eng) heaterShield(ctx, cx - f * 7.6, by - 2, 11, f, c.main, c.dark)
+  else kiteShield(ctx, cx - f * 7.6, by - 2.4, 13, f, c.main, c.dark)
+  // sword arm and blade
+  arm(ctx, cx + f * 2.8, by - 5.8, cx + f * 9, by - 2.6, c.main, striking ? -2.6 : -1.3)
   ctx.save()
-  ctx.translate(bx + f * 7.5 + lunge, by - 2)
+  ctx.translate(cx + f * 9, by - 2.6)
   ctx.rotate(f * (striking ? 1.15 : 0.45))
-  ctx.strokeStyle = '#D7DBE2'; ctx.lineWidth = 2.6
-  ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(0, -11); ctx.stroke()
+  ctx.strokeStyle = STEEL_DARK; ctx.lineWidth = 3.2
+  ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(0, eng ? -11.5 : -13.5); ctx.stroke()
+  ctx.strokeStyle = STEEL; ctx.lineWidth = 1.9
+  ctx.beginPath(); ctx.moveTo(-0.3, 0.5); ctx.lineTo(-0.3, eng ? -10.5 : -12.5); ctx.stroke()
+  ctx.strokeStyle = STEEL_LIT; ctx.lineWidth = 0.8
+  ctx.beginPath(); ctx.moveTo(-0.9, 0); ctx.lineTo(-0.9, eng ? -10 : -12); ctx.stroke()
   ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.moveTo(-2.6, 0); ctx.lineTo(2.6, 0); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(-2.8, 0); ctx.lineTo(2.8, 0); ctx.stroke()
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(0, 2.2, 1.3, 0, Math.PI * 2); ctx.fill() // pommel
   ctx.restore()
   ctx.restore()
 }
-
-export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
+export function drawSpearman(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  const eng = civ === 'english'
   const thrusting = e.state === 'attack' && (e.cd ?? 0) > 0.72
   const lunge = thrusting ? f * 3.5 : 0
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
-  // feet
   legs(ctx, bx, e.y + 4.2, by, 3.6, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.6, e.y + 4.2 + walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.6, e.y + 4.2 - walk * 1.2, 2.6, 1.9, 0, 0, Math.PI * 2); ctx.fill()
-  // body
-  tunic(ctx, bx + lunge, by, 6.5, c.main, c.dark, c.pale)
-  // small buckler on the off-hand
-  ctx.fillStyle = WOOD
-  ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 4.2, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = '#C7CCD4'
-  ctx.beginPath(); ctx.arc(bx - f * 7 + lunge, by - 1.5, 1.6, 0, Math.PI * 2); ctx.fill()
-  // head + conical cap
-  headBall(ctx, bx + lunge, by - 11.5, 6)
+  const cx = bx + lunge
+  // the far arm reaches across to the shield before the body is drawn, so it
+  // reads as passing behind him
+  arm(ctx, cx - f * 2, by - 5, cx - f * 6.4, by - 1.5, c.dark, 1.4)
+  tunic(ctx, cx, by, 6.5, c.main, c.dark, c.pale)
   ctx.fillStyle = c.dark
-  ctx.beginPath()
-  ctx.moveTo(bx - 6.2 + lunge, by - 13.5)
-  ctx.quadraticCurveTo(bx + lunge, by - 16, bx + 6.2 + lunge, by - 13.5)
-  ctx.lineTo(bx + 1.5 + lunge, by - 21.5)
-  ctx.quadraticCurveTo(bx + lunge, by - 22.5, bx - 1.5 + lunge, by - 21.5)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#E9B44C'
-  ctx.beginPath(); ctx.arc(bx + lunge, by - 22, champ ? 2.2 : 1.3, 0, Math.PI * 2); ctx.fill()
-  if (champ) { // champions wear a golden band on the cap
-    ctx.strokeStyle = '#E9B44C'; ctx.lineWidth = 1.6
-    ctx.beginPath(); ctx.moveTo(bx - 5.6 + lunge, by - 14); ctx.lineTo(bx + 5.6 + lunge, by - 14); ctx.stroke()
+  rr(ctx, cx - 6.2, by + 0.8, 12.4, 2.4, 1.2); ctx.fill() // belt
+  // the shield hand
+  if (eng) {
+    ctx.fillStyle = WOOD
+    ctx.beginPath(); ctx.arc(cx - f * 7, by - 1.5, 4.4, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = 1; ctx.stroke()
+    ctx.fillStyle = STEEL
+    ctx.beginPath(); ctx.arc(cx - f * 7, by - 1.5, 1.6, 0, Math.PI * 2); ctx.fill()
+  } else {
+    ctx.fillStyle = c.main
+    ctx.beginPath(); ctx.arc(cx - f * 7, by - 1.5, 4.4, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = c.dark; ctx.lineWidth = 1.1; ctx.stroke()
+    fleur(ctx, cx - f * 7, by - 0.2, 4.2, '#FBF3E4')
   }
-  // a single soft eye-line rather than two dots — enough to say which
-  // way the face is turned without reading as a doll
+  headBall(ctx, cx, by - 11.5, 6)
+  if (eng) kettleHat(ctx, cx, by - 14.2, 6.4, champ ? '#E9B44C' : undefined)
+  else nasalHelm(ctx, cx, by - 13.4, 6.2, f, champ ? '#E9B44C' : undefined)
+  // one soft eye-line: enough to say which way he is turned, no more
   ctx.globalAlpha = 0.5
   ctx.strokeStyle = '#5A4632'
   ctx.lineWidth = 1.1
   ctx.beginPath()
-  ctx.moveTo(bx + f * 1.8 + lunge, by - 10.8)
-  ctx.lineTo(bx + f * 4.2 + lunge, by - 10.8)
+  ctx.moveTo(cx + f * 1.8, by - 10.6)
+  ctx.lineTo(cx + f * 4.2, by - 10.6)
   ctx.stroke()
   ctx.globalAlpha = 1
-  // the long spear, angled forward; thrusts on attack
+  // the spear arm, then the shaft it grips
+  arm(ctx, cx + f * 2.5, by - 5.6, cx + f * 8.6, by - 3.6, c.main, -1.6)
   ctx.save()
-  ctx.translate(bx + f * 6 + lunge * 1.4, by - 3)
+  ctx.translate(cx + f * 8.6 + lunge * 0.4, by - 3.6)
   ctx.rotate(f * (thrusting ? 0.12 : 0.35))
   ctx.strokeStyle = WOOD
   ctx.lineWidth = 2.2
-  ctx.beginPath(); ctx.moveTo(-f * 6, 6); ctx.lineTo(f * 13, -7); ctx.stroke()
-  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.moveTo(-f * 6, 6); ctx.lineTo(f * 13.5, -7.4); ctx.stroke()
+  if (!eng) { // a little pennon under the head, the French way
+    ctx.fillStyle = champ ? '#E9B44C' : c.main
+    ctx.beginPath()
+    ctx.moveTo(f * 9.6, -3.8)
+    ctx.lineTo(f * 13.4, -1.2)
+    ctx.lineTo(f * 8.4, -0.4)
+    ctx.closePath(); ctx.fill()
+  }
+  ctx.fillStyle = STEEL
   ctx.save()
-  ctx.translate(f * 13, -7)
+  ctx.translate(f * 13.5, -7.4)
   ctx.rotate(f * -0.68)
   ctx.beginPath()
-  ctx.moveTo(-2.2, 0); ctx.lineTo(0, -6); ctx.lineTo(2.2, 0)
+  ctx.moveTo(-2.2, 0); ctx.lineTo(0, -6.4); ctx.lineTo(2.2, 0)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = STEEL_LIT
+  ctx.beginPath()
+  ctx.moveTo(-2.2, 0); ctx.lineTo(0, -6.4); ctx.lineTo(0, 0)
   ctx.closePath(); ctx.fill()
   ctx.restore()
   ctx.restore()
   ctx.restore()
 }
-
-export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
+// The two ranged traditions, and the clearest tell on the field.
+//
+// England fields the LONGBOW: a yew stave as tall as the man who draws it,
+// held upright in the left fist and pulled back to the ear rather than the
+// chest. Arrows ride in a bag at the hip, the way a yeoman actually carried
+// them — a back quiver is a later idea, and it reads as a crossbowman anyway.
+//
+// France fields the CROSSBOW: a short thick bow lying across a tiller, held at
+// the shoulder like a gun, with a pavise slung on the back to shelter behind
+// while he cranks the next bolt. Two silhouettes you can tell apart across the
+// whole meadow, which is the point.
+export function drawArcher(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const { bx, by, walk } = unitBase(ctx, e, t)
   const f = e.face ?? 1
+  const eng = civ === 'english'
   const drawing = e.state === 'attack' && (e.cd ?? 0) > 1.2 // just loosed / drawing
   ctx.save()
   lean(ctx, e, 0.2, 0.25)
-  // feet
   legs(ctx, bx, e.y + 4, by, 3.4, walk, '#5A4632')
   ctx.fillStyle = WOOD_DARK
   ctx.beginPath(); ctx.ellipse(bx - 3.4, e.y + 4 + walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath(); ctx.ellipse(bx + 3.4, e.y + 4 - walk * 1.2, 2.5, 1.8, 0, 0, Math.PI * 2); ctx.fill()
-  // body: slim tunic
+
+  if (!eng) {
+    // the pavise, a door of a shield slung across his back
+    ctx.fillStyle = c.dark
+    rr(ctx, bx - f * 9.5 - 3.4, by - 12, 6.8, 17, 2.4); ctx.fill()
+    ctx.fillStyle = c.main
+    rr(ctx, bx - f * 9.5 - 2.6, by - 11.4, 5.2, 15.8, 2); ctx.fill()
+    fleur(ctx, bx - f * 9.5, by - 4, 5, '#FBF3E4')
+  }
+
   tunic(ctx, bx, by, 6, c.main, c.dark, c.pale)
-  // quiver on the back
-  ctx.save()
-  ctx.translate(bx - f * 6.5, by - 4)
-  ctx.rotate(f * 0.35)
-  ctx.fillStyle = '#8B6A4A'
-  rr(ctx, -2.2, -5, 4.4, 10, 2); ctx.fill()
-  ctx.strokeStyle = '#F4E4C6'; ctx.lineWidth = 1.4
-  ctx.beginPath()
-  ctx.moveTo(-1, -5); ctx.lineTo(-1, -8)
-  ctx.moveTo(1.2, -5); ctx.lineTo(1.2, -8.5)
-  ctx.stroke()
-  ctx.restore()
-  // head with a hood
+  ctx.fillStyle = c.dark
+  rr(ctx, bx - 5.8, by + 0.6, 11.6, 2.2, 1.1); ctx.fill() // belt
+
+  if (eng) {
+    // the arrow bag at the hip, fletchings standing proud of it
+    ctx.save()
+    ctx.translate(bx - f * 5.2, by + 1.5)
+    ctx.fillStyle = '#8B6A4A'
+    rr(ctx, -2.4, -1, 4.8, 7, 1.8); ctx.fill()
+    ctx.strokeStyle = '#F4E4C6'; ctx.lineWidth = 1.3
+    ctx.beginPath()
+    ctx.moveTo(-1.1, -1); ctx.lineTo(-1.6, -5)
+    ctx.moveTo(0.4, -1); ctx.lineTo(0.4, -5.6)
+    ctx.moveTo(1.8, -1); ctx.lineTo(2.4, -4.8)
+    ctx.stroke()
+    ctx.restore()
+  }
+
   headBall(ctx, bx, by - 11.5, 5.8)
-  ctx.fillStyle = champ ? '#C98F2B' : c.dark // champion longbows hood in gold-braid
-  ctx.beginPath(); ctx.arc(bx, by - 12.5, 6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(bx - f * 2, by - 18)
-  ctx.quadraticCurveTo(bx - f * 7, by - 17, bx - f * 8, by - 13)
-  ctx.quadraticCurveTo(bx - f * 5, by - 15.5, bx - f * 2.5, by - 16.5)
-  ctx.closePath(); ctx.fill()
-  // a single soft eye-line rather than two dots — enough to say which
-  // way the face is turned without reading as a doll
+  if (eng) {
+    // a hood under a kettle hat: the yeoman's whole wardrobe
+    ctx.fillStyle = champ ? '#3F6B4A' : '#4B6B3C'
+    ctx.beginPath(); ctx.arc(bx, by - 12.2, 6.1, Math.PI * 0.9, Math.PI * 2.1); ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(bx - f * 2, by - 17.2)
+    ctx.quadraticCurveTo(bx - f * 7, by - 16.4, bx - f * 8.2, by - 12.6)
+    ctx.quadraticCurveTo(bx - f * 5, by - 15, bx - f * 2.5, by - 16)
+    ctx.closePath(); ctx.fill()
+    kettleHat(ctx, bx, by - 14.4, 6.2, champ ? '#E9B44C' : undefined)
+  } else {
+    nasalHelm(ctx, bx, by - 13.4, 6, f, champ ? '#E9B44C' : undefined)
+  }
   ctx.globalAlpha = 0.5
   ctx.strokeStyle = '#5A4632'
   ctx.lineWidth = 1.1
   ctx.beginPath()
-  ctx.moveTo(bx + f * 1.8, by - 10.8)
-  ctx.lineTo(bx + f * 4.2, by - 10.8)
+  ctx.moveTo(bx + f * 1.8, by - 10.6)
+  ctx.lineTo(bx + f * 4.2, by - 10.6)
   ctx.stroke()
   ctx.globalAlpha = 1
-  // bow held forward
-  ctx.save()
-  ctx.translate(bx + f * 7, by - 4)
-  ctx.strokeStyle = WOOD
-  ctx.lineWidth = 2.2
-  ctx.beginPath()
-  ctx.arc(0, 0, 8, -Math.PI / 2 + 0.25, Math.PI / 2 - 0.25)
-  ctx.stroke()
-  ctx.strokeStyle = '#F4E4C6'
-  ctx.lineWidth = 1
-  const pull = drawing ? -f * 3 : 0
-  ctx.beginPath()
-  ctx.moveTo(0.8, -7.5)
-  ctx.lineTo(pull, 0)
-  ctx.lineTo(0.8, 7.5)
-  ctx.stroke()
-  if (drawing) {
-    ctx.strokeStyle = '#6F5238'
-    ctx.lineWidth = 1.6
-    ctx.beginPath(); ctx.moveTo(pull, 0); ctx.lineTo(8, 0); ctx.stroke()
+
+  if (eng) {
+    // ---- the longbow: a stave from his knee to well over his head ----
+    const gx = bx + f * 6.6, gy = by - 5
+    arm(ctx, bx + f * 2.4, by - 5.6, gx, gy, c.main, -0.8) // the bow arm, straight
+    ctx.save()
+    ctx.translate(gx, gy)
+    ctx.strokeStyle = '#7A5A34'
+    ctx.lineWidth = 2.4
+    ctx.lineCap = 'round'
+    // the stave: one long shallow curve, belly toward the archer
+    ctx.beginPath()
+    ctx.moveTo(f * 1.4, -19)
+    ctx.quadraticCurveTo(-f * 2.8, -3, f * 1.4, 11)
+    ctx.stroke()
+    // horn nocks
+    ctx.fillStyle = '#F2E6CE'
+    ctx.beginPath(); ctx.arc(f * 1.4, -19, 1.2, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(f * 1.4, 11, 1.2, 0, Math.PI * 2); ctx.fill()
+    // the string, drawn back past the jaw when he looses
+    const pull = drawing ? f * 8.5 : f * 1.2
+    ctx.strokeStyle = '#F4E4C6'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(f * 1.4, -18.6)
+    ctx.lineTo(f * 1.4 - pull, drawing ? -6.5 : -4)
+    ctx.lineTo(f * 1.4, 10.6)
+    ctx.stroke()
+    if (drawing) {
+      // the shaft on the string, and the hand that holds it at the ear
+      ctx.strokeStyle = '#6F5238'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(f * 1.4 - pull, -6.5); ctx.lineTo(f * 12, -6.5)
+      ctx.stroke()
+      ctx.fillStyle = STEEL
+      ctx.beginPath()
+      ctx.moveTo(f * 12, -8); ctx.lineTo(f * 15, -6.5); ctx.lineTo(f * 12, -5)
+      ctx.closePath(); ctx.fill()
+    }
+    ctx.restore()
+    // the drawing hand comes back to the ear
+    if (drawing) arm(ctx, bx - f * 1.2, by - 6, bx - f * 1.4, by - 10.2, c.main, 2.6)
+    else arm(ctx, bx - f * 1.6, by - 5.6, bx - f * 4.6, by + 0.6, c.main, 1.4)
+  } else {
+    // ---- the crossbow ----
+    // Shouldered and level when he shoots; carried muzzle-down across the body
+    // between bolts, because a spanned crossbow held level for hours is a
+    // crossbow nobody trusts. The two poses are also two silhouettes.
+    const gx = bx + f * (drawing ? 5.6 : 6.6), gy = by - (drawing ? 6.6 : 4.6)
+    ctx.save()
+    ctx.translate(gx, gy)
+    ctx.rotate(f * (drawing ? 0 : 0.16))
+    ctx.scale(f, 1)
+    // the tiller, tucked into the shoulder
+    ctx.fillStyle = '#7A5A34'
+    rr(ctx, -8, -1.5, 18.5, 3, 1.3); ctx.fill()
+    ctx.fillStyle = '#5F4526'
+    rr(ctx, -8.4, -1.5, 4.4, 5, 1.5); ctx.fill() // the butt against his shoulder
+    ctx.fillStyle = '#94703F'
+    rr(ctx, -1, -2.6, 9, 1.4, 0.7); ctx.fill() // the groove the bolt lies in
+    // the prod: short, thick and deeply bent — this is where the power is
+    ctx.strokeStyle = STEEL_DARK
+    ctx.lineWidth = 2.8
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(6.4, -9.4)
+    ctx.quadraticCurveTo(13.4, 0, 6.4, 9.4)
+    ctx.stroke()
+    ctx.strokeStyle = STEEL
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(6.4, -9.4)
+    ctx.quadraticCurveTo(12.6, -3, 10.6, 0)
+    ctx.stroke()
+    // the string: hauled back to the nut when spanned, slack out at the tips
+    ctx.strokeStyle = '#F4E4C6'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(6.4, -9.2)
+    ctx.lineTo(drawing ? 0.5 : 9.6, 0)
+    ctx.lineTo(6.4, 9.2)
+    ctx.stroke()
+    if (drawing) { // a bolt lying in the groove, ready to go
+      ctx.strokeStyle = '#6F5238'; ctx.lineWidth = 1.6
+      ctx.beginPath(); ctx.moveTo(0.5, 0); ctx.lineTo(12, 0); ctx.stroke()
+      ctx.fillStyle = STEEL
+      ctx.beginPath()
+      ctx.moveTo(12, -1.7); ctx.lineTo(15.4, 0); ctx.lineTo(12, 1.7)
+      ctx.closePath(); ctx.fill()
+    }
+    ctx.restore()
+    // both hands on it: one forward on the stock, one back at the tiller
+    if (drawing) {
+      arm(ctx, bx + f * 2.6, by - 5.8, bx + f * 9.4, by - 6.2, c.main, -1.4)
+      arm(ctx, bx - f * 1.2, by - 5.8, bx + f * 1.4, by - 6.6, c.dark, 1.8)
+    } else {
+      arm(ctx, bx + f * 2.6, by - 5.4, bx + f * 8.8, by - 2.4, c.main, -1.5)
+      arm(ctx, bx - f * 1.2, by - 5.6, bx + f * 1.6, by - 3.4, c.dark, 1.6)
+    }
+    // the spanning hook on his belt, which is how the thing gets loaded
+    ctx.strokeStyle = STEEL_DARK; ctx.lineWidth = 1.3
+    ctx.beginPath(); ctx.arc(bx - f * 4.4, by + 2.6, 2, Math.PI * 0.2, Math.PI * 1.2); ctx.stroke()
   }
   ctx.restore()
-  ctx.restore()
 }
-
 export function drawArcheryRange(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
   const x = e.x, y = e.y
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
@@ -2828,16 +3101,27 @@ export function drawArcheryRange(ctx: CanvasRenderingContext2D, e: Ent, t: numbe
 
 const UNITS_CD_SWORD = 0.9
 
-export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): void {
+// The eyes of the village, on a rough little pony. England sends a huntsman
+// with a horn at his hip; France sends a light horseman with a pennon on a
+// short lance — the same errand, told apart at a glance.
+export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const f = e.face ?? 1
+  const eng = civ === 'english'
   const moving = e.stepped === true
   const trot = moving ? Math.sin(t * 12 + (e.phase ?? 0)) : Math.sin(t * 2 + (e.phase ?? 0)) * 0.4
   const by = e.y - Math.abs(trot) * 2.4
+  const rx = bxr(e.x, f)
   shadow(ctx, e.x, e.y + 6, 11, 4)
   ctx.save()
   lean(ctx, e, 0.45, 0.55) // the pony really points where it's trotting
-  // pony legs
+  // far legs first, so the near pair reads in front
+  ctx.strokeStyle = '#6B5138'
+  ctx.lineWidth = 2.4
+  ctx.beginPath()
+  ctx.moveTo(e.x - 3, by - 3); ctx.lineTo(e.x - 3 + trot * 1.6, e.y + 4)
+  ctx.moveTo(e.x + 6.4, by - 3); ctx.lineTo(e.x + 6.4 - trot * 1.6, e.y + 4)
+  ctx.stroke()
   ctx.strokeStyle = '#7A5C40'
   ctx.lineWidth = 2.6
   ctx.beginPath()
@@ -2849,7 +3133,18 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   ctx.beginPath()
   ctx.ellipse(e.x, by - 4, 10, 6.5, 0, 0, Math.PI * 2)
   ctx.fill()
-  // head + ears
+  ctx.globalAlpha = 0.35
+  ctx.fillStyle = '#6F5238'
+  ctx.beginPath(); ctx.ellipse(e.x + 1.5, by - 2.4, 8.4, 4.6, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.globalAlpha = 1
+  // neck, head + ears
+  ctx.fillStyle = '#96714C'
+  ctx.beginPath()
+  ctx.moveTo(e.x + f * 4, by - 8.5)
+  ctx.lineTo(e.x + f * 9.5, by - 11)
+  ctx.lineTo(e.x + f * 11, by - 7)
+  ctx.lineTo(e.x + f * 6, by - 2.5)
+  ctx.closePath(); ctx.fill()
   ctx.beginPath()
   ctx.ellipse(e.x + f * 10, by - 8, 4.6, 3.8, f * 0.4, 0, Math.PI * 2)
   ctx.fill()
@@ -2867,60 +3162,127 @@ export function drawScout(ctx: CanvasRenderingContext2D, e: Ent, t: number): voi
   // saddle in team color
   ctx.fillStyle = c.main
   rr(ctx, e.x - 4.5, by - 9.5, 9, 4.5, 2); ctx.fill()
+  ctx.fillStyle = c.dark
+  rr(ctx, e.x - 4.5, by - 5.6, 9, 1.6, 0.8); ctx.fill()
+  // What he carries goes in BEHIND him — a horn across the chest or a lance
+  // through the face is what you get for drawing it last.
+  if (eng) {
+    // the hunting horn, slung on a baldric over the far shoulder
+    ctx.save()
+    ctx.translate(rx - f * 4.6, by - 13.6)
+    ctx.rotate(f * 0.5)
+    ctx.strokeStyle = '#E8DCC0'
+    ctx.lineWidth = 2.3
+    ctx.lineCap = 'round'
+    ctx.beginPath(); ctx.arc(0, 0, 3.1, Math.PI * 0.05, Math.PI * 1.15); ctx.stroke()
+    ctx.fillStyle = '#C98F2B'
+    ctx.beginPath(); ctx.arc(3, 0.3, 1.4, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
+  } else {
+    // a short lance carried upright, with the company's pennon flying from it
+    ctx.strokeStyle = WOOD; ctx.lineWidth = 1.9
+    ctx.beginPath(); ctx.moveTo(rx - f * 6, by - 8); ctx.lineTo(rx - f * 8.4, by - 30); ctx.stroke()
+    ctx.fillStyle = c.main
+    ctx.beginPath()
+    ctx.moveTo(rx - f * 8.2, by - 29)
+    ctx.lineTo(rx - f * 15, by - 26.4)
+    ctx.lineTo(rx - f * 11, by - 25)
+    ctx.lineTo(rx - f * 7.8, by - 24.4)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#E9B44C'
+    ctx.beginPath(); ctx.arc(rx - f * 8.4, by - 30, 1.5, 0, Math.PI * 2); ctx.fill()
+  }
   // little rider
   ctx.fillStyle = c.main
   ctx.beginPath()
-  ctx.moveTo(bxr(e.x, f) - 4.5, by - 10)
-  ctx.quadraticCurveTo(bxr(e.x, f) - 5, by - 17, bxr(e.x, f), by - 18)
-  ctx.quadraticCurveTo(bxr(e.x, f) + 5, by - 17, bxr(e.x, f) + 4.5, by - 10)
+  ctx.moveTo(rx - 4.5, by - 10)
+  ctx.quadraticCurveTo(rx - 5, by - 17, rx, by - 18)
+  ctx.quadraticCurveTo(rx + 5, by - 17, rx + 4.5, by - 10)
   ctx.closePath(); ctx.fill()
-  headBall(ctx, bxr(e.x, f), by - 20.5, 4.6)
-  // feathered cap
+  ctx.globalAlpha = 0.35
   ctx.fillStyle = c.dark
-  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22, 4.8, Math.PI * 0.95, Math.PI * 2.05); ctx.fill()
-  ctx.strokeStyle = '#85B168'
+  ctx.beginPath()
+  ctx.moveTo(rx + 1.4, by - 10)
+  ctx.quadraticCurveTo(rx + 4.6, by - 16.4, rx + 2.6, by - 17.6)
+  ctx.quadraticCurveTo(rx + 5, by - 17, rx + 4.5, by - 10)
+  ctx.closePath(); ctx.fill()
+  ctx.globalAlpha = 1
+  // the rein hand, reaching down the neck
+  arm(ctx, rx + f * 2, by - 14.6, e.x + f * 6.6, by - 8.4, c.main, -1.6)
+  headBall(ctx, rx, by - 20.5, 4.6)
+  // the cap, feathered either way — the feather is the only thing they share
+  ctx.fillStyle = c.dark
+  ctx.beginPath(); ctx.arc(rx, by - 22, 4.8, Math.PI * 0.95, Math.PI * 2.05); ctx.fill()
+  ctx.fillStyle = c.main
+  ctx.beginPath(); ctx.ellipse(rx, by - 22.4, 5, 1.5, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = eng ? '#85B168' : '#E9B44C'
   ctx.lineWidth = 1.6
   ctx.beginPath()
-  ctx.moveTo(bxr(e.x, f) - f * 3, by - 25)
-  ctx.quadraticCurveTo(bxr(e.x, f) - f * 6, by - 28, bxr(e.x, f) - f * 8, by - 26)
+  ctx.moveTo(rx - f * 3, by - 25)
+  ctx.quadraticCurveTo(rx - f * 6, by - 28, rx - f * 8, by - 26)
   ctx.stroke()
-  // a single soft eye-line rather than two dots — enough to say which
-  // way the face is turned without reading as a doll
   ctx.globalAlpha = 0.5
   ctx.strokeStyle = '#5A4632'
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.moveTo(bxr(e.x, f) + f * 1.5, by - 20)
-  ctx.lineTo(bxr(e.x, f) + f * 3.4, by - 20)
+  ctx.moveTo(rx + f * 1.5, by - 20)
+  ctx.lineTo(rx + f * 3.4, by - 20)
   ctx.stroke()
   ctx.globalAlpha = 1
   ctx.restore()
 }
-
 function bxr(x: number, f: number): number { return x - f * 1.5 }
 
-export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false): void {
+// Chivalry, both flavours. England rides in the older kit: a flat-topped great
+// helm and a heater under the cross, a plain caparison. France rides later and
+// grander — a crested bascinet, a kite strewn with the fleur, a caparison sewn
+// with them, and a pennon snapping from the lance.
+export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, champ = false, civ: CivId = 'english'): void {
   const c = TEAM_COLOR[e.team] ?? TEAM_COLOR[0]
   const f = e.face ?? 1
+  const eng = civ === 'english'
   const moving = e.stepped === true
   const trot = moving ? Math.sin(t * 11 + (e.phase ?? 0)) : Math.sin(t * 2 + (e.phase ?? 0)) * 0.4
   const by = e.y - Math.abs(trot) * 2.6
+  const rx = bxr(e.x, f)
+  const crest = champ ? '#E9B44C' : c.main
   shadow(ctx, e.x, e.y + 6, 13, 4.5)
   ctx.save()
   lean(ctx, e, 0.4, 0.5)
-  // charger legs
+  // the far pair of legs, then the near — a horse with four legs reads as a
+  // horse; a horse with two reads as a rocking toy
+  ctx.strokeStyle = '#5C432E'
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(e.x - 3.4, by - 3); ctx.lineTo(e.x - 3.4 + trot * 1.8, e.y + 4.5)
+  ctx.moveTo(e.x + 7.6, by - 3); ctx.lineTo(e.x + 7.6 - trot * 1.8, e.y + 4.5)
+  ctx.stroke()
   ctx.strokeStyle = '#6B4F37'
   ctx.lineWidth = 3
   ctx.beginPath()
   ctx.moveTo(e.x - 6, by - 2); ctx.lineTo(e.x - 6 - trot * 2.2, e.y + 5.5)
   ctx.moveTo(e.x + 6, by - 2); ctx.lineTo(e.x + 6 + trot * 2.2, e.y + 5.5)
   ctx.stroke()
-  // the charger, broad and proud, in a team caparison
+  // the charger, broad and proud
   ctx.fillStyle = '#84603F'
   ctx.beginPath(); ctx.ellipse(e.x, by - 5, 11.5, 7.5, 0, 0, Math.PI * 2); ctx.fill()
+  // the caparison over its hindquarters
   ctx.fillStyle = champ ? '#E9B44C' : c.main
-  ctx.beginPath(); ctx.ellipse(e.x, by - 3, 10.5, 5.5, 0, 0, Math.PI); ctx.fill() // skirt
+  ctx.beginPath(); ctx.ellipse(e.x, by - 3, 10.5, 5.5, 0, 0, Math.PI); ctx.fill()
+  ctx.fillStyle = c.dark
+  ctx.beginPath(); ctx.ellipse(e.x, by - 0.5, 10.5, 2, 0, 0, Math.PI * 2); ctx.fill()
+  if (!eng) { // France sows hers with the fleur
+    fleur(ctx, e.x - 5, by - 1.6, 4, '#FBF3E4')
+    fleur(ctx, e.x + 4, by - 1.6, 4, '#FBF3E4')
+  }
+  // neck, head, ears
   ctx.fillStyle = '#84603F'
+  ctx.beginPath()
+  ctx.moveTo(e.x + f * 4.5, by - 10)
+  ctx.lineTo(e.x + f * 10.5, by - 13)
+  ctx.lineTo(e.x + f * 12, by - 8)
+  ctx.lineTo(e.x + f * 6.5, by - 3)
+  ctx.closePath(); ctx.fill()
   ctx.beginPath(); ctx.ellipse(e.x + f * 11, by - 9.5, 5, 4.2, f * 0.4, 0, Math.PI * 2); ctx.fill()
   ctx.beginPath()
   ctx.moveTo(e.x + f * 9, by - 12.5)
@@ -2928,58 +3290,111 @@ export function drawKnight(ctx: CanvasRenderingContext2D, e: Ent, t: number, cha
   ctx.lineTo(e.x + f * 12.5, by - 12.5)
   ctx.closePath(); ctx.fill()
   // chamfron (face armor)
-  ctx.fillStyle = '#C7CCD4'
+  ctx.fillStyle = STEEL
   ctx.beginPath(); ctx.ellipse(e.x + f * 12.5, by - 9.5, 2.8, 2.2, f * 0.4, 0, Math.PI * 2); ctx.fill()
-  // armored rider
-  ctx.fillStyle = '#AEB4BF'
+  ctx.fillStyle = crest
   ctx.beginPath()
-  ctx.moveTo(bxr(e.x, f) - 5, by - 11)
-  ctx.quadraticCurveTo(bxr(e.x, f) - 5.5, by - 19, bxr(e.x, f), by - 20)
-  ctx.quadraticCurveTo(bxr(e.x, f) + 5.5, by - 19, bxr(e.x, f) + 5, by - 11)
+  ctx.moveTo(e.x + f * 10, by - 13.6)
+  ctx.lineTo(e.x + f * 11.4, by - 17.6)
+  ctx.lineTo(e.x + f * 12.4, by - 13.4)
   ctx.closePath(); ctx.fill()
-  // great helm with a plume — steel takes the sun harder than skin does, so
-  // it gets a bright edge as well as a shaded side
-  ctx.fillStyle = '#AEB4BF'
-  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22.5, 4.8, 0, Math.PI * 2); ctx.fill()
-  ctx.save()
-  ctx.beginPath(); ctx.arc(bxr(e.x, f), by - 22.5, 4.8, 0, Math.PI * 2); ctx.clip()
-  ctx.fillStyle = '#E4E8EE'
-  ctx.fillRect(bxr(e.x, f) - 4.8, by - 27.3, 3.2, 9.6)
-  ctx.fillStyle = '#7E858F'
-  ctx.fillRect(bxr(e.x, f) + 1.2, by - 27.3, 3.6, 9.6)
-  ctx.restore()
-  ctx.fillStyle = '#5A4632'
-  rr(ctx, bxr(e.x, f) - 4.4, by - 23.4, 8.8, 1.8, 0.9); ctx.fill() // visor slit
-  ctx.fillStyle = champ ? '#E9B44C' : c.main
+  // armored rider, with a surcoat over the mail
+  ctx.fillStyle = MAIL
   ctx.beginPath()
-  ctx.ellipse(bxr(e.x, f) - f * 1.5, by - 28, 2, 3.2, f * -0.4, 0, Math.PI * 2)
-  ctx.fill()
-  // kite shield
+  ctx.moveTo(rx - 5, by - 11)
+  ctx.quadraticCurveTo(rx - 5.5, by - 19, rx, by - 20)
+  ctx.quadraticCurveTo(rx + 5.5, by - 19, rx + 5, by - 11)
+  ctx.closePath(); ctx.fill()
   ctx.fillStyle = c.main
   ctx.beginPath()
-  ctx.moveTo(bxr(e.x, f) - f * 7, by - 17)
-  ctx.quadraticCurveTo(bxr(e.x, f) - f * 11, by - 15, bxr(e.x, f) - f * 9.5, by - 8)
-  ctx.quadraticCurveTo(bxr(e.x, f) - f * 8.5, by - 6, bxr(e.x, f) - f * 6, by - 8.5)
-  ctx.quadraticCurveTo(bxr(e.x, f) - f * 4.5, by - 14, bxr(e.x, f) - f * 7, by - 17)
+  ctx.moveTo(rx - 3.4, by - 18.6)
+  ctx.quadraticCurveTo(rx - 4.6, by - 13, rx - 4.2, by - 11)
+  ctx.lineTo(rx + 4.2, by - 11)
+  ctx.quadraticCurveTo(rx + 4.6, by - 13, rx + 3.4, by - 18.6)
   ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#FBF3E4'
-  ctx.beginPath(); ctx.arc(bxr(e.x, f) - f * 7.8, by - 12, 1.6, 0, Math.PI * 2); ctx.fill()
+  // the rein arm goes down the neck before the shield is hung on the near side
+  arm(ctx, rx + f * 2.4, by - 15.4, e.x + f * 7.4, by - 9, MAIL, -1.6)
+  if (eng) {
+    // ---- the great helm: a steel bucket with a breathing slit ----
+    ctx.fillStyle = MAIL
+    ctx.beginPath(); ctx.arc(rx, by - 22.5, 4.8, 0, Math.PI * 2); ctx.fill()
+    ctx.save()
+    ctx.beginPath(); ctx.arc(rx, by - 22.5, 4.8, 0, Math.PI * 2); ctx.clip()
+    ctx.fillStyle = STEEL_LIT
+    ctx.fillRect(rx - 4.8, by - 27.3, 3.2, 9.6)
+    ctx.fillStyle = '#7E858F'
+    ctx.fillRect(rx + 1.2, by - 27.3, 3.6, 9.6)
+    ctx.restore()
+    ctx.fillStyle = '#5A4632'
+    rr(ctx, rx - 4.4, by - 23.4, 8.8, 1.8, 0.9); ctx.fill() // visor slit
+    ctx.fillStyle = STEEL_DARK
+    rr(ctx, rx - 4.6, by - 26.6, 9.2, 1.6, 0.8); ctx.fill() // the flat top
+    ctx.fillStyle = crest
+    ctx.beginPath()
+    ctx.ellipse(rx - f * 1.5, by - 28.4, 2, 3.2, f * -0.4, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    // ---- the bascinet: a pointed skull, visor down, a crest along the top ----
+    ctx.fillStyle = MAIL
+    ctx.beginPath(); ctx.ellipse(rx, by - 19.6, 5.2, 3.2, 0, 0, Math.PI); ctx.fill()
+    ctx.fillStyle = STEEL
+    ctx.beginPath()
+    ctx.moveTo(rx - 4.6, by - 20.4)
+    ctx.quadraticCurveTo(rx - 5, by - 26, rx - f * 0.6, by - 28.2)
+    ctx.quadraticCurveTo(rx + 5, by - 26, rx + 4.6, by - 20.4)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = STEEL_LIT
+    ctx.beginPath()
+    ctx.moveTo(rx - 4.6, by - 20.4)
+    ctx.quadraticCurveTo(rx - 5, by - 26, rx - f * 0.6, by - 28.2)
+    ctx.quadraticCurveTo(rx - 2, by - 25, rx - 1.6, by - 20.4)
+    ctx.closePath(); ctx.fill()
+    // the visor, snouted forward, with its slit
+    ctx.fillStyle = STEEL_DARK
+    ctx.beginPath()
+    ctx.moveTo(rx + f * 0.4, by - 25.4)
+    ctx.quadraticCurveTo(rx + f * 6.4, by - 24, rx + f * 4.2, by - 20)
+    ctx.lineTo(rx + f * 0.4, by - 19.6)
+    ctx.closePath(); ctx.fill()
+    ctx.strokeStyle = '#3E4A38'; ctx.lineWidth = 1.1
+    ctx.beginPath(); ctx.moveTo(rx + f * 0.8, by - 23.4); ctx.lineTo(rx + f * 4.6, by - 22.8); ctx.stroke()
+    // the crest, running fore and aft along the skull
+    ctx.fillStyle = crest
+    ctx.beginPath()
+    ctx.moveTo(rx - f * 4, by - 25.6)
+    ctx.quadraticCurveTo(rx - f * 0.4, by - 31.6, rx + f * 2.4, by - 26.6)
+    ctx.quadraticCurveTo(rx - f * 0.4, by - 28.6, rx - f * 4, by - 25.6)
+    ctx.closePath(); ctx.fill()
+  }
+  // the shield, hung on the near arm
+  if (eng) heaterShield(ctx, rx - f * 7.8, by - 10.5, 11, f, c.main, c.dark)
+  else kiteShield(ctx, rx - f * 7.8, by - 10, 12.5, f, c.main, c.dark)
   // couched lance, dips on the charge
   const striking = e.state === 'attack' && (e.cd ?? 0) > 0.65
   ctx.save()
-  ctx.translate(bxr(e.x, f) + f * 3, by - 14)
+  ctx.translate(rx + f * 3, by - 14)
   ctx.rotate(f * (striking ? 0.32 : 0.18))
   ctx.strokeStyle = WOOD
   ctx.lineWidth = 2.4
-  ctx.beginPath(); ctx.moveTo(-f * 4, 0); ctx.lineTo(f * 17, 0); ctx.stroke()
-  ctx.fillStyle = '#C7CCD4'
+  ctx.beginPath(); ctx.moveTo(-f * 5, 0); ctx.lineTo(f * 17, 0); ctx.stroke()
+  ctx.fillStyle = STEEL_DARK // the grip guard, so the lance has a hand's place
+  ctx.beginPath(); ctx.ellipse(f * 1.5, 0, 1.6, 2.6, 0, 0, Math.PI * 2); ctx.fill()
+  if (!eng) { // the pennon, a third of the way down the shaft
+    ctx.fillStyle = crest
+    ctx.beginPath()
+    ctx.moveTo(f * 10, -0.8)
+    ctx.lineTo(f * 15.4, -4.4)
+    ctx.lineTo(f * 14.2, -1)
+    ctx.lineTo(f * 15.4, 1.6)
+    ctx.closePath(); ctx.fill()
+  }
+  ctx.fillStyle = STEEL
   ctx.beginPath()
   ctx.moveTo(f * 17, -1.8); ctx.lineTo(f * 21.5, 0); ctx.lineTo(f * 17, 1.8)
   ctx.closePath(); ctx.fill()
   ctx.restore()
   ctx.restore()
 }
-
 // ---- siege engines: slow wooden machines from the workshop ----
 
 // a wheeled catapult with a throwing spoon; the arm rocks back as it reloads

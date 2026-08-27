@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, BANNERS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, CivId, BUILDINGS, BANNERS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
@@ -12,6 +12,12 @@ import {
   drawRelic, drawChurch, drawMinistry, drawMonk,
   drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawMuster,
 } from './sprites'
+
+// Which kit a soldier wears. The civs are settled at Begin, after the world is
+// dealt, so this is read at draw time rather than stamped onto the unit.
+function civOf(g: Game, e: Ent): CivId {
+  return g.civs[e.team] ?? 'english'
+}
 
 let groundPattern: CanvasPattern | null = null
 let fogCanvas: HTMLCanvasElement | null = null
@@ -603,13 +609,13 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
             isUnit(u) && !u.hidden && u.team === e.team && dist(u.x, u.y, e.x, e.y) < 42))
         : drawSite(ctx, e)
         break
-      case 'villager': drawVillager(ctx, e, time); break
+      case 'villager': drawVillager(ctx, e, time, civOf(g, e)); break
       case 'monk': drawMonk(ctx, e, time, e.relicId !== undefined); break
-      case 'swordsman': drawSwordsman(ctx, e, time, g.champs[e.team]?.infantry); break
-      case 'spearman': drawSpearman(ctx, e, time, g.champs[e.team]?.infantry); break
-      case 'archer': drawArcher(ctx, e, time, g.champs[e.team]?.ranged); break
-      case 'scout': drawScout(ctx, e, time); break
-      case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry); break
+      case 'swordsman': drawSwordsman(ctx, e, time, g.champs[e.team]?.infantry, civOf(g, e)); break
+      case 'spearman': drawSpearman(ctx, e, time, g.champs[e.team]?.infantry, civOf(g, e)); break
+      case 'archer': drawArcher(ctx, e, time, g.champs[e.team]?.ranged, civOf(g, e)); break
+      case 'scout': drawScout(ctx, e, time, civOf(g, e)); break
+      case 'knight': drawKnight(ctx, e, time, g.champs[e.team]?.cavalry, civOf(g, e)); break
       case 'mangonel': drawMangonel(ctx, e, time); break
       case 'trebuchet': drawTrebuchet(ctx, e, time); break
       case 'siegeworkshop': e.complete ? drawSiegeWorkshop(ctx, e, time) : drawSite(ctx, e); break

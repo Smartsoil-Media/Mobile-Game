@@ -45,7 +45,7 @@ function el<T extends HTMLElement>(id: string): T { return document.getElementBy
 
 // Menu icons are miniatures of the real in-game sprites, drawn fresh onto
 // tiny canvases so the build menu always matches the world's art.
-function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
+function spriteIcon(kind: string, age = 2, civ: CivId = iconCiv): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = c.height = 96
   c.className = 'sprite-icon'
@@ -98,7 +98,7 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     monk: { scale: 1.55, cx: 0, cy: -7 },
     swordsman: { scale: 1.45, cx: 0, cy: -8 },
     spearman: { scale: 1.4, cx: 0, cy: -8 },
-    archer: { scale: 1.45, cx: 0, cy: -7 },
+    archer: { scale: 1.22, cx: 0, cy: -6 }, // a longbow is taller than a man, and a crossbow wider
     scout: { scale: 1.15, cx: 0, cy: -10 },
     knight: { scale: 1.05, cx: 0, cy: -11 },
   }
@@ -141,13 +141,13 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
     case 'crag': drawCrag(ctx, fake); break
     case 'relic': drawRelic(ctx, fake, 0); break
     case 'trebuchet': drawTrebuchet(ctx, fake, 0); break
-    case 'villager': drawVillager(ctx, fake, 0); break
+    case 'villager': drawVillager(ctx, fake, 0, civ); break
     case 'monk': drawMonk(ctx, fake, 0); break
-    case 'swordsman': drawSwordsman(ctx, fake, 0); break
-    case 'spearman': drawSpearman(ctx, fake, 0); break
-    case 'archer': drawArcher(ctx, fake, 0); break
-    case 'scout': drawScout(ctx, fake, 0); break
-    case 'knight': drawKnight(ctx, fake, 0); break
+    case 'swordsman': drawSwordsman(ctx, fake, 0, false, civ); break
+    case 'spearman': drawSpearman(ctx, fake, 0, false, civ); break
+    case 'archer': drawArcher(ctx, fake, 0, false, civ); break
+    case 'scout': drawScout(ctx, fake, 0, civ); break
+    case 'knight': drawKnight(ctx, fake, 0, false, civ); break
   }
   return c
 }
@@ -211,6 +211,11 @@ function musterIcon(color: string, edge: string, planted: boolean, size = 38): s
     `<circle cx="13.1" cy="3.1" r="2.1" fill="#E9B44C" stroke="#C98F2B" stroke-width="0.9"/>` +
     `</svg>`
 }
+
+// Whose kit the dock and roster icons wear. Kept alongside the game rather
+// than threaded through every spriteIcon call: it only changes at Begin, and
+// syncUI refreshes it before anything is drawn.
+let iconCiv: CivId = 'english'
 
 // Who's playing, as far as the menu is concerned. A stand-in until accounts
 // arrive: nothing leaves the device and the sim never reads it.
@@ -1031,7 +1036,7 @@ function buildInfoCard(g: Game, e: Ent): string {
   const blurb = lm ? `${lm.blurb}. Raising it IS the age-up: the ${AGE_NAMES[lm.toAge]} dawns when its walls stand.`
     : INFO_BLURB[e.kind] ?? ''
   // a canvas loses its pixels through outerHTML — bake the miniature to an image
-  const icon = spriteIcon(e.kind, g.age[e.team] ?? 2)
+  const icon = spriteIcon(e.kind, g.age[e.team] ?? 2, g.civs[e.team] ?? 'english')
   return `<div class="ic-head"><img class="ic-icon" alt="" src="${icon.toDataURL()}"><h3>${name}${tag ? `<div class="ic-tag">${tag}</div>` : ''}</h3>` +
     `<button class="ic-close" id="info-close" aria-label="Close">\u2715</button></div>` +
     (blurb ? `<p>${blurb}</p>` : '') +
@@ -1092,6 +1097,7 @@ export function syncUI(g: Game): void {
   // The HUD belongs to a game in progress. Reading it off g.started here means
   // every way in — the menu, a replay, the test hook — gets it right.
   document.body.classList.toggle('playing', g.started)
+  iconCiv = g.civs[0] ?? 'english'
   const p = pop(g, 0)
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
   el('food-n').textContent = String(Math.floor(g.res[0].food))

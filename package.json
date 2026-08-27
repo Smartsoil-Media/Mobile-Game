@@ -8,7 +8,8 @@
     "build": "node build.mjs",
     "shot": "node scripts/shot.mjs",
     "synth": "node scripts/synth.mjs",
-    "audio": "node scripts/synth.mjs && node scripts/audio.mjs"
+    "audio": "node scripts/synth.mjs && node scripts/audio.mjs",
+    "units": "node scripts/units.mjs shots/units.png"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

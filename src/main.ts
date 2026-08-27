@@ -5,6 +5,7 @@ import { findPath, inWater } from './nav'
 import { update } from './sim'
 import { render } from './render'
 import { attachInput, clampCamera, selectArmy, snapPlace, commandMove, beginMuster, plantMuster } from './input'
+import * as sprites from './sprites'
 import { initUI, syncUI } from './ui'
 import { unlockAudio, listenFrom, drainSfx, sfx, setMuted, setVolume, audioReady, muted, heardSfx, clearHeard, sfxProbe } from './audio'
 
@@ -103,4 +104,6 @@ requestAnimationFrame(frame)
   unlockAudio() { unlockAudio() },
   setMuted(on: boolean) { setMuted(on) },
   setVolume(v: number) { setVolume(v) },
+  // the sprite kit itself, so a contact sheet can draw every unit side by side
+  sprites,
 }

@@ -3204,6 +3204,51 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.85) the two hosts must actually look different. Draw each unit under both
+// banners onto a scratch canvas and count how much of the inked area disagrees
+// — a cheap way to catch a civ tell being lost to a refactor.
+const kitDiff = await page3.evaluate(() => {
+  const S = window.__game.sprites
+  const KINDS = ['villager', 'spearman', 'swordsman', 'archer', 'scout', 'knight']
+  const shot = (k, civ) => {
+    const c = document.createElement('canvas')
+    c.width = 110; c.height = 110
+    const x = c.getContext('2d')
+    x.translate(55, 74); x.scale(1.9, 1.9)
+    const e = { id: 1, kind: k, team: 0, x: 0, y: 0, r: 11, hp: 9, maxHp: 9,
+      seed: 3, face: 1, phase: 0, state: 'idle', cd: 0 }
+    switch (k) {
+      case 'villager': S.drawVillager(x, e, 0, civ); break
+      case 'spearman': S.drawSpearman(x, e, 0, false, civ); break
+      case 'swordsman': S.drawSwordsman(x, e, 0, false, civ); break
+      case 'archer': S.drawArcher(x, e, 0, false, civ); break
+      case 'scout': S.drawScout(x, e, 0, civ); break
+      case 'knight': S.drawKnight(x, e, 0, false, civ); break
+    }
+    return x.getImageData(0, 0, 110, 110).data
+  }
+  const out = {}
+  for (const k of KINDS) {
+    const a = shot(k, 'english'), b = shot(k, 'french')
+    let diff = 0, ink = 0
+    for (let i = 0; i < a.length; i += 4) {
+      if (a[i + 3] > 8 || b[i + 3] > 8) ink++
+      const d = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) +
+        Math.abs(a[i + 2] - b[i + 2]) + Math.abs(a[i + 3] - b[i + 3])
+      if (d > 40) diff++
+    }
+    out[k] = Math.round((diff / Math.max(1, ink)) * 100)
+  }
+  return out
+})
+console.log('english vs french, % of the sprite that differs:', kitDiff)
+for (const [k, pct] of Object.entries(kitDiff)) {
+  if (pct < 8) throw new Error(`the two hosts' ${k} look the same (${pct}% differs)`)
+}
+// the archer is the headline: a longbow and a crossbow should share almost nothing
+if (kitDiff.archer < 25)
+  throw new Error(`longbow and crossbow should be plainly different, got ${kitDiff.archer}%`)
+
 // 18.9) the main menu and the French: banner picking, feudal knights, the School
 const pageF = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await pageF.goto('file://' + resolve('dist/index.html') + '?map=classic')
