@@ -798,14 +798,31 @@ button.cmd.ghost {
 
 .hidden { display: none !important; }
 
-/* landscape-first: in portrait, ask for a turn (tests opt out via allow-portrait).
-   Opaque on purpose — the meadow behind is drawn for a landscape window, so
-   letting it peek through only shows off ground the player can't play on. */
+/* Before the first Begin there is no village to report on, so the HUD stays
+   away and the menu has the screen to itself. The sound bell is the exception:
+   turning the meadow down before you walk into it is a fair thing to want. */
+body:not(.playing) #hud-top,
+body:not(.playing) #minimap,
+body:not(.playing) #army-panel,
+body:not(.playing) #prod-panel,
+body:not(.playing) #banner-strip,
+body:not(.playing) #dock,
+body:not(.playing) #toasts,
+body:not(.playing) #info-card { display: none; }
+
+/* The menu and the turn-sideways screen both stand on their own ground rather
+   than a blurred glimpse of the meadow: you haven't picked a map yet on one,
+   and can't play on the other. A soft lift in the middle keeps the flat field
+   from reading as dead space behind the card. */
+#start-overlay, #rotate-overlay {
+  background:
+    radial-gradient(120% 90% at 50% 42%, #4A5B39 0%, var(--meadow-deep) 62%, #33412A 100%);
+  backdrop-filter: none;
+}
+/* landscape-first: in portrait, ask for a turn (tests opt out via allow-portrait) */
 #rotate-overlay {
   display: none;
   z-index: 40;
-  background: var(--meadow-deep);
-  backdrop-filter: none;
 }
 @media (orientation: portrait) {
   body:not(.allow-portrait) #rotate-overlay { display: flex; }

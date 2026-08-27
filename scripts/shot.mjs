@@ -3210,6 +3210,17 @@ await pageF.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await pageF.evaluate(() => window.__game.allowPortrait())
 // the way in starts at the name card, not the mode card
 if (!(await pageF.isVisible('#menu-login'))) throw new Error('the sign-in card should come first')
+// and it stands on its own ground: no meadow, no minimap, no HUD behind it
+const menuChrome = await pageF.evaluate(() => ({
+  playing: document.body.classList.contains('playing'),
+  showing: ['hud-top', 'minimap', 'army-panel', 'dock']
+    .filter(id => (document.getElementById(id)?.getClientRects().length ?? 0) > 0),
+  seeThrough: getComputedStyle(document.getElementById('start-overlay')).backdropFilter,
+}))
+console.log('menu chrome:', menuChrome)
+if (menuChrome.playing) throw new Error('nothing is being played yet')
+if (menuChrome.showing.length) throw new Error('the HUD should wait for a game: ' + menuChrome.showing.join(','))
+if (menuChrome.seeThrough !== 'none') throw new Error('the menu should not show the meadow through it')
 if (await pageF.isVisible('#menu-home')) throw new Error('the mode card should wait for a name')
 await pageF.fill('#login-name', 'Rowan')
 await pageF.tap('#login-go')
@@ -3247,6 +3258,13 @@ if (!frStart.started) throw new Error('Begin did not start the game')
 if (frStart.civs[0] !== 'french' || frStart.civs[1] !== 'english') throw new Error('civ picks wrong: ' + frStart.civs.join(','))
 if (frStart.aiLevel !== 'hard' || frStart.enemyFood < 200) throw new Error('difficulty pick did not take')
 if (frStart.mapSeed !== 0) throw new Error('Crocodile Crossing should be the handcrafted meadow, got seed ' + frStart.mapSeed)
+const hudBack = await pageF.evaluate(() => ({
+  playing: document.body.classList.contains('playing'),
+  hidden: ['hud-top', 'minimap', 'army-panel']
+    .filter(id => (document.getElementById(id)?.getClientRects().length ?? 0) === 0),
+}))
+if (!hudBack.playing || hudBack.hidden.length)
+  throw new Error('the HUD should be back once play starts: ' + JSON.stringify(hudBack))
 // the French Town Hall offers the French landmark pair
 await pageF.evaluate(() => {
   const g = window.__game.state

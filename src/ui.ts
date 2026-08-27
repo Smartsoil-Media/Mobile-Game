@@ -1089,6 +1089,9 @@ function syncBannerStrip(g: Game): void {
 }
 
 export function syncUI(g: Game): void {
+  // The HUD belongs to a game in progress. Reading it off g.started here means
+  // every way in — the menu, a replay, the test hook — gets it right.
+  document.body.classList.toggle('playing', g.started)
   const p = pop(g, 0)
   el('wood-n').textContent = String(Math.floor(g.res[0].wood))
   el('food-n').textContent = String(Math.floor(g.res[0].food))

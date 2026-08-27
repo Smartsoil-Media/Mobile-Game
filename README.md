@@ -256,11 +256,12 @@ other banner, plays its own civ's landmarks, and leans into its own civ's
 habits. A Fierce rival thinks faster, runs a deeper economy, starts flush,
 and pushes with bigger armies; a Gentle one gives you room to breathe.
 
-Held in portrait, the game shows one flat *turn sideways* screen rather
-than a blurred glimpse of a meadow laid out for a window it hasn't got —
-and everything outside the playfield (including the strip beyond a notched
-phone's viewport) is painted the same deep green, so no pale band shows
-along an edge.
+The menu stands on its own ground: a soft deep-green field, no blurred
+meadow behind the cards and no HUD until there's a village to report on
+(the sound bell stays, so you can turn the meadow down before you walk into
+it). The *turn sideways* screen in portrait is the same field, and so is
+everything outside the playfield — including the strip beyond a notched
+phone's viewport — so no pale band shows along an edge.
 
 ## Ages & Landmarks
 
