@@ -1,5 +1,5 @@
 // Camera + world rendering.
-import { Game, Ent, BUILDINGS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
+import { Game, Ent, BUILDINGS, BANNERS, PLACE_SNAP, TILE, TILT, dist, isUnit, isBuilding } from './data'
 import { isVisibleToPlayer, canPlaceAt, placementCells, wallLinePoints, fogIndex } from './world'
 import { inWater } from './nav'
 import {
@@ -10,7 +10,7 @@ import {
   drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace,
   drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight,
   drawRelic, drawChurch, drawMinistry, drawMonk,
-  drawSiegeWorkshop, drawMangonel, drawTrebuchet,
+  drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawMuster,
 } from './sprites'
 
 let groundPattern: CanvasPattern | null = null
@@ -727,6 +727,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     }
     ctx.globalAlpha = 1
     g.taps = g.taps.filter(tp => time - tp.at < 0.5)
+  }
+
+  // Every muster flag your companies have planted, above the fog so you can
+  // always see where your recruits are headed. The banner you're looking at
+  // stands full strength; the others hang back, pale.
+  for (let i = 0; i < g.banners; i++) {
+    const m = g.muster[i]
+    if (!m) continue
+    const b = BANNERS[i]
+    drawMuster(ctx, m.x, m.y, time, b.color, b.edge, i !== g.activeBanner)
   }
 
   // placement ghost rides above the fog so it's always legible

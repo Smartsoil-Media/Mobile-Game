@@ -1,5 +1,5 @@
 // Cosy storybook sprites, all drawn with canvas vector shapes.
-import { Ent, TEAM_COLOR, BANNERS, KINGS_BANNER } from './data'
+import { Ent, TEAM_COLOR, BANNERS, LION_BANNER, TILT } from './data'
 
 // The original storybook palette, retuned to the meadow's new naturalistic
 // light. Keeping the names means everything still drawn the old way — fences,
@@ -1488,7 +1488,7 @@ function chimneySmoke(ctx: CanvasRenderingContext2D, x: number, y: number, t: nu
 // so the whole routing of your village can be read off the rooftops.
 function bannerTint(e: Ent): string | undefined {
   const b = e.recruitBanner
-  return e.team === 0 && b !== undefined && b !== KINGS_BANNER ? BANNERS[b].color : undefined
+  return e.team === 0 && b !== undefined && b !== LION_BANNER ? BANNERS[b].color : undefined
 }
 function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number, t: number, tint?: string): void {
   const c = TEAM_COLOR[team] ?? TEAM_COLOR[0]
@@ -1503,6 +1503,49 @@ function flag(ctx: CanvasRenderingContext2D, x: number, y: number, team: number,
   ctx.quadraticCurveTo(x + 8, y - 15 + wave, x, y - 12)
   ctx.closePath()
   ctx.fill()
+}
+
+// Stand something up out of the tilted ground, the same way the renderer does
+// for entity sprites. The muster flag is drawn outside that pass, so it undoes
+// the squash itself.
+function upright(ctx: CanvasRenderingContext2D, y: number): void {
+  ctx.scale(1, 1 / TILT)
+  ctx.translate(0, y * (TILT - 1))
+}
+
+// A company's muster flag, planted in the grass. This is the only flag on a
+// pole left in the game — the companies themselves wear beasts — so a pennant
+// standing in open ground reads as one thing: form up here.
+export function drawMuster(ctx: CanvasRenderingContext2D, x: number, y: number, t: number,
+                           color: string, edge: string, faded = false): void {
+  ctx.save()
+  ctx.globalAlpha = faded ? 0.5 : 1
+  // a scuffed ring of earth where the company treads
+  ctx.fillStyle = 'rgba(120, 104, 72, 0.16)'
+  ctx.beginPath(); ctx.ellipse(x, y, 17, 6.4, 0, 0, Math.PI * 2); ctx.fill()
+  shadow(ctx, x + 5, y + 1, 9, 3.4)
+  upright(ctx, y)
+  ctx.strokeStyle = WOOD_DARK
+  ctx.lineWidth = 2.6
+  ctx.lineCap = 'round'
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 40); ctx.stroke()
+  const wave = Math.sin(t * 2.4) * 1.9
+  ctx.fillStyle = color
+  ctx.strokeStyle = edge
+  ctx.lineWidth = 1.3
+  ctx.beginPath()
+  ctx.moveTo(x + 1, y - 39)
+  ctx.quadraticCurveTo(x + 10, y - 41 + wave, x + 19, y - 36 + wave)
+  ctx.lineTo(x + 14.5, y - 31 + wave * 0.7)
+  ctx.quadraticCurveTo(x + 18, y - 27 + wave * 0.5, x + 19, y - 25 + wave * 0.5)
+  ctx.quadraticCurveTo(x + 10, y - 24 + wave * 0.4, x + 1, y - 27)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  // the gilt finial on top
+  ctx.fillStyle = '#E9B44C'
+  ctx.beginPath(); ctx.arc(x, y - 41.5, 2.4, 0, Math.PI * 2); ctx.fill()
+  ctx.restore()
 }
 
 export function drawTC(ctx: CanvasRenderingContext2D, e: Ent, t: number, age = 2): void {

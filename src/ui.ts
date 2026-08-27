@@ -4,10 +4,10 @@ import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
   CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
-  BANNERS, BANNER_MAX, KINGS_BANNER,
+  BANNERS, BANNER_MAX, LION_BANNER, Beast,
   isUnit, isBuilding, isSiege, canBanner, mustBanner, Formation} from './data'
 import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex } from './world'
-import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove} from './input'
+import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove, beginMuster, cancelMuster, clearMuster } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
 const ICON = {
@@ -152,14 +152,17 @@ function spriteIcon(kind: string, age = 2): HTMLCanvasElement {
   return c
 }
 
-// A pennant per banner: the same swallow-tailed flag, a different charge on
-// each field — a crown for the King's, then a rose, a star, an oak.
-const BANNER_CHARGE = [
-  `<path d="M11 14.6 L11.5 8.2 L14 10.4 L16 7.2 L18 10.4 L20.5 8.2 L21 14.6 Z" fill="#FBF3E4"/>`,
-  `<g fill="#FBF3E4"><circle cx="16" cy="7.9" r="1.9"/><circle cx="19.4" cy="10.3" r="1.9"/><circle cx="18.1" cy="14.2" r="1.9"/><circle cx="13.9" cy="14.2" r="1.9"/><circle cx="12.6" cy="10.3" r="1.9"/><circle cx="16" cy="11.4" r="1.7" fill="#F5D584"/></g>`,
-  `<path d="M16 6.6 L17.8 10.2 L21.8 10.8 L18.9 13.6 L19.6 17.5 L16 15.7 L12.4 17.5 L13.1 13.6 L10.2 10.8 L14.2 10.2 Z" fill="#FBF3E4"/>`,
-  `<g fill="#FBF3E4"><ellipse cx="16" cy="13.4" rx="3.3" ry="4"/><path d="M12.4 10.4 a3.6 2.8 0 0 1 7.2 0 z"/><path d="M16 6.6 v1.9" stroke="#FBF3E4" stroke-width="1.3" stroke-linecap="round"/></g>`,
-]
+// Heraldry, not flags: each company is known by the beast it wears, borne on
+// a roundel in its own colours. A flag now means something else entirely —
+// it marks where a company musters (see musterIcon).
+const CREAM = '#FBF3E4'
+const BEAST_CHARGE: Record<Beast, (e: string) => string> = {
+  lion: e => `<path d="M16.00 8.80 Q19.46 5.75 20.47 10.25 Q25.06 9.82 23.23 14.05 Q27.20 16.40 23.23 18.75 Q25.06 22.98 20.47 22.55 Q19.46 27.05 16.00 24.00 Q12.54 27.05 11.53 22.55 Q6.94 22.98 8.77 18.75 Q4.80 16.40 8.77 14.05 Q6.94 9.82 11.53 10.25 Q12.54 5.75 16.00 8.80 Z" fill="${CREAM}"/><circle cx="16" cy="16.4" r="7.2" fill="${e}"/><circle cx="16" cy="16.4" r="5.7" fill="${CREAM}"/><circle cx="13.9" cy="15.2" r="1.05" fill="${e}"/><circle cx="18.1" cy="15.2" r="1.05" fill="${e}"/><path d="M16 17.5 l1.9 1.2 a2.25 2.25 0 0 1 -3.8 0 z" fill="${e}"/><path d="M16 18.7 v1.5 M16 20.2 q-1.6 1.2 -2.9 .1 M16 20.2 q1.6 1.2 2.9 .1" stroke="${e}" stroke-width="0.85" fill="none" stroke-linecap="round"/>`,
+  stag: e => `<g stroke="${CREAM}" stroke-width="1.5" stroke-linecap="round" fill="none"><path d="M13.2 12.2 L10.6 7.4 M10.6 7.4 L7.6 7.0 M11.8 9.6 L8.6 10.2 M10.6 7.4 L10.9 4.4"/><path d="M18.8 12.2 L21.4 7.4 M21.4 7.4 L24.4 7.0 M20.2 9.6 L23.4 10.2 M21.4 7.4 L21.1 4.4"/></g><path d="M16 10.6 c3.4 0 5 2.1 5 4.6 c0 3.4-2.2 7.2-5 9.2 c-2.8-2-5-5.8-5-9.2 c0-2.5 1.6-4.6 5-4.6 z" fill="${CREAM}"/><ellipse cx="10.3" cy="13.6" rx="2.4" ry="1.5" transform="rotate(-28 10.3 13.6)" fill="${CREAM}"/><ellipse cx="21.7" cy="13.6" rx="2.4" ry="1.5" transform="rotate(28 21.7 13.6)" fill="${CREAM}"/><circle cx="13.7" cy="15.2" r="1.15" fill="${e}"/><circle cx="18.3" cy="15.2" r="1.15" fill="${e}"/><ellipse cx="16" cy="21.4" rx="1.9" ry="1.4" fill="${e}"/>`,
+  boar: e => `<path d="M16 8.6 L17.4 11.2 L19.6 10 L19.9 12.4 L22.2 11.8 L21.7 14.2" fill="none" stroke="${CREAM}" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"/><path d="M16 8.6 L14.6 11.2 L12.4 10 L12.1 12.4 L9.8 11.8 L10.3 14.2" fill="none" stroke="${CREAM}" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"/><path d="M16 11.2 c4.2 0 6.6 2.3 6.6 5.1 c0 3.4-3 7-6.6 8.4 c-3.6-1.4-6.6-5-6.6-8.4 c0-2.8 2.4-5.1 6.6-5.1 z" fill="${CREAM}"/><path d="M10.5 19.4 c-2 .6-2.8 2.3-2.2 4.2" stroke="${CREAM}" stroke-width="1.7" stroke-linecap="round" fill="none"/><path d="M21.5 19.4 c2 .6 2.8 2.3 2.2 4.2" stroke="${CREAM}" stroke-width="1.7" stroke-linecap="round" fill="none"/><circle cx="13.2" cy="15.6" r="1.15" fill="${e}"/><circle cx="18.8" cy="15.6" r="1.15" fill="${e}"/><rect x="13.1" y="19.2" width="5.8" height="3.9" rx="1.9" fill="${e}"/><circle cx="14.7" cy="21.1" r="0.72" fill="${CREAM}"/><circle cx="17.3" cy="21.1" r="0.72" fill="${CREAM}"/>`,
+  wolf: e => `<path d="M10.2 12.9 L11.9 6.1 L15.0 11.4 Z" fill="${CREAM}"/><path d="M21.8 12.9 L20.1 6.1 L17.0 11.4 Z" fill="${CREAM}"/><path d="M11.7 11.4 L12.4 8.6 L13.9 11.3 Z" fill="${e}"/><path d="M20.3 11.4 L19.6 8.6 L18.1 11.3 Z" fill="${e}"/><path d="M10.4 11.9 L13.4 13.3 H18.6 L21.6 11.9 L21.9 17.5 C21.9 19.5 20.1 20.5 18.8 20.9 L18.2 24.1 C18.2 25.5 13.8 25.5 13.8 24.1 L13.2 20.9 C11.9 20.5 10.1 19.5 10.1 17.5 Z" fill="${CREAM}"/><path d="M12.3 15.7 L14.9 16.6 L12.4 17.3 Z" fill="${e}"/><path d="M19.7 15.7 L17.1 16.6 L19.6 17.3 Z" fill="${e}"/><path d="M16 21.3 l1.55 1 a1.85 1.85 0 0 1 -3.1 0 z" fill="${e}"/>`,
+}
+
 // The whole-host shield, in whichever banner's colours are currently active:
 // gold-trimmed, studded along the chief, crossed steel over the field, and an
 // ARMY ribbon draped across the foot.
@@ -185,9 +188,28 @@ function armyShield(banner: number): string {
 function bannerIcon(i: number, size = 32): string {
   const b = BANNERS[i] ?? BANNERS[0]
   return `<svg class="pennant" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">` +
-    `<rect x="4.4" y="2.5" width="2.3" height="27" rx="1.1" fill="#8B6A4A"/>` +
-    `<path d="M6.7 4.4 H27.4 L22.7 11.4 L27.4 18.4 H6.7 Z" fill="${b.color}" stroke="${b.edge}" stroke-width="1.4" stroke-linejoin="round"/>` +
-    BANNER_CHARGE[i] + `</svg>`
+    `<circle cx="16" cy="16" r="15" fill="#C98F2B"/>` +
+    `<circle cx="16" cy="16" r="13.2" fill="${b.color}" stroke="${b.edge}" stroke-width="1.3"/>` +
+    BEAST_CHARGE[b.beast](b.edge) + `</svg>`
+}
+
+// The muster flag: a pennant on a planted pole. Now that no company wears a
+// flag, one on the grass means one thing only — stand here once you are raised.
+// A cream keyline keeps the cloth legible on the honey dock whatever colour the
+// company flies, and a mound of earth at the foot says the flag is already
+// planted — so the button needs no badge to tell you.
+function musterIcon(color: string, edge: string, planted: boolean, size = 38): string {
+  return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">` +
+    (planted
+      ? `<ellipse cx="13.1" cy="27.5" rx="7.4" ry="2.6" fill="#8B6A4A"/>` +
+        `<ellipse cx="13.1" cy="26.7" rx="7.4" ry="2.6" fill="#A98456"/>`
+      : `<path d="M8.6 27.5 h9" stroke="#A98456" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="2.6 2.8"/>`) +
+    `<rect x="11.9" y="3.4" width="2.4" height="23.8" rx="1.2" fill="#8B6A4A"/>` +
+    `<path d="M14.3 4.6 H27 L22.6 10.6 L27 16.6 H14.3 Z" fill="none" stroke="${CREAM}" stroke-width="3.4" stroke-linejoin="round"/>` +
+    `<path d="M14.3 4.6 H27 L22.6 10.6 L27 16.6 H14.3 Z" fill="${color}" stroke="${edge}" stroke-width="1.4" stroke-linejoin="round"` +
+      (planted ? '' : ' opacity="0.5"') + `/>` +
+    `<circle cx="13.1" cy="3.1" r="2.1" fill="#E9B44C" stroke="#C98F2B" stroke-width="0.9"/>` +
+    `</svg>`
 }
 
 const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
@@ -198,7 +220,7 @@ export function initUI(g: Game): void {
   // per-type chips grow above it as the army musters (see syncUI)
   const all = document.createElement('button')
   all.id = 'army-all'
-  all.innerHTML = armyShield(KINGS_BANNER)
+  all.innerHTML = armyShield(LION_BANNER)
   all.addEventListener('click', () => selectArmy(g, canvas))
   const chipWrap = document.createElement('div')
   chipWrap.id = 'army-chips'
@@ -739,9 +761,40 @@ function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
   }
 }
 
+// Where this hall's recruits walk once they step out of the door. The flag is
+// per banner, not per hall, so every hall feeding a company sends its recruits
+// to the same field.
+function musterDock(g: Game, dock: HTMLElement, b: Ent): void {
+  const banner = b.recruitBanner ?? LION_BANNER
+  const spec = BANNERS[banner]
+  const planted = g.muster[banner]
+  if (g.mustering === banner) {
+    const stop = document.createElement('button')
+    stop.className = 'cmd ghost'
+    stop.dataset.cmd = 'muster-cancel'
+    stop.setAttribute('aria-label', 'Never mind the muster point')
+    stop.textContent = '✕'
+    stop.addEventListener('click', () => cancelMuster(g))
+    dock.appendChild(stop)
+    if (planted) {
+      dock.appendChild(iconButton(
+        { cmd: 'muster-clear', label: `${spec.name} musters at its halls again`,
+          icon: musterIcon('#B9B1A2', '#8E877A', true) },
+        () => clearMuster(g, banner)))
+    }
+    return
+  }
+  dock.appendChild(iconButton(
+    { cmd: 'muster', label: planted
+        ? `Move where ${spec.name} musters`
+        : `Set where ${spec.name} musters`,
+      icon: musterIcon(spec.color, spec.edge, !!planted) },
+    () => beginMuster(g, banner)))
+}
+
 // A military hall flies a banner: everything it musters rides under it.
 function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
-  const cur = b.recruitBanner ?? KINGS_BANNER
+  const cur = b.recruitBanner ?? LION_BANNER
   if (!bannerPick) {
     dock.appendChild(iconButton(
       { cmd: 'recruit-banner', label: `Recruits ride under ${BANNERS[cur].name} — tap to change`,
@@ -897,10 +950,14 @@ function buildInfoCard(g: Game, e: Ent): string {
   if (e.team === 0 && canBanner(e)) {
     lines.push(e.banner !== undefined
       ? `Rides under <b>${BANNERS[e.banner].name}</b>.`
-      : 'Sworn to no banner — send him to one from the dock.')
+      : 'Sworn to no beast — a monk answers no company\u2019s muster.')
   }
   if (e.team === 0 && HALL_KINDS.includes(e.kind)) {
-    lines.push(`Recruits ride under <b>${BANNERS[e.recruitBanner ?? KINGS_BANNER].name}</b>.`)
+    const rb = e.recruitBanner ?? LION_BANNER
+    lines.push(`Recruits ride under <b>${BANNERS[rb].name}</b>.`)
+    lines.push(g.muster[rb]
+      ? `They march to <b>${BANNERS[rb].name}\u2019s muster flag</b> once raised.`
+      : 'They gather at the door — plant a muster flag to send them elsewhere.')
   }
   if (e.kind === 'relic') {
     if (e.shrineId !== undefined) lines.push(`<b>Enshrined</b> — tithing ${RELIC_GOLD_RATE} gold a second.`)
@@ -947,7 +1004,7 @@ function syncInfoTools(g: Game): void {
   el('p-clear').classList.toggle('dim', g.selection.length === 0)
 }
 
-// the raised banners, above the roster. The King's Army keeps the shield —
+// the companies raised, above the roster. The Lion keeps the shield —
 // these are the companies you have split off from it.
 function syncBannerStrip(g: Game): void {
   const strip = el('banner-strip')
@@ -1040,11 +1097,15 @@ export function syncUI(g: Game): void {
   const first = sel[0]
   const sameKind = sel.length > 0 && sel.every(e => e.kind === first.kind)
   const selKey = g.selection.join(',')
-  if (selKey !== lastSelKey) { lastSelKey = selKey; buildCat = null; agePick = false; bannerPick = false }
+  if (selKey !== lastSelKey) {
+    lastSelKey = selKey
+    buildCat = null; agePick = false; bannerPick = false
+    g.mustering = null // don't leave a half-set muster flag hanging over a new selection
+  }
 
   const HALLS = ['barracks', 'kingsbarracks', 'archeryrange', 'stable', 'cavalryschool', 'siegeworkshop']
   if (bannerPick && first && HALLS.includes(first.kind) && first.team === 0 && first.complete) {
-    recruitBannerDock(g, dock, first)
+    recruitBannerDock(g, dock, first) // the picker takes the whole dock to itself
   } else if (g.placing) {
     const cross = document.createElement('button')
     cross.className = 'cmd ghost'
@@ -1126,6 +1187,7 @@ export function syncUI(g: Game): void {
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
+    musterDock(g, dock, first)
   } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
@@ -1142,6 +1204,7 @@ export function syncUI(g: Game): void {
       () => tryTrain(g, first, 'swordsman')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
+    musterDock(g, dock, first)
   } else if (first && first.kind === 'siegeworkshop' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-mangonel', label: 'Build mangonel — lobs a splash boulder at clumps',
@@ -1152,12 +1215,14 @@ export function syncUI(g: Game): void {
         icon: spriteIcon('trebuchet'), cost: UNITS.trebuchet.cost },
       () => tryTrain(g, first, 'trebuchet')))
     recruitBannerDock(g, dock, first)
+    musterDock(g, dock, first)
   } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-archer', label: 'Train longbowman', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
       () => tryTrain(g, first, 'archer')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
+    musterDock(g, dock, first)
   } else if (first && first.kind === 'stable' && first.complete && first.team === 0) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
@@ -1168,6 +1233,7 @@ export function syncUI(g: Game): void {
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
+    musterDock(g, dock, first)
   } else if (sameKind && first.kind === 'villager') {
     if (buildCat === null) {
       // two clear doors: what kind of building?

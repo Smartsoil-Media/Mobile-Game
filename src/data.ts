@@ -32,6 +32,8 @@ export const CIVS: Record<CivId, { name: string; blurb: string }> = {
 
 export type ResKind = 'wood' | 'food' | 'gold' | 'stone'
 
+export interface Pt { x: number; y: number }
+
 // How a company arranges itself on the march. A bunch is a block, shoulder to
 // shoulder; a line is a rank drawn across the direction of travel.
 export type Formation = 'bunch' | 'line'
@@ -160,8 +162,10 @@ export interface Game {
   toasts: { text: string; t: number }[]
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
-  banners: number // how many banners are raised (1 = just the King's Army)
+  banners: number // how many banners are raised (1 = just the Lion)
   formation: Formation[] // per banner: how its companies stand when they march
+  muster: (Pt | null)[] // per banner: where its recruits walk once they are raised
+  mustering: number | null // which banner is waiting for you to plant its muster flag
   activeBanner: number // whose roster the bucklers are showing
   infoMode: boolean // the ? button: taps read a thing out instead of commanding it
   infoId: number | null // what the info card is currently reading out
@@ -352,17 +356,19 @@ export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
 }
 
 // ---- banners: the companies your host is split into ----
-// Every soldier and engine musters under the King's Army unless a military
-// hall sends its recruits elsewhere. Monks swear to no banner unless asked.
-export interface BannerSpec { name: string; short: string; color: string; edge: string }
+// Each company is known by the beast it wears, not by a flag: a flag now means
+// a muster point. Everything raised musters under the Lion unless a military
+// hall sends its recruits elsewhere. Monks swear to no beast unless asked.
+export type Beast = 'lion' | 'stag' | 'boar' | 'wolf'
+export interface BannerSpec { name: string; short: string; beast: Beast; color: string; edge: string }
 export const BANNERS: BannerSpec[] = [
-  { name: "The King's Army", short: 'Crown', color: '#6D9DC5', edge: '#4E7EA6' },
-  { name: 'The Rose Banner', short: 'Rose', color: '#C9A227', edge: '#A07D13' },
-  { name: 'The Star Banner', short: 'Star', color: '#6E9B57', edge: '#527A3E' },
-  { name: 'The Oak Banner', short: 'Oak', color: '#8A6FA8', edge: '#6B5286' },
+  { name: 'The Lion', short: 'Lion', beast: 'lion', color: '#6D9DC5', edge: '#4E7EA6' },
+  { name: 'The Stag', short: 'Stag', beast: 'stag', color: '#C9A227', edge: '#A07D13' },
+  { name: 'The Boar', short: 'Boar', beast: 'boar', color: '#6E9B57', edge: '#527A3E' },
+  { name: 'The Wolf', short: 'Wolf', beast: 'wolf', color: '#8A6FA8', edge: '#6B5286' },
 ]
 export const BANNER_MAX = BANNERS.length
-export const KINGS_BANNER = 0
+export const LION_BANNER = 0 // the host you start with, and where every recruit goes by default
 // who may swear to a banner at all: the battle line, plus monks by invitation.
 // Villagers and scouts never do — they have their own work.
 export function canBanner(e: Ent): boolean {

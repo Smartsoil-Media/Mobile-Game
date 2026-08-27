@@ -11,7 +11,7 @@ import {
   TOWER_RANGE, TOWER_VOLLEY, TOWER_DMG, WORLD_W, WORLD_H,
   MANGONEL_SPLASH, MANGONEL_MIN_RANGE, MANGONEL_ARC, MANGONEL_BOULDER_SPEED,
   TREB_SETUP, TREB_SPLASH, TREB_ARC, TREB_BOULDER_SPEED,
-  dist, isUnit, isBuilding, isResource, isSiege, mustBanner, cue,
+  dist, isUnit, isBuilding, isResource, isSiege, mustBanner, cue, FORMATION_SPACING,
 } from './data'
 import { spawn, nearest, nearestDropoff, nearestEnemyUnit, nearestEnemyThing, toast, updateVision, unitSpeed, champDmg, resumeJob, farmTaken, gatherRate } from './world'
 import { lineClear, findPath, inWater, streamDist } from './nav'
@@ -804,10 +804,40 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     const u = spawn(g, q.kind, e.team, e.x + Math.cos(a) * d, e.y + Math.abs(Math.sin(a)) * d + 6)
     // recruits ride under whatever banner this hall flies (monks still swear to none)
     if (e.team === 0 && e.recruitBanner !== undefined && mustBanner(u)) u.banner = e.recruitBanner
+    // and then walk straight to that banner's muster flag, if one is planted
+    const rally = u.banner !== undefined ? g.muster[u.banner] : null
+    if (rally && e.team === 0) {
+      const spot = musterSlot(g, u.banner!, rally)
+      u.state = 'move'
+      u.tx = spot.x
+      u.ty = spot.y
+      u.resume = null
+    }
     puff(g, u.x, u.y, '#FBF3E4', 6)
     cue(g, 'muster', u.x, u.y)
     if (e.team === 0) g.uiDirty = true
   }
+}
+
+// Where the next man to reach a muster flag should stand. Recruits arrive one
+// at a time, so rather than everyone treading the same patch we count who is
+// already gathered and hand out rings of six around the pole — the company
+// builds outward into a block instead of a heap, and the pole stays clear.
+function musterSlot(g: Game, banner: number, flag: { x: number; y: number }): { x: number; y: number } {
+  const reach = FORMATION_SPACING * 4.5
+  let k = 0
+  for (const o of g.ents) {
+    if (o.team !== 0 || o.banner !== banner || !isUnit(o)) continue
+    const ox = o.tx ?? o.x, oy = o.ty ?? o.y
+    if (dist(ox, oy, flag.x, flag.y) < reach) k++
+  }
+  let ring = 1, start = 0
+  while (k >= start + ring * 6) { start += ring * 6; ring++ }
+  const n = ring * 6
+  // stagger alternate rings so nobody stands directly behind the man in front
+  const a = ((k - start) / n) * Math.PI * 2 + (ring % 2 === 0 ? Math.PI / n : 0)
+  const rd = FORMATION_SPACING * ring * 0.92
+  return { x: flag.x + Math.cos(a) * rd, y: flag.y + Math.sin(a) * rd }
 }
 
 function killEnt(g: Game, e: Ent): void {

@@ -1,5 +1,5 @@
 // Touch-first input: tap to select/command, drag to pan, pinch to zoom.
-import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, KINGS_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING} from './data'
+import { Game, Ent, Buildable, ResKind, LandmarkKind, BUILDINGS, LANDMARKS, BANNERS, BANNER_MAX, LION_BANNER, SOURCE_OF, AGE_NAMES, PLACE_SNAP, snapTiles, CAM_PAD, TILT, WORLD_W, WORLD_H, dist, isUnit, isBuilding, isResource, canBanner, mustBanner, cue, Formation, FORMATION_SPACING} from './data'
 import { entAt, spawn, nearest, canAfford, canPlaceAt, clearSpent, gateSnap, wallsUnderGate, pay, toast, gatherResOf, wallLinePoints, farmTaken } from './world'
 
 export interface PointerState {
@@ -250,6 +250,12 @@ let lastTapEnt = -1
 export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: number): void {
   if (g.over) return
   const { x, y } = screenToWorld(g, canvas, sx, sy)
+
+  // planting a muster flag: one tap on the grass sets it and the mode is done
+  if (g.mustering !== null) {
+    plantMuster(g, g.mustering, x, y)
+    return
+  }
 
   if (g.placing) {
     // while placing, taps just move the ghost (snapped); the tick/cross decide.
@@ -518,7 +524,7 @@ export function selectBanner(g: Game, banner: number, canvas?: HTMLCanvasElement
   g.selection = host.map(e => e.id)
   g.uiDirty = true
   if (!host.length) {
-    toast(g, banner === KINGS_BANNER && g.banners === 1
+    toast(g, banner === LION_BANNER && g.banners === 1
       ? 'No soldiers yet — build a Barracks and train some!'
       : `${BANNERS[banner].name} has no one under it yet.`)
   }
@@ -545,13 +551,50 @@ function assignBanner(g: Game, units: Ent[], banner: number | null): void {
   g.uiDirty = true
 }
 
+// ---- muster points: where a company gathers once it is raised ----
+// A flag on the grass, one per banner. Recruits walk to it the moment they
+// step out of the hall, so a company forms up where you want it rather than
+// milling about the door.
+export function beginMuster(g: Game, banner: number): void {
+  g.mustering = banner
+  g.placing = null
+  g.placePos = null
+  g.placeEnd = null
+  toast(g, `Tap the ground where ${BANNERS[banner].name} should muster.`)
+  g.uiDirty = true
+}
+
+export function cancelMuster(g: Game): void {
+  g.mustering = null
+  g.uiDirty = true
+}
+
+export function plantMuster(g: Game, banner: number, x: number, y: number): void {
+  const w = g.world
+  g.muster[banner] = {
+    x: Math.max(20, Math.min(w.w - 20, x)),
+    y: Math.max(20, Math.min(w.h - 20, y)),
+  }
+  g.mustering = null
+  cue(g, 'place', x, y)
+  toast(g, `${BANNERS[banner].name} will muster here.`)
+  g.uiDirty = true
+}
+
+export function clearMuster(g: Game, banner: number): void {
+  g.muster[banner] = null
+  g.mustering = null
+  toast(g, `${BANNERS[banner].name} musters at its halls again.`)
+  g.uiDirty = true
+}
+
 // raise the next banner in the roll and hand it whatever is selected
 export function raiseBanner(g: Game, units: Ent[]): void {
   if (g.banners >= BANNER_MAX) { toast(g, 'Every banner is already flying.'); return }
   const banner = g.banners++
   if (units.length) assignBanner(g, units, banner) // a hall may raise one with nobody yet
   g.activeBanner = banner
-  toast(g, `${BANNERS[banner].name} rides out — the King's Army no longer counts them.`)
+  toast(g, `${BANNERS[banner].name} rides out — the Lion no longer counts them.`)
   g.uiDirty = true
 }
 

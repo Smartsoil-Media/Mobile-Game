@@ -92,23 +92,37 @@ chase at its edge.
   training queue (with a ×count badge), per tech being researched, and per
   landmark rising. Tap a loader to select the building doing the work; the
   command dock stays clean for giving orders
-- **Banners** (multiple armies): every soldier and siege engine musters
-  under **the King's Army** by default — the shield *is* that banner, so
-  if you never split your host, nothing changes. A soldier's banner is
-  settled where the soldier is *raised*: a **military hall sends its
-  recruits to a banner** — tap the pennant on its dock, and *raise a new
-  one* there (the Rose, the Star, the Oak) if you want a fresh company.
-  The hall then *flies that banner's colours on its roof*, so you can
-  read your whole muster off the rooftops. The banners fly as pennants in
-  the **row at the top right** — tap one to switch companies. The
-  bucklers below show **that banner's roster**, and the **shield musters
-  all of it**, wearing that banner's colours so the whole right edge
-  belongs to the company you're looking at. One banner per unit; an
-  emptied banner keeps flying, pale, because its halls still feed it.
-  **Monks are the exception**: they are ordained at a church rather than
-  a military hall, so they swear to no banner at all — and a monk
-  carrying a relic ignores the muster entirely, the reliquary mattering
-  more than the parade
+- **Companies and their beasts** (multiple armies): every soldier and
+  siege engine musters under **the Lion** by default — the shield *is*
+  that company, so if you never split your host, nothing changes. A
+  company is known by the **beast it wears**, not by a flag: the Lion,
+  then **the Stag, the Boar and the Wolf**, each borne on a roundel in
+  its own colours. Which beast a soldier rides under is settled where he
+  is *raised*: a **military hall sends its recruits to a company** — tap
+  the roundel on its dock, and raise a new one there if you want a fresh
+  company. The hall then *flies that company's colours on its roof*, so
+  you can read your whole muster off the rooftops. The beasts sit in the
+  **row at the top right** — tap one to switch companies. The bucklers
+  below show **that company's roster**, and the **shield musters all of
+  it**, wearing those colours so the whole right edge belongs to the
+  company you're looking at. One beast per unit; an emptied company keeps
+  its roundel, pale, because its halls still feed it. **Monks are the
+  exception**: they are ordained at a church rather than a military hall,
+  so they swear to no beast at all — and a monk carrying a relic ignores
+  the muster entirely, the reliquary mattering more than the parade
+- **The muster flag** (where recruits gather): now that no company wears
+  a flag, a flag means one thing — **stand here**. Select a military hall
+  and the dock carries a pennant beside the beast; tap it, then tap the
+  grass, and that company's **muster flag** is planted there. Every man
+  it raises from then on walks straight to the flag instead of milling
+  about the yard, taking a spot a little off the pole so a company builds
+  up around it rather than treading the same patch. The flag is per
+  *company*, not per hall, so a barracks and an archery range both
+  feeding the Stag send their recruits to the same field. It stands in
+  the meadow in that company's colours — full strength for the company
+  you're looking at, pale for the rest — and the button shows a mound of
+  earth at the pole's foot once one is planted. Tap the flag again to
+  move it, or clear it and recruits gather at their halls as before
 - **Formation** (how a company marches): select soldiers and the dock
   carries a single formation button — a **bunch** (a square block,
   shoulder to shoulder) or a **line** (one rank drawn *across* the
@@ -117,8 +131,8 @@ chase at its edge.
   re-forms a company that is already on the march. Every move order then
   hands out standing places rather than sending everyone at one point:
   the company keeps its shape on the way over instead of scattering and
-  jostling. Each banner remembers its own formation, so the King's Army
-  can hold a line while the Rose stays bunched
+  jostling. Each company remembers its own formation, so the Lion can
+  hold a line while the Stag stays bunched
 - **The build grid**: every building covers a whole number of **16px
   tiles** — a house is 4×4, a barracks 8×8, the Town Hall 8×8, a fence
   post 1×1 — and pick one up and the meadow rules itself into that
@@ -142,10 +156,10 @@ chase at its edge.
   order goes out while it's lit; tap the ⓘ again to switch it off
 - **Drag** to pan the camera, **pinch** to zoom
 - **Army panel** (right edge): a **buckler** per unit type in the active
-  banner, with a live count — tap one to grab all its spearmen /
+  company, with a live count — tap one to grab all its spearmen /
   swordsmen / knights at once. Below them the **heater shield** musters
-  every soldier in the active banner; the banners themselves fly in a row
-  across the top right
+  every soldier in the active company; the companies' own beasts sit in a
+  row across the top right
 - **Archery Range** (175 wood) trains **longbowmen** — ranged units that
   shoot arrows from a distance (30 food + 35 gold each)
 - **Stable** (175 wood, Feudal) trains scouts (30 food + 15 gold) so your

@@ -571,7 +571,7 @@ const stableDock = await page3.evaluate(() => ({
   locked: [...document.querySelectorAll('#dock-buttons button.locked')].map(b => b.dataset.cmd),
 }))
 console.log('stable dock:', stableDock)
-if (stableDock.buttons.join(',') !== 'train-scout,train-knight,champ-cavalry,recruit-banner')
+if (stableDock.buttons.join(',') !== 'train-scout,train-knight,champ-cavalry,recruit-banner,muster')
   throw new Error('stable dock wrong: ' + stableDock.buttons.join(','))
 if (!stableDock.locked.includes('train-knight')) throw new Error('knight should be locked until the Castle Age')
 if (!stableDock.locked.includes('champ-cavalry')) throw new Error('champions should be locked until the Castle Age')
@@ -1153,7 +1153,7 @@ if (!builtOver.housePlaced) throw new Error('the house would not go up on worked
 if (!builtOver.bushCleared) throw new Error('the picked bush should be swept away under the new building')
 await waitSim(page3, 1)
 
-// 4.6652) banners: the King's Army by default, split off a company, and let a
+// 4.6652) banners: the Lion by default, split off a company, and let a
 // hall route its recruits into it
 const bannerStage = await page3.evaluate(() => {
   const g = window.__game.state
@@ -1174,11 +1174,11 @@ const bannerStage = await page3.evaluate(() => {
 console.log('banner defaults:', {
   spearBanner: bannerStage.spearBanner, monkBanner: bannerStage.monkBanner, banners: bannerStage.banners,
 })
-if (bannerStage.spearBanner !== 0) throw new Error('soldiers should muster under the King\u2019s Army')
+if (bannerStage.spearBanner !== 0) throw new Error('soldiers should muster under the Lion')
 if (bannerStage.monkBanner !== null) throw new Error('a monk should swear to no banner unless asked')
-if (bannerStage.banners !== 1) throw new Error('only the King\u2019s Army should fly at the start')
+if (bannerStage.banners !== 1) throw new Error('only the Lion should ride at the start')
 await page3.waitForTimeout(250)
-// the shield musters the King's Army — soldiers and engines, never the monk
+// the shield musters the Lion — soldiers and engines, never the monk
 await page3.tap('#army-all')
 await page3.waitForTimeout(250)
 const kingsMuster = await page3.evaluate(({ monkId }) => {
@@ -1186,8 +1186,8 @@ const kingsMuster = await page3.evaluate(({ monkId }) => {
   return { sel: g.selection.length, hasMonk: g.selection.includes(monkId) }
 }, bannerStage)
 console.log('kings muster:', kingsMuster)
-if (kingsMuster.sel !== 5) throw new Error(`the King\u2019s Army should hold 5, got ${kingsMuster.sel}`)
-if (kingsMuster.hasMonk) throw new Error('an unsworn monk should not answer the King\u2019s muster')
+if (kingsMuster.sel !== 5) throw new Error(`the Lion should hold 5, got ${kingsMuster.sel}`)
+if (kingsMuster.hasMonk) throw new Error('an unsworn monk should not answer the Lion\u2019s muster')
 // select the knights and raise a banner of their own
 await page3.evaluate(({ knights }) => {
   const g = window.__game.state
@@ -1225,13 +1225,13 @@ const raised = await page3.evaluate(({ knights }) => {
 console.log('banner raised:', raised)
 if (raised.banners !== 2 || raised.knightBanner !== 1) throw new Error('the knights did not take the new banner')
 if (raised.pennants !== 2) throw new Error('both banners should fly in the top-right row')
-// the King's Army no longer counts them; the new banner musters on its own
+// the Lion no longer counts them; the new company musters on its own
 await page3.tap('[data-cmd="banner-select-0"]')
 await page3.waitForTimeout(250)
 const afterSplit = await page3.evaluate(() => window.__game.state.selection.length)
 await page3.tap('[data-cmd="banner-select-1"]')
 await page3.waitForTimeout(250)
-// the shield answers for whichever banner is active, not the King's alone
+// the shield answers for whichever company is active, not the Lion alone
 await page3.evaluate(() => { window.__game.state.selection = []; window.__game.state.uiDirty = true })
 await page3.waitForTimeout(200)
 await page3.tap('#army-all')
@@ -1244,15 +1244,15 @@ if (shieldMuster.active !== 1 || shieldMuster.sel !== 2)
   throw new Error('the shield should muster the active banner, got ' + JSON.stringify(shieldMuster))
 await page3.tap('[data-cmd="banner-select-1"]')
 await page3.waitForTimeout(250)
-const roseMuster = await page3.evaluate(() => ({
+const stagMuster = await page3.evaluate(() => ({
   sel: window.__game.state.selection.length,
   active: window.__game.state.activeBanner,
   chips: [...document.querySelectorAll('#army-chips .army-chip')].map(c => c.dataset.cmd),
 }))
-console.log('after split:', { kings: afterSplit, rose: roseMuster })
-if (afterSplit !== 3) throw new Error(`the King\u2019s Army should be down to 3, got ${afterSplit}`)
-if (roseMuster.sel !== 2 || roseMuster.active !== 1) throw new Error('the new banner did not muster its own')
-if (roseMuster.chips.join(',') !== 'army-knight') throw new Error('the bucklers should show only the active banner: ' + roseMuster.chips.join(','))
+console.log('after split:', { lion: afterSplit, stag: stagMuster })
+if (afterSplit !== 3) throw new Error(`the Lion should be down to 3, got ${afterSplit}`)
+if (stagMuster.sel !== 2 || stagMuster.active !== 1) throw new Error('the new company did not muster its own')
+if (stagMuster.chips.join(',') !== 'army-knight') throw new Error('the bucklers should show only the active company: ' + stagMuster.chips.join(','))
 // formation: a company can be told to bunch up or draw out into a line, and the
 // order takes the shape it was given rather than scattering everyone at a point
 await page3.evaluate(({ spears }) => {
@@ -1313,8 +1313,40 @@ await page3.tap('[data-cmd="recruit-banner"]')
 await page3.waitForTimeout(250)
 await page3.tap('[data-cmd="recruit-to-1"]')
 await page3.waitForTimeout(300)
+
+// the muster flag: plant one for this hall's company and the next man out of
+// the door walks to it instead of milling about the yard
+const musterDock = await page3.evaluate(() =>
+  [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd))
+console.log('hall dock with heraldry:', musterDock)
+if (!musterDock.includes('muster')) throw new Error('a hall should offer a muster flag: ' + musterDock.join(','))
+await page3.tap('[data-cmd="muster"]')
+await page3.waitForTimeout(250)
+const arming = await page3.evaluate(() => ({
+  mustering: window.__game.state.mustering,
+  dock: [...document.querySelectorAll('#dock-buttons button.cmd')].map(b => b.dataset.cmd),
+}))
+console.log('muster armed:', arming)
+if (arming.mustering !== 1) throw new Error('tapping the flag should arm the muster for that banner')
+if (!arming.dock.includes('muster-cancel')) throw new Error('an armed muster should offer a way out')
+// tap the grass: one tap plants it and the mode is done
+{
+  const box = await page3.locator('#game').boundingBox()
+  await page3.touchscreen.tap(box.x + box.width * 0.34, box.y + box.height * 0.52)
+}
+await page3.waitForTimeout(300)
+const planted = await page3.evaluate(() => {
+  const g = window.__game.state
+  return { at: g.muster[1], mustering: g.mustering, lion: g.muster[0] }
+})
+console.log('muster planted:', planted)
+if (!planted.at) throw new Error('the tap did not plant a muster flag')
+if (planted.mustering !== null) throw new Error('planting the flag should end the muster mode')
+if (planted.lion) throw new Error('only the banner being set should get a flag')
+
 await page3.evaluate((raxId) => {
   const g = window.__game.state
+  g.selection = [raxId]
   g.byId.get(raxId).queue.push({ kind: 'spearman', t: 0.1, total: 8 })
   window.__game.setSpeed(5)
 }, raxBanner)
@@ -1325,10 +1357,15 @@ const routed = await page3.evaluate(({ raxId, spears }) => {
   const rax = g.byId.get(raxId)
   const fresh = g.ents.filter(e =>
     e.team === 0 && e.kind === 'spearman' && !spears.includes(e.id))
+  const flag = g.muster[1]
   const out = {
     recruitBanner: rax.recruitBanner,
     freshBanners: fresh.map(e => e.banner),
     oldBanners: spears.map(id => g.byId.get(id)).filter(Boolean).map(e => e.banner),
+    // how far each new man was told to stand from his company's flag
+    fromFlag: fresh.map(e => e.tx === undefined ? null
+      : Math.round(Math.hypot(e.tx - flag.x, e.ty - flag.y))),
+    marching: fresh.map(e => e.state),
   }
   // tidy the practice host away
   for (const e of [...fresh, ...spears.map(i => g.byId.get(i))]) if (e) e.hp = 0
@@ -1338,11 +1375,17 @@ const routed = await page3.evaluate(({ raxId, spears }) => {
   return out
 }, { raxId: raxBanner, spears: bannerStage.spears })
 console.log('recruit routing:', routed)
+// recruits ring the pole; the first few land on the inner ring, later ones a
+// ring out, so allow for a couple of rings rather than pinning one radius
+if (!routed.fromFlag.length || routed.fromFlag.some(d => d === null || d > 80))
+  throw new Error('a recruit should walk to his muster flag, got ' + JSON.stringify(routed.fromFlag))
+if (routed.marching.some(st => st !== 'move'))
+  throw new Error('a recruit with a muster flag should set off for it: ' + routed.marching.join(','))
 if (routed.recruitBanner !== 1) throw new Error('the barracks did not take the new banner')
 if (!routed.freshBanners.length || routed.freshBanners.some(b => b !== 1))
   throw new Error('a recruit from a routed hall should ride under its banner: ' + routed.freshBanners.join(','))
 if (routed.oldBanners.some(b => b !== 0))
-  throw new Error('soldiers already mustered should keep the King\u2019s Army')
+  throw new Error('soldiers already mustered should keep the Lion')
 await page3.evaluate(({ knights, monkId }) => {
   const g = window.__game.state
   for (const id of [...knights, monkId]) { const e = g.byId.get(id); if (e) e.hp = 0 }
