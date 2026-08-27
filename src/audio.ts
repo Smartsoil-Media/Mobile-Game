@@ -257,7 +257,7 @@ export function drainSfx(g: Game): void {
   if (!q || !q.length) return
   for (const e of q) {
     // the fog keeps its secrets: a sound placed in the dark is never heard
-    if (e.x !== undefined && e.y !== undefined && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue
+    if (e.x !== undefined && e.y !== undefined && g.fog[g.me].visible[fogIndex(g, e.x, e.y)] !== 1) continue
     if (heard.length < HEARD_MAX) heard.push(e.name)
     sfx(e.name, { x: e.x, y: e.y, gain: e.gain })
   }

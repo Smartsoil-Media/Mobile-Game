@@ -1,6 +1,6 @@
 // World creation and shared queries/helpers.
 import {
-  Game, Ent, Kind, Cost, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
+  Game, Ent, Kind, Cost, Pt, ResKind, ChampId, TechId, UNITS, BUILDINGS, RESOURCES, DROPOFFS,
   CHAMPS, NO_CHAMPS, NO_TECHS, DEER_HP, CROC_HP,
   NEUTRAL, POP_MAX, FOG_CELL, PLACE_SNAP, WORLD_W, WORLD_H, LION_BANNER,
   dist, isUnit, isBuilding, isResource, mustBanner, BANNER_MAX, Formation, rnd, rndInt, dcos, dsin, q,
@@ -40,7 +40,7 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
     if (champ && g.champs[team]?.[champ]) {
       e.hp = e.maxHp = s.hp + CHAMPS[champ].hp // born a champion
     }
-    if (team === 0 && mustBanner(e)) e.banner = LION_BANNER
+    if (mustBanner(e)) e.banner = LION_BANNER // each side has its own Lion
     e.state = 'idle'; e.cd = 0; e.gatherT = 0; e.scanT = rnd(g) * 0.3
     e.carry = 0; e.face = team === 0 ? 1 : -1; e.phase = rnd(g) * Math.PI * 2
     e.resume = null
@@ -101,11 +101,11 @@ export function createGame(opts?: { seed?: number }): Game {
     particles: [],
     projectiles: [],
     arrowsFired: 0,
-    fog: (() => {
+    fog: [0, 1].map(() => {
       const w = Math.ceil(W / FOG_CELL)
       const h = Math.ceil(H / FOG_CELL)
       return { w, h, explored: new Uint8Array(w * h), visible: new Uint8Array(w * h) }
-    })(),
+    }),
     visionT: 0,
     ai: { enabled: true, thinkT: 2, attackSize: 4, attacking: false },
     age: [1, 1],
@@ -121,9 +121,10 @@ export function createGame(opts?: { seed?: number }): Game {
     // The simulation's stream, seeded off the map so a rematch on the same
     // ground still plays out differently — and so both players start level.
     rng: (random ? ((opts!.seed! | 0) || 1) : 20260819) ^ 0x5BF03635,
-    banners: 1,
-    formation: Array.from({ length: BANNER_MAX }, () => 'bunch' as Formation),
-    muster: Array.from({ length: BANNER_MAX }, () => null),
+    me: 0,
+    banners: [1, 1],
+    formation: [0, 1].map(() => Array.from({ length: BANNER_MAX }, () => 'bunch' as Formation)),
+    muster: [0, 1].map(() => Array.from({ length: BANNER_MAX }, () => null as Pt | null)),
     mustering: null,
     activeBanner: 0, infoMode: false, infoId: null, started: false, uiDirty: true, sfxQueue: [],
   }
@@ -371,10 +372,12 @@ export function gatherRate(g: Game, team: number, res: ResKind): number {
 
 // ---- Fog of war ----
 
+// The grid is the same shape for both teams, so one index serves either fog.
 export function fogIndex(g: Game, x: number, y: number): number {
-  const cx = Math.max(0, Math.min(g.fog.w - 1, Math.floor(x / FOG_CELL)))
-  const cy = Math.max(0, Math.min(g.fog.h - 1, Math.floor(y / FOG_CELL)))
-  return cy * g.fog.w + cx
+  const f = g.fog[0]
+  const cx = Math.max(0, Math.min(f.w - 1, Math.floor(x / FOG_CELL)))
+  const cy = Math.max(0, Math.min(f.h - 1, Math.floor(y / FOG_CELL)))
+  return cy * f.w + cx
 }
 
 // ---- champion effects ----
@@ -424,11 +427,18 @@ export function unitAgeReq(g: Game, team: number, kind: Kind): number {
   return base
 }
 
+// Both villages keep their own book of what they have seen. In a solo game the
+// rival's copy is never looked at; in a 1v1 it is the other player's whole view,
+// and it has to be kept honestly or the two screens disagree about the dark.
 export function updateVision(g: Game): void {
-  const { w, h, explored, visible } = g.fog
+  for (let team = 0; team < g.fog.length; team++) updateTeamVision(g, team)
+}
+
+function updateTeamVision(g: Game, team: number): void {
+  const { w, h, explored, visible } = g.fog[team]
   visible.fill(0)
   for (const e of g.ents) {
-    if (e.team !== 0 || e.hidden) continue
+    if (e.team !== team || e.hidden) continue
     let los = 0
     if (isUnit(e)) los = UNITS[e.kind].los
     else if (isBuilding(e)) los = e.complete ? BUILDINGS[e.kind].los : 100
@@ -449,11 +459,13 @@ export function updateVision(g: Game): void {
   for (let i = 0; i < explored.length; i++) if (visible[i]) explored[i] = 1
 }
 
-// Enemy units exist for the player only in live vision; enemy buildings once seen.
+// The other village's units exist for you only in live vision; its buildings
+// once you have seen them. "The other village" is whoever you are not.
 export function isVisibleToPlayer(g: Game, e: Ent): boolean {
-  if (e.team !== 1) return true
+  if (e.team === g.me || e.team === NEUTRAL) return true
+  const f = g.fog[g.me]
   const i = fogIndex(g, e.x, e.y)
-  return isUnit(e) ? g.fog.visible[i] === 1 : g.fog.explored[i] === 1
+  return isUnit(e) ? f.visible[i] === 1 : f.explored[i] === 1
 }
 
 // ---- Queries ----
@@ -509,10 +521,10 @@ export function entAt(g: Game, x: number, y: number): Ent | null {
   for (const e of g.ents) {
     if (e.hidden) continue
     if (e.kind === 'crag') continue // terrain, not a thing to select
-    if (e.team === 1 && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
-    if ((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) continue // wildlife slips out of sight
+    if (e.team !== g.me && e.team !== NEUTRAL && !isVisibleToPlayer(g, e)) continue // can't tap into the fog
+    if ((e.kind === 'deer' || e.kind === 'croc') && g.fog[g.me].visible[fogIndex(g, e.x, e.y)] !== 1) continue // wildlife slips out of sight
     if (e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined ||
-      g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)) continue // a relic must be found, and free, to tap
+      g.fog[g.me].explored[fogIndex(g, e.x, e.y)] !== 1)) continue // a relic must be found, and free, to tap
     const slack = isUnit(e) ? 14 : 8
     const d = dist(x, y, e.x, e.y)
     if (d < e.r + slack && d < bd) { bd = d; best = e }

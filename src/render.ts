@@ -28,7 +28,7 @@ let fogImg: ImageData | null = null
 let fogSeenT = -1
 
 function drawFog(ctx: CanvasRenderingContext2D, g: Game): void {
-  const { w, h, explored, visible } = g.fog
+  const { w, h, explored, visible } = g.fog[g.me]
   if (!fogCanvas || fogCanvas.width !== w || fogCanvas.height !== h) {
     fogCanvas = document.createElement('canvas')
     fogCanvas.width = w
@@ -410,7 +410,7 @@ function drawButterflies(ctx: CanvasRenderingContext2D, g: Game, time: number): 
     const t = time * 0.5 + i * 2.1
     const x = a.fx * g.world.w + Math.sin(t) * 60 + Math.sin(t * 2.3) * 22
     const y = a.fy * g.world.h + Math.cos(t * 0.8) * 42 + Math.sin(t * 3.1) * 10
-    if (g.fog.visible[fogIndex(g, x, y)] !== 1) continue // they live in the sunlight
+    if (g.fog[g.me].visible[fogIndex(g, x, y)] !== 1) continue // they live in the sunlight
     const flap = Math.abs(Math.sin(time * 10 + i))
     ctx.fillStyle = a.c
     ctx.beginPath()
@@ -507,7 +507,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   // building stands on rather than a decal pasted under it.
   for (const e of g.ents) {
     if (!isBuilding(e) || e.kind === 'wall' || e.kind === 'gate' || e.kind === 'farm') continue
-    if (g.fog.explored[fogIndex(g, e.x, e.y)] !== 1) continue
+    if (g.fog[g.me].explored[fogIndex(g, e.x, e.y)] !== 1) continue
     const bd = BUILDINGS[e.kind]
     const k = bd.art ? bd.foot / bd.art : 1
     groundDecal(ctx, e, bd.foot * 0.62, (e.complete === false ? 14 : 34) * k)
@@ -550,16 +550,16 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       const y = e.y - e.r - e.r * 0.8
       ctx.fillStyle = 'rgba(60, 46, 30, 0.45)'
       rrFill(ctx, e.x - 21, y - 1, 42, 5, 2.5)
-      ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
+      ctx.fillStyle = e.team === g.me ? '#8FBF6A' : '#D98A7F'
       rrFill(ctx, e.x - 20, y, Math.max(2, 40 * (e.hp / e.maxHp)), 3, 1.5)
     }
   }
 
   const sorted = g.ents
-    .filter(e => e.kind !== 'farm' && !e.hidden && !(isUnit(e) && e.team === 1 && !isVisibleToPlayer(g, e)) &&
-      !((e.kind === 'deer' || e.kind === 'croc') && g.fog.visible[fogIndex(g, e.x, e.y)] !== 1) &&
+    .filter(e => e.kind !== 'farm' && !e.hidden && !(isUnit(e) && e.team !== g.me && e.team >= 0 && !isVisibleToPlayer(g, e)) &&
+      !((e.kind === 'deer' || e.kind === 'croc') && g.fog[g.me].visible[fogIndex(g, e.x, e.y)] !== 1) &&
       !(e.kind === 'relic' && (e.heldBy !== undefined || e.shrineId !== undefined ||
-        g.fog.explored[fogIndex(g, e.x, e.y)] !== 1)))
+        g.fog[g.me].explored[fogIndex(g, e.x, e.y)] !== 1)))
     .sort((a, b) => (a.y + a.r) - (b.y + b.r))
   for (const e of sorted) {
     ctx.save()
@@ -630,7 +630,7 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
       const y = e.y - e.r - (isBuilding(e) ? e.r * 0.8 : 22)
       ctx.fillStyle = 'rgba(60, 46, 30, 0.45)'
       rrFill(ctx, e.x - w / 2 - 1, y - 1, w + 2, 5, 2.5)
-      ctx.fillStyle = e.team === 0 ? '#8FBF6A' : '#D98A7F'
+      ctx.fillStyle = e.team === g.me ? '#8FBF6A' : '#D98A7F'
       rrFill(ctx, e.x - w / 2, y, Math.max(2, w * (e.hp / e.maxHp)), 3, 1.5)
     }
     setDecals(true)
@@ -738,8 +738,8 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
   // Every muster flag your companies have planted, above the fog so you can
   // always see where your recruits are headed. The banner you're looking at
   // stands full strength; the others hang back, pale.
-  for (let i = 0; i < g.banners; i++) {
-    const m = g.muster[i]
+  for (let i = 0; i < g.banners[g.me]; i++) {
+    const m = g.muster[g.me][i]
     if (!m) continue
     const b = BANNERS[i]
     drawMuster(ctx, m.x, m.y, time, b.color, b.edge, i !== g.activeBanner)
@@ -791,19 +791,19 @@ export function render(g: Game, canvas: HTMLCanvasElement, time: number): void {
     ctx.save()
     upright(ctx, y)
     const ghost: any = {
-      id: 0, kind: g.placing, team: 0, x, y, r: b.r, hp: 1, maxHp: 1, seed: 7,
+      id: 0, kind: g.placing, team: g.me, x, y, r: b.r, hp: 1, maxHp: 1, seed: 7,
       complete: true, garrison: 0, queue: [], angle: g.placeAngle,
     }
     switch (g.placing) {
-      case 'towncenter': drawTC(ctx, ghost, time, g.age[0]); break
-      case 'house': drawHouse(ctx, ghost, time, g.age[0]); break
+      case 'towncenter': drawTC(ctx, ghost, time, g.age[g.me]); break
+      case 'house': drawHouse(ctx, ghost, time, g.age[g.me]); break
       case 'farm': drawFarm(ctx, ghost, time); break
-      case 'barracks': drawBarracks(ctx, ghost, time, g.age[0]); break
+      case 'barracks': drawBarracks(ctx, ghost, time, g.age[g.me]); break
       case 'archeryrange': drawArcheryRange(ctx, ghost, time); break
       case 'watchtower': drawWatchtower(ctx, ghost, time); break
       case 'lumbercamp': drawLumberCamp(ctx, ghost); break
       case 'miningcamp': drawMiningCamp(ctx, ghost); break
-      case 'mill': drawMill(ctx, ghost, time, g.age[0]); break
+      case 'mill': drawMill(ctx, ghost, time, g.age[g.me]); break
       case 'stable': drawStable(ctx, ghost, time); break
       case 'church': drawChurch(ctx, ghost, time); break
       case 'ministry': drawMinistry(ctx, ghost, time); break

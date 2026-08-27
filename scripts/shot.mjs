@@ -1173,7 +1173,7 @@ const bannerStage = await page3.evaluate(() => {
     spears, knights, monkId,
     spearBanner: g.byId.get(spears[0]).banner,
     monkBanner: g.byId.get(monkId).banner ?? null,
-    banners: g.banners,
+    banners: g.banners[g.me],
   }
 })
 console.log('banner defaults:', {
@@ -1212,7 +1212,7 @@ if (!unitDock.includes('formation-line'))
 // split the knights onto their own banner directly — the field UI for it is gone
 await page3.evaluate(({ knights }) => {
   const g = window.__game.state
-  g.banners = 2
+  g.banners[g.me] = 2
   g.activeBanner = 1
   for (const id of knights) g.byId.get(id).banner = 1
   g.selection = knights.slice()
@@ -1222,7 +1222,7 @@ await page3.waitForTimeout(300)
 const raised = await page3.evaluate(({ knights }) => {
   const g = window.__game.state
   return {
-    banners: g.banners, active: g.activeBanner,
+    banners: g.banners[g.me], active: g.activeBanner,
     knightBanner: g.byId.get(knights[0]).banner,
     pennants: document.querySelectorAll('#banner-strip .banner-chip').length,
   }
@@ -1280,7 +1280,7 @@ const lined = await page3.evaluate(({ spears }) => {
   us.forEach(u => { u.x = 900; u.y = 700 })
   window.__game.commandMove(us, 1200, 700)
   return {
-    formation: g.formation[us[0].banner ?? 0],
+    formation: g.formation[us[0].team][us[0].banner ?? 0],
     spread: us.map(u => ({ x: Math.round(u.tx), y: Math.round(u.ty) })),
   }
 }, bannerStage)
@@ -1342,7 +1342,7 @@ if (!arming.dock.includes('muster-cancel')) throw new Error('an armed muster sho
 await page3.waitForTimeout(300)
 const planted = await page3.evaluate(() => {
   const g = window.__game.state
-  return { at: g.muster[1], mustering: g.mustering, lion: g.muster[0] }
+  return { at: g.muster[g.me][1], mustering: g.mustering, lion: g.muster[g.me][0] }
 })
 console.log('muster planted:', planted)
 if (!planted.at) throw new Error('the tap did not plant a muster flag')
@@ -1362,7 +1362,7 @@ const routed = await page3.evaluate(({ raxId, spears }) => {
   const rax = g.byId.get(raxId)
   const fresh = g.ents.filter(e =>
     e.team === 0 && e.kind === 'spearman' && !spears.includes(e.id))
-  const flag = g.muster[1]
+  const flag = g.muster[g.me][1]
   const out = {
     recruitBanner: rax.recruitBanner,
     freshBanners: fresh.map(e => e.banner),
@@ -2752,7 +2752,7 @@ await page3.screenshot({ path: 'shots/10-expansion.png' })
 const fogStart = await page3.evaluate(() => {
   const g = window.__game.state
   const eTC = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
-  const idx = Math.floor(eTC.y / 32) * g.fog.w + Math.floor(eTC.x / 32)
+  const idx = Math.floor(eTC.y / 32) * g.fog[g.me].w + Math.floor(eTC.x / 32)
   const scout = g.ents.find(e => e.team === 0 && e.kind === 'scout')
   if (scout) {
     // approach from the west, outside the guards' aggro
@@ -2760,7 +2760,7 @@ const fogStart = await page3.evaluate(() => {
     g.camera.x = eTC.x - 200; g.camera.y = eTC.y
   }
   window.__game.setSpeed(20)
-  return { idx, explored: g.fog.explored[idx], hasScout: !!scout }
+  return { idx, explored: g.fog[g.me].explored[idx], hasScout: !!scout }
 })
 console.log('fog start:', fogStart)
 if (!fogStart.hasScout) throw new Error('player scout missing')
@@ -2768,7 +2768,7 @@ if (fogStart.explored) throw new Error('enemy base should start unexplored')
 await waitSim(page3, 50) // the aged-up enemy village is denser now; the ride takes longer
 const fogSeen = await page3.evaluate(({ idx }) => {
   const g = window.__game.state
-  return { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }
+  return { explored: g.fog[g.me].explored[idx], visible: g.fog[g.me].visible[idx] }
 }, fogStart)
 console.log('fog after scouting:', fogSeen)
 if (!fogSeen.explored || !fogSeen.visible) throw new Error('scout did not reveal the enemy base')
@@ -2789,8 +2789,8 @@ const fogShadow = await page3.evaluate(({ idx }) => {
   // shadowed enemy units must not be tappable — probe the hit-test via a tap
   // by checking the selection stays empty after tapping their position
   return {
-    explored: g.fog.explored[idx],
-    visible: g.fog.visible[idx],
+    explored: g.fog[g.me].explored[idx],
+    visible: g.fog[g.me].visible[idx],
     scoutAlive: g.ents.some(e => e.team === 0 && e.kind === 'scout'),
   }
 }, fogStart)
@@ -2802,24 +2802,24 @@ if (!fogShadow.scoutAlive) throw new Error('scout died on a safe route')
 // (teleported — this test is about vision, the walking is covered elsewhere)
 const villFog = await page3.evaluate(() => {
   const g = window.__game.state
-  const cellOf = s => Math.floor(s.y / 32) * g.fog.w + Math.floor(s.x / 32)
+  const cellOf = s => Math.floor(s.y / 32) * g.fog[g.me].w + Math.floor(s.x / 32)
   const candidates = [
     { x: 1500, y: 1180 }, { x: 1700, y: 1120 }, { x: 240, y: 120 }, { x: 1800, y: 950 },
   ]
-  const spot = candidates.find(s => !g.fog.explored[cellOf(s)])
+  const spot = candidates.find(s => !g.fog[g.me].explored[cellOf(s)])
   if (!spot) return { idx: -1, explored: 1 }
   const idx = cellOf(spot)
   const v = g.ents.find(e => e.team === 0 && e.kind === 'villager')
   v.homeX = v.x; v.homeY = v.y
   v.x = spot.x; v.y = spot.y; v.state = 'idle'; v.targetId = undefined
-  return { idx, explored: g.fog.explored[idx], villId: v.id }
+  return { idx, explored: g.fog[g.me].explored[idx], villId: v.id }
 })
 if (villFog.explored) throw new Error('all candidate fog spots were already explored')
 await waitSim(page3, 3) // a couple of vision refreshes
 const villFogAfter = await page3.evaluate(({ idx, villId }) => {
   const g = window.__game.state
   const v = g.byId.get(villId)
-  const out = { explored: g.fog.explored[idx], visible: g.fog.visible[idx] }
+  const out = { explored: g.fog[g.me].explored[idx], visible: g.fog[g.me].visible[idx] }
   if (v) { v.x = v.homeX; v.y = v.homeY } // pop them back where they were
   return out
 }, villFog)
@@ -3204,6 +3204,61 @@ console.log('attack pings:', pinged)
 if (pinged.pings < 1) throw new Error('no minimap alert when a unit took hits')
 await waitSim(page3, 1)
 
+// 18.75) the other chair. Multiplayer seats one player on each side, so the
+// whole HUD has to work for team 1 as well: their resources, their roster,
+// their fog. Nothing here is about the network — it is about the game being
+// playable from either end of the board.
+{
+  const away = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })
+  await away.goto('file://' + resolve('dist/index.html') + '?map=classic')
+  await away.waitForFunction(() => !!window.__game)
+  await away.evaluate(() => { window.__game.allowPortrait(); window.__game.start() })
+  await away.waitForTimeout(300)
+  const seated = await away.evaluate(() => {
+    const g = window.__game.state
+    g.me = 1
+    g.ai.enabled = false
+    g.res[1].wood = 777; g.res[1].food = 333
+    const tc = g.ents.find(e => e.team === 1 && e.kind === 'towncenter')
+    g.camera.x = tc.x; g.camera.y = tc.y
+    for (let i = 0; i < 3; i++) window.__game.spawn('spearman', 1, tc.x + i * 24, tc.y + 70)
+    const vill = g.ents.find(e => e.team === 1 && e.kind === 'villager')
+    window.__game.select(vill.id)
+    g.uiDirty = true
+    // their own town must be lit for them, and the rival's corner dark
+    const ours = window.__game.fogAt(tc.x, tc.y)
+    const theirs = window.__game.fogAt(
+      g.ents.find(e => e.team === 0 && e.kind === 'towncenter').x,
+      g.ents.find(e => e.team === 0 && e.kind === 'towncenter').y)
+    return { ours, theirs }
+  })
+  await away.waitForTimeout(350)
+  const hud = await away.evaluate(() => ({
+    wood: document.getElementById('wood-n')?.textContent,
+    food: document.getElementById('food-n')?.textContent,
+    dock: [...document.querySelectorAll('#dock-buttons button.cmd')].map(x => x.dataset.cmd),
+  }))
+  console.log('seated on the other side:', { ...seated, ...hud })
+  if (hud.wood !== '777' || hud.food !== '333')
+    throw new Error('the pills should show the local player\u2019s stores, got ' + hud.wood + '/' + hud.food)
+  if (!hud.dock.includes('cat-economy'))
+    throw new Error('their villager should be able to build: ' + hud.dock.join(','))
+  if (seated.ours !== 'visible')
+    throw new Error('a village should be able to see itself, got ' + seated.ours)
+  if (seated.theirs === 'visible')
+    throw new Error('the rival village should not be handed live vision of the enemy')
+  // and the shield musters THEIR host, not the other one
+  await away.tap('#army-all')
+  await away.waitForTimeout(300)
+  const muster = await away.evaluate(() => {
+    const g = window.__game.state
+    return { n: g.selection.length, allMine: g.selection.every(id => g.byId.get(id).team === 1) }
+  })
+  console.log('their shield musters:', muster)
+  if (muster.n !== 3 || !muster.allMine) throw new Error('the shield mustered the wrong host: ' + JSON.stringify(muster))
+  await away.close()
+}
+
 // 18.8) determinism, which multiplayer stands or falls on. Same seed, same
 // number of ticks, same fingerprint — twice on one page, and again on a page
 // that knows nothing about the first. If this ever goes red, two players
@@ -3531,7 +3586,7 @@ for (const seed of [7, 13, 2026]) {
       e.kind === kind && Math.hypot(e.x - tc.x, e.y - tc.y) <= maxD).length
     return {
       w: g.world.w, h: g.world.h,
-      fogW: g.fog.w, fogH: g.fog.h,
+      fogW: g.fog[g.me].w, fogH: g.fog[g.me].h,
       tcDist: Math.round(Math.hypot(tcs[0].x - tcs[1].x, tcs[0].y - tcs[1].y)),
       kits: tcs.map(tc => ({
         berries: near(tc, 'berrybush', 330),
@@ -3582,7 +3637,7 @@ for (const seed of [7, 13, 2026]) {
       return n
     }
     const before = bluePixels()
-    g.fog.explored.fill(1)
+    g.fog[g.me].explored.fill(1)
     return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() =>
       res({ before, after: bluePixels() }))))
   })
@@ -3677,7 +3732,7 @@ console.log('random map invariants hold')
   const inTheDark = await pgA.evaluate(async () => {
     const G = window.__game, g = G.state
     const spot = { x: g.world.w - 200, y: g.world.h - 200 }
-    const lit = g.fog.visible[Math.floor(spot.y / 32) * g.fog.w + Math.floor(spot.x / 32)]
+    const lit = g.fog[g.me].visible[Math.floor(spot.y / 32) * g.fog[g.me].w + Math.floor(spot.x / 32)]
     const a = G.spawn('swordsman', 1, spot.x, spot.y)
     const b = G.spawn('spearman', 1, spot.x + 16, spot.y)
     g.byId.get(a).state = 'attack'

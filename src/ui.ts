@@ -51,7 +51,7 @@ function spriteIcon(kind: string, age = 2, civ: CivId = iconCiv): HTMLCanvasElem
   c.className = 'sprite-icon'
   const ctx = c.getContext('2d')!
   const fake: any = {
-    id: 0, kind, team: 0, x: 0, y: 0, r: 0, hp: 1, maxHp: 1, seed: 3,
+    id: 0, kind, team: iconTeam, x: 0, y: 0, r: 0, hp: 1, maxHp: 1, seed: 3,
     complete: true, state: 'idle', face: 1, phase: 0, carry: 0, amount: 60,
   }
   // the wilds are drawn from their own radius (a crag with r 0 draws nothing)
@@ -216,6 +216,7 @@ function musterIcon(color: string, edge: string, planted: boolean, size = 38): s
 // than threaded through every spriteIcon call: it only changes at Begin, and
 // syncUI refreshes it before anything is drawn.
 let iconCiv: CivId = 'english'
+let iconTeam = 0
 
 // Who's playing, as far as the menu is concerned. A stand-in until accounts
 // arrive: nothing leaves the device and the sim never reads it.
@@ -405,24 +406,24 @@ function selectedEnts(g: Game): Ent[] {
 
 function queueLen(g: Game): number {
   let n = 0
-  for (const e of g.ents) if (e.team === 0 && e.queue) n += e.queue.length
+  for (const e of g.ents) if (e.team === g.me && e.queue) n += e.queue.length
   return n
 }
 
 function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' | 'archer' | 'scout' | 'knight' | 'monk' | 'mangonel' | 'trebuchet'): void {
   const s = UNITS[kind]
-  const ageReq = unitAgeReq(g, 0, kind)
-  if (ageReq > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
+  const ageReq = unitAgeReq(g, g.me, kind)
+  if (ageReq > g.age[g.me]) { toast(g, `Reach the ${AGE_NAMES[ageReq]} first!`); return }
   // the King's Barracks musters its spear levy for a pittance;
   // the School of Cavalry saddles knights at a chevalier's discount
   const levy = b.kind === 'kingsbarracks' && kind === 'spearman'
   const school = b.kind === 'cavalryschool' && kind === 'knight'
   const trainCost = levy ? LEVY_SPEAR_COST : school ? SCHOOL_KNIGHT_COST : s.cost
   const trainTime = levy ? LEVY_SPEAR_TIME : school ? SCHOOL_KNIGHT_TIME : s.time
-  const p = pop(g, 0)
+  const p = pop(g, g.me)
   if (p.used + queueLen(g) >= p.cap) { toast(g, 'Population full — build a House!'); return }
-  if (!canAfford(g, 0, trainCost)) {
-    const r = g.res[0]
+  if (!canAfford(g, g.me, trainCost)) {
+    const r = g.res[g.me]
     const missing =
       r.food < trainCost.food ? 'Not enough food — forage berries or work a farm!' :
       r.gold < trainCost.gold ? 'Not enough gold — mine some!' :
@@ -432,7 +433,7 @@ function tryTrain(g: Game, b: Ent, kind: 'villager' | 'swordsman' | 'spearman' |
     return
   }
   if ((b.queue?.length ?? 0) >= 5) { toast(g, 'Training queue is full.'); return }
-  pay(g, 0, trainCost)
+  pay(g, g.me, trainCost)
   b.queue!.push({ kind, t: trainTime, total: trainTime })
   g.uiDirty = true
 }
@@ -481,7 +482,7 @@ function syncProdPanel(g: Game): void {
   interface Item { key: string; hostId: number; icon: string; frac: number; count: number }
   const items: Item[] = []
   for (const e of g.ents) {
-    if (e.team !== 0) continue
+    if (e.team !== g.me) continue
     if (e.queue?.length) {
       items.push({
         key: `q${e.id}`, hostId: e.id, icon: `unit:${e.queue[0].kind}`,
@@ -552,9 +553,9 @@ let bannerPick = false
 // the landmark site currently rising toward the player's next age, if any
 function landmarkSite(g: Game): Ent | null {
   for (const e of g.ents) {
-    if (e.team !== 0 || e.complete) continue
+    if (e.team !== g.me || e.complete) continue
     const lm = LANDMARKS[e.kind as LandmarkKind]
-    if (lm && lm.toAge === g.age[0] + 1) return e
+    if (lm && lm.toAge === g.age[g.me] + 1) return e
   }
   return null
 }
@@ -565,15 +566,15 @@ function researchDock(g: Game, dock: HTMLElement, b: Ent): void {
   if (!ids.length) return
   if (b.research) return // the top-right loader tells the story now
   for (const id of ids) {
-    if (g.techs[0][id]) continue // already known
+    if (g.techs[g.me][id]) continue // already known
     const spec = TECHS[id]
     dock.appendChild(iconButton(
-      { cmd: `research-${id}`, label: `Research ${spec.name} — ${spec.blurb}`, icon: TECH_ICON[id], cost: spec.cost, locked: g.age[0] < 2 },
+      { cmd: `research-${id}`, label: `Research ${spec.name} — ${spec.blurb}`, icon: TECH_ICON[id], cost: spec.cost, locked: g.age[g.me] < 2 },
       () => {
-        if (g.age[0] < 2) { toast(g, 'Reach the Feudal Age first!'); return }
-        if (b.research || g.techs[0][id]) return
-        if (!canAfford(g, 0, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
-        pay(g, 0, spec.cost)
+        if (g.age[g.me] < 2) { toast(g, 'Reach the Feudal Age first!'); return }
+        if (b.research || g.techs[g.me][id]) return
+        if (!canAfford(g, g.me, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
+        pay(g, g.me, spec.cost)
         b.research = { id, t: spec.time, total: spec.time }
         g.uiDirty = true
       }))
@@ -585,15 +586,15 @@ function champDock(g: Game, dock: HTMLElement, b: Ent): void {
   const id = (Object.keys(CHAMPS) as ChampId[]).find(c => CHAMPS[c].at.includes(b.kind))
   if (!id) return
   if (b.research) return // the top-right loader tells the story now
-  if (g.champs[0][id]) return // already sworn in
+  if (g.champs[g.me][id]) return // already sworn in
   const spec = CHAMPS[id]
   dock.appendChild(iconButton(
-    { cmd: `champ-${id}`, label: `${spec.name} — ${spec.blurb}`, icon: ICON.crown, cost: spec.cost, locked: g.age[0] < 3 },
+    { cmd: `champ-${id}`, label: `${spec.name} — ${spec.blurb}`, icon: ICON.crown, cost: spec.cost, locked: g.age[g.me] < 3 },
     () => {
-      if (g.age[0] < 3) { toast(g, 'Reach the Castle Age first!'); return }
-      if (b.research || g.champs[0][id]) return
-      if (!canAfford(g, 0, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
-      pay(g, 0, spec.cost)
+      if (g.age[g.me] < 3) { toast(g, 'Reach the Castle Age first!'); return }
+      if (b.research || g.champs[g.me][id]) return
+      if (!canAfford(g, g.me, spec.cost)) { toast(g, `Not enough for ${spec.name}.`); return }
+      pay(g, g.me, spec.cost)
       b.research = { id, t: spec.time, total: spec.time }
       g.uiDirty = true
     }))
@@ -608,7 +609,7 @@ function updateAffordability(g: Game): void {
       const n = Number(b.dataset[k] ?? 0)
       if (!n) continue
       hasCost = true
-      if (g.res[0][k] < n) short = true
+      if (g.res[g.me][k] < n) short = true
     }
     if (hasCost) b.classList.toggle('disabled', short)
   })
@@ -623,25 +624,25 @@ function drawMinimap(g: Game): void {
   const W = c.width, H = c.height
   const sx = W / g.world.w, sy = H / g.world.h
   // fog underlay, softly scaled up from the fog grid
-  if (!miniFog || miniFog.width !== g.fog.w || miniFog.height !== g.fog.h) {
+  if (!miniFog || miniFog.width !== g.fog[g.me].w || miniFog.height !== g.fog[g.me].h) {
     miniFog = document.createElement('canvas')
-    miniFog.width = g.fog.w
-    miniFog.height = g.fog.h
+    miniFog.width = g.fog[g.me].w
+    miniFog.height = g.fog[g.me].h
   }
   const fctx = miniFog.getContext('2d')!
-  const img = fctx.createImageData(g.fog.w, g.fog.h)
+  const img = fctx.createImageData(g.fog[g.me].w, g.fog[g.me].h)
   const d = img.data
-  for (let i = 0; i < g.fog.w * g.fog.h; i++) {
+  for (let i = 0; i < g.fog[g.me].w * g.fog[g.me].h; i++) {
     const o = i * 4
-    if (!g.fog.explored[i]) { d[o] = 30; d[o + 1] = 42; d[o + 2] = 26 }
-    else if (!g.fog.visible[i]) { d[o] = 74; d[o + 1] = 95; d[o + 2] = 56 }
+    if (!g.fog[g.me].explored[i]) { d[o] = 30; d[o + 1] = 42; d[o + 2] = 26 }
+    else if (!g.fog[g.me].visible[i]) { d[o] = 74; d[o + 1] = 95; d[o + 2] = 56 }
     else { d[o] = 122; d[o + 1] = 153; d[o + 2] = 88 }
     d[o + 3] = 255
   }
   fctx.putImageData(img, 0, 0)
   ctx.imageSmoothingEnabled = true
   ctx.clearRect(0, 0, W, H)
-  ctx.drawImage(miniFog, 0, 0, g.fog.w, g.fog.h, 0, 0, W, H)
+  ctx.drawImage(miniFog, 0, 0, g.fog[g.me].w, g.fog[g.me].h, 0, 0, W, H)
   // the stream and its fords — only the stretches you've actually found
   // (rivers, and one day ponds, are discoveries, not free intelligence)
   if (g.streams.length) {
@@ -659,7 +660,7 @@ function drawMinimap(g: Game): void {
           const t0 = k / 3, t1 = (k + 1) / 3
           const mx = a.x + (b.x - a.x) * (t0 + t1) / 2
           const my = a.y + (b.y - a.y) * (t0 + t1) / 2
-          if (g.fog.explored[fogIndex(g, mx, my)] === 1) {
+          if (g.fog[g.me].explored[fogIndex(g, mx, my)] === 1) {
             if (!pen) { ctx.moveTo((a.x + (b.x - a.x) * t0) * sx, (a.y + (b.y - a.y) * t0) * sy); pen = true }
             ctx.lineTo((a.x + (b.x - a.x) * t1) * sx, (a.y + (b.y - a.y) * t1) * sy)
           } else {
@@ -671,15 +672,15 @@ function drawMinimap(g: Game): void {
     }
     ctx.fillStyle = '#D8C89C'
     for (const f of g.fords) {
-      if (g.fog.explored[fogIndex(g, f.x, f.y)] !== 1) continue
+      if (g.fog[g.me].explored[fogIndex(g, f.x, f.y)] !== 1) continue
       ctx.beginPath(); ctx.arc(f.x * sx, f.y * sy, 2.2, 0, Math.PI * 2); ctx.fill()
     }
   }
   // the land and the villages (enemy buildings once seen, units in live sight)
   for (const e of g.ents) {
     const fi = fogIndex(g, e.x, e.y)
-    const seen = g.fog.explored[fi] === 1
-    const lit = g.fog.visible[fi] === 1
+    const seen = g.fog[g.me].explored[fi] === 1
+    const lit = g.fog[g.me].visible[fi] === 1
     const mx = e.x * sx, my = e.y * sy
     if (e.kind === 'tree') {
       if (seen && (e.amount ?? 0) > 0) { ctx.fillStyle = '#3E5A34'; ctx.fillRect(mx - 1, my - 1, 2, 2) }
@@ -700,8 +701,8 @@ function drawMinimap(g: Game): void {
         ctx.closePath(); ctx.fill()
       }
     } else if (isBuilding(e)) {
-      if (e.team === 0 || seen) {
-        ctx.fillStyle = e.team === 0 ? '#6D9DC5' : '#C4746B'
+      if (e.team === g.me || seen) {
+        ctx.fillStyle = e.team === g.me ? '#6D9DC5' : '#C4746B'
         const s = e.kind === 'towncenter' ? 5 : 3.4
         ctx.fillRect(mx - s / 2, my - s / 2, s, s)
         if (e.kind === 'towncenter') {
@@ -711,8 +712,8 @@ function drawMinimap(g: Game): void {
         }
       }
     } else if (isUnit(e) && !e.hidden) {
-      if (e.team === 0 || lit) {
-        ctx.fillStyle = e.team === 0 ? '#BFD8EC' : '#E5A79F'
+      if (e.team === g.me || lit) {
+        ctx.fillStyle = e.team === g.me ? '#BFD8EC' : '#E5A79F'
         ctx.fillRect(mx - 1, my - 1, 2, 2)
       }
     }
@@ -749,15 +750,15 @@ function syncArmyPanel(g: Game): void {
   // the bucklers are the ACTIVE banner's roster, not the whole village
   const counts = ARMY_TYPES.map(k =>
     g.ents.reduce((n, e) =>
-      n + (e.team === 0 && e.kind === k && !e.hidden && e.banner === g.activeBanner ? 1 : 0), 0))
+      n + (e.team === g.me && e.kind === k && !e.hidden && e.banner === g.activeBanner ? 1 : 0), 0))
   // every banner's headcount rides in the signature, or a death in a company
   // you aren't looking at would leave its pennant showing a stale number
   const tally: number[] = []
-  for (let i = 0; i < g.banners; i++) {
+  for (let i = 0; i < g.banners[g.me]; i++) {
     tally.push(g.ents.reduce((c, e) =>
-      c + (e.team === 0 && !e.hidden && e.banner === i ? 1 : 0), 0))
+      c + (e.team === g.me && !e.hidden && e.banner === i ? 1 : 0), 0))
   }
-  const sig = `${g.banners}:${g.activeBanner}:${counts.join(',')}:${tally.join(',')}`
+  const sig = `${g.banners[g.me]}:${g.activeBanner}:${counts.join(',')}:${tally.join(',')}`
   if (sig === armySig) return
   armySig = sig
   syncBannerStrip(g)
@@ -795,7 +796,7 @@ function formationIcon(kind: Formation, size = 38): string {
 }
 
 function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
-  const troop = sel.filter(e => canBanner(e) && e.team === 0)
+  const troop = sel.filter(e => canBanner(e) && e.team === g.me)
   if (!troop.length) return
   const cur = formationOf(g, troop) // the shape a move order would use right now
   let owner = g.activeBanner
@@ -810,7 +811,7 @@ function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
         label: kind === 'line' ? 'Form a line across the advance' : 'Bunch up shoulder to shoulder',
         icon: formationIcon(kind) },
       () => {
-        g.formation[owner] = kind
+        g.formation[g.me][owner] = kind
         toast(g, kind === 'line'
           ? `${BANNERS[owner].name} forms a line.`
           : `${BANNERS[owner].name} bunches up.`)
@@ -832,7 +833,7 @@ function formationDock(g: Game, dock: HTMLElement, sel: Ent[]): void {
 function musterDock(g: Game, dock: HTMLElement, b: Ent): void {
   const banner = b.recruitBanner ?? LION_BANNER
   const spec = BANNERS[banner]
-  const planted = g.muster[banner]
+  const planted = g.muster[g.me][banner]
   if (g.mustering === banner) {
     const stop = document.createElement('button')
     stop.className = 'cmd ghost'
@@ -874,7 +875,7 @@ function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
   back.textContent = '‹'
   back.addEventListener('click', () => { bannerPick = false; g.uiDirty = true })
   dock.appendChild(back)
-  for (let i = 0; i < g.banners; i++) {
+  for (let i = 0; i < g.banners[g.me]; i++) {
     dock.appendChild(iconButton(
       { cmd: `recruit-to-${i}`, label: `Send recruits to ${BANNERS[i].name}`, icon: bannerIcon(i, 38) },
       () => {
@@ -884,11 +885,11 @@ function recruitBannerDock(g: Game, dock: HTMLElement, b: Ent): void {
         g.uiDirty = true
       }))
   }
-  if (g.banners < BANNER_MAX) {
+  if (g.banners[g.me] < BANNER_MAX) {
     dock.appendChild(iconButton(
-      { cmd: 'recruit-to-new', label: 'Raise a new banner for these recruits', icon: bannerIcon(g.banners, 38) },
+      { cmd: 'recruit-to-new', label: 'Raise a new banner for these recruits', icon: bannerIcon(g.banners[g.me], 38) },
       () => {
-        b.recruitBanner = g.banners
+        b.recruitBanner = g.banners[g.me]
         raiseBanner(g, [])
         bannerPick = false
         g.uiDirty = true
@@ -963,7 +964,7 @@ function buildInfoCard(g: Game, e: Ent): string {
   const r = RESOURCES[e.kind]
   const lm = LANDMARKS[e.kind as LandmarkKind]
   const name = u?.name ?? b?.name ?? r?.name ?? (e.kind === 'relic' ? 'Holy Relic' : e.kind === 'crag' ? 'Rocky Crag' : e.kind)
-  const tag = e.team === 0 ? 'Yours' : e.team === 1 ? 'The rival village' : isUnit(e) || b ? '' : 'The wilds'
+  const tag = e.team === g.me ? 'Yours' : e.team >= 0 ? 'The rival village' : isUnit(e) || b ? '' : 'The wilds'
   const stats: string[] = []
   const lines: string[] = []
 
@@ -986,7 +987,7 @@ function buildInfoCard(g: Game, e: Ent): string {
     if (e.kind === 'croc' && e.hp > 0) stats.push(statChip('HP', `${Math.ceil(e.hp)}/${e.maxHp}`))
   }
 
-  const ageReq = u ? unitAgeReq(g, 0, e.kind) : (b?.age ?? 1)
+  const ageReq = u ? unitAgeReq(g, g.me, e.kind) : (b?.age ?? 1)
   // (a starting Town Hall is older than the age its rebuild needs — say so plainly)
   if (ageReq > 1 && !lm) lines.push(b ? `Can be built from the <b>${AGE_NAMES[ageReq]}</b>.` : `Available from the <b>${AGE_NAMES[ageReq]}</b>.`)
 
@@ -1012,15 +1013,15 @@ function buildInfoCard(g: Game, e: Ent): string {
     lines.push(`<b>Now researching:</b> ${rn}.`)
   }
   if ((e.garrison ?? 0) > 0) lines.push(`<b>${e.garrison}</b> sheltering inside.`)
-  if (e.team === 0 && canBanner(e)) {
+  if (e.team === g.me && canBanner(e)) {
     lines.push(e.banner !== undefined
       ? `Rides under <b>${BANNERS[e.banner].name}</b>.`
       : 'Sworn to no beast — a monk answers no company\u2019s muster.')
   }
-  if (e.team === 0 && HALL_KINDS.includes(e.kind)) {
+  if (e.team === g.me && HALL_KINDS.includes(e.kind)) {
     const rb = e.recruitBanner ?? LION_BANNER
     lines.push(`Recruits ride under <b>${BANNERS[rb].name}</b>.`)
-    lines.push(g.muster[rb]
+    lines.push(g.muster[e.team]?.[rb]
       ? `They march to <b>${BANNERS[rb].name}\u2019s muster flag</b> once raised.`
       : 'They gather at the door — plant a muster flag to send them elsewhere.')
   }
@@ -1074,10 +1075,10 @@ function syncInfoTools(g: Game): void {
 function syncBannerStrip(g: Game): void {
   const strip = el('banner-strip')
   strip.innerHTML = ''
-  strip.classList.toggle('hidden', g.banners <= 1)
-  for (let i = 0; i < g.banners; i++) {
+  strip.classList.toggle('hidden', g.banners[g.me] <= 1)
+  for (let i = 0; i < g.banners[g.me]; i++) {
     const n = g.ents.reduce((c, e) =>
-      c + (e.team === 0 && !e.hidden && e.banner === i ? 1 : 0), 0)
+      c + (e.team === g.me && !e.hidden && e.banner === i ? 1 : 0), 0)
     const b = document.createElement('button')
     b.className = 'banner-chip' + (g.activeBanner === i ? ' active' : '') + (n === 0 ? ' empty' : '')
     b.dataset.cmd = `banner-select-${i}`
@@ -1097,18 +1098,19 @@ export function syncUI(g: Game): void {
   // The HUD belongs to a game in progress. Reading it off g.started here means
   // every way in — the menu, a replay, the test hook — gets it right.
   document.body.classList.toggle('playing', g.started)
-  iconCiv = g.civs[0] ?? 'english'
-  const p = pop(g, 0)
-  el('wood-n').textContent = String(Math.floor(g.res[0].wood))
-  el('food-n').textContent = String(Math.floor(g.res[0].food))
-  el('gold-n').textContent = String(Math.floor(g.res[0].gold))
-  el('stone-n').textContent = String(Math.floor(g.res[0].stone))
+  iconCiv = g.civs[g.me] ?? 'english'
+  iconTeam = g.me
+  const p = pop(g, g.me)
+  el('wood-n').textContent = String(Math.floor(g.res[g.me].wood))
+  el('food-n').textContent = String(Math.floor(g.res[g.me].food))
+  el('gold-n').textContent = String(Math.floor(g.res[g.me].gold))
+  el('stone-n').textContent = String(Math.floor(g.res[g.me].stone))
   el('pop-n').textContent = `${p.used}/${p.cap}`
   // little crew counts under each number: who's working what, who's loafing
   const crew: Record<ResKind, number> = { wood: 0, food: 0, gold: 0, stone: 0 }
   let idleVills = 0
   for (const e of g.ents) {
-    if (e.team !== 0 || e.kind !== 'villager' || e.hidden) continue
+    if (e.team !== g.me || e.kind !== 'villager' || e.hidden) continue
     if (e.state === 'idle') { idleVills++; continue }
     const r = gatherResOf(g, e)
     if (r) crew[r]++
@@ -1175,7 +1177,7 @@ export function syncUI(g: Game): void {
   }
 
   const HALLS = ['barracks', 'kingsbarracks', 'archeryrange', 'stable', 'cavalryschool', 'siegeworkshop']
-  if (bannerPick && first && HALLS.includes(first.kind) && first.team === 0 && first.complete) {
+  if (bannerPick && first && HALLS.includes(first.kind) && first.team === g.me && first.complete) {
     recruitBannerDock(g, dock, first) // the picker takes the whole dock to itself
   } else if (g.placing) {
     const cross = document.createElement('button')
@@ -1195,7 +1197,7 @@ export function syncUI(g: Game): void {
     dock.appendChild(tick)
   } else if (first && first.kind === 'towncenter' && first.complete) {
     const rising = landmarkSite(g)
-    if (agePick && g.age[0] < 3 && !rising) {
+    if (agePick && g.age[g.me] < 3 && !rising) {
       // choose your landmark — the eco road or the military road into the next age
       const back = document.createElement('button')
       back.className = 'cmd ghost'
@@ -1204,9 +1206,9 @@ export function syncUI(g: Game): void {
       back.textContent = '‹'
       back.addEventListener('click', () => { agePick = false; g.uiDirty = true })
       dock.appendChild(back)
-      const nextAge = g.age[0] + 1
+      const nextAge = g.age[g.me] + 1
       const choices = (Object.keys(LANDMARKS) as LandmarkKind[])
-        .filter(k => LANDMARKS[k].toAge === nextAge && LANDMARKS[k].civ === g.civs[0])
+        .filter(k => LANDMARKS[k].toAge === nextAge && LANDMARKS[k].civ === g.civs[g.me])
       for (const kind of choices) {
         const spec = BUILDINGS[kind]
         const lm = LANDMARKS[kind]
@@ -1224,9 +1226,9 @@ export function syncUI(g: Game): void {
       dock.appendChild(iconButton(
         { cmd: 'train-villager', label: 'Train villager', icon: spriteIcon('villager'), cost: UNITS.villager.cost },
         () => tryTrain(g, first, 'villager')))
-      if (!rising && g.age[0] < 3) {
+      if (!rising && g.age[g.me] < 3) {
         dock.appendChild(iconButton(
-          { cmd: 'age-up', label: `Advance to the ${AGE_NAMES[g.age[0] + 1]} — raise a landmark`, icon: ICON.laurel },
+          { cmd: 'age-up', label: `Advance to the ${AGE_NAMES[g.age[g.me] + 1]} — raise a landmark`, icon: ICON.laurel },
           () => { agePick = true; g.uiDirty = true }))
       }
       const garrison = first.garrison ?? 0
@@ -1241,29 +1243,29 @@ export function syncUI(g: Game): void {
       }
       }
   } else if (first && (first.kind === 'lumbercamp' || first.kind === 'miningcamp' || first.kind === 'mill' ||
-    first.kind === 'ministry') && first.complete && first.team === 0) {
+    first.kind === 'ministry') && first.complete && first.team === g.me) {
     researchDock(g, dock, first)
-  } else if (first && first.kind === 'church' && first.complete && first.team === 0) {
+  } else if (first && first.kind === 'church' && first.complete && first.team === g.me) {
     dock.appendChild(iconButton(
       { cmd: 'train-monk', label: 'Ordain a monk — he heals the hurt and carries relics home',
-        icon: spriteIcon('monk'), cost: UNITS.monk.cost, locked: g.age[0] < unitAgeReq(g, 0, 'monk') },
+        icon: spriteIcon('monk'), cost: UNITS.monk.cost, locked: g.age[g.me] < unitAgeReq(g, g.me, 'monk') },
       () => tryTrain(g, first, 'monk')))
-  } else if (first && first.kind === 'cavalryschool' && first.complete && first.team === 0) {
+  } else if (first && first.kind === 'cavalryschool' && first.complete && first.team === g.me) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
       () => tryTrain(g, first, 'scout')))
     dock.appendChild(iconButton(
       { cmd: 'train-knight', label: "Muster knight — a chevalier's discount", icon: spriteIcon('knight'),
-        cost: SCHOOL_KNIGHT_COST, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
+        cost: SCHOOL_KNIGHT_COST, locked: g.age[g.me] < unitAgeReq(g, g.me, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
     musterDock(g, dock, first)
-  } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === 0 && (first.garrison ?? 0) > 0) {
+  } else if (first && (first.kind === 'watchtower' || first.kind === 'whitekeep' || first.kind === 'redpalace') && first.complete && first.team === g.me && (first.garrison ?? 0) > 0) {
     dock.appendChild(iconButton(
       { cmd: 'doors', label: 'Open the doors', icon: ICON.bell, badge: `×${first.garrison}` },
       () => openDoors(g, first)))
-  } else if (first && (first.kind === 'barracks' || first.kind === 'kingsbarracks') && first.complete && first.team === 0) {
+  } else if (first && (first.kind === 'barracks' || first.kind === 'kingsbarracks') && first.complete && first.team === g.me) {
     const levy = first.kind === 'kingsbarracks'
     dock.appendChild(iconButton(
       { cmd: 'train-spearman', label: levy ? 'Muster levy spearman' : 'Train spearman',
@@ -1271,12 +1273,12 @@ export function syncUI(g: Game): void {
       () => tryTrain(g, first, 'spearman')))
     dock.appendChild(iconButton(
       { cmd: 'train-swordsman', label: 'Train swordsman', icon: spriteIcon('swordsman'),
-        cost: UNITS.swordsman.cost, locked: g.age[0] < (UNITS.swordsman.age ?? 1) },
+        cost: UNITS.swordsman.cost, locked: g.age[g.me] < (UNITS.swordsman.age ?? 1) },
       () => tryTrain(g, first, 'swordsman')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
     musterDock(g, dock, first)
-  } else if (first && first.kind === 'siegeworkshop' && first.complete && first.team === 0) {
+  } else if (first && first.kind === 'siegeworkshop' && first.complete && first.team === g.me) {
     dock.appendChild(iconButton(
       { cmd: 'train-mangonel', label: 'Build mangonel — lobs a splash boulder at clumps',
         icon: spriteIcon('mangonel'), cost: UNITS.mangonel.cost },
@@ -1287,20 +1289,20 @@ export function syncUI(g: Game): void {
       () => tryTrain(g, first, 'trebuchet')))
     recruitBannerDock(g, dock, first)
     musterDock(g, dock, first)
-  } else if (first && first.kind === 'archeryrange' && first.complete && first.team === 0) {
+  } else if (first && first.kind === 'archeryrange' && first.complete && first.team === g.me) {
     dock.appendChild(iconButton(
       { cmd: 'train-archer', label: 'Train longbowman', icon: spriteIcon('archer'), cost: UNITS.archer.cost },
       () => tryTrain(g, first, 'archer')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
     musterDock(g, dock, first)
-  } else if (first && first.kind === 'stable' && first.complete && first.team === 0) {
+  } else if (first && first.kind === 'stable' && first.complete && first.team === g.me) {
     dock.appendChild(iconButton(
       { cmd: 'train-scout', label: 'Train scout', icon: spriteIcon('scout'), cost: UNITS.scout.cost },
       () => tryTrain(g, first, 'scout')))
     dock.appendChild(iconButton(
-      { cmd: 'train-knight', label: `Train knight (${AGE_NAMES[unitAgeReq(g, 0, 'knight')]})`, icon: spriteIcon('knight'),
-        cost: UNITS.knight.cost, locked: g.age[0] < unitAgeReq(g, 0, 'knight') },
+      { cmd: 'train-knight', label: `Train knight (${AGE_NAMES[unitAgeReq(g, g.me, 'knight')]})`, icon: spriteIcon('knight'),
+        cost: UNITS.knight.cost, locked: g.age[g.me] < unitAgeReq(g, g.me, 'knight') },
       () => tryTrain(g, first, 'knight')))
     champDock(g, dock, first)
     recruitBannerDock(g, dock, first)
@@ -1335,11 +1337,11 @@ export function syncUI(g: Game): void {
       }
       for (const kind of lists[buildCat]) {
         const b = BUILDINGS[kind]
-        const locked = g.age[0] < (b.age ?? 1)
+        const locked = g.age[g.me] < (b.age ?? 1)
         dock.appendChild(iconButton(
-          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind, g.age[0]), cost: b.cost, locked },
+          { cmd: `build-${kind}`, label: `Build ${b.name}`, icon: symbolIcons[kind] ?? spriteIcon(kind, g.age[g.me]), cost: b.cost, locked },
           () => {
-            if (g.age[0] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
+            if (g.age[g.me] < (b.age ?? 1)) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return }
             g.placing = kind
             const fit = kind === 'gate' ? gateSnap(g, g.camera.x, g.camera.y) : null
             g.placeAngle = fit ? fit.angle : 0
@@ -1351,7 +1353,7 @@ export function syncUI(g: Game): void {
           }))
       }
     }
-  } else if (sel.some(e => canBanner(e) && e.team === 0)) {
+  } else if (sel.some(e => canBanner(e) && e.team === g.me)) {
     formationDock(g, dock, sel)
   }
 

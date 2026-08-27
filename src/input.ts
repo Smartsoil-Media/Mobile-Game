@@ -64,13 +64,15 @@ export function commandGather(g: Game, villagers: Ent[], res: Ent): void {
 // falls back to the one whose roster is on screen.
 export function formationOf(g: Game, units: Ent[]): Formation {
   const tally = new Map<number, number>()
+  let team = g.me
   for (const u of units) {
     if (u.banner === undefined) continue
+    team = u.team
     tally.set(u.banner, (tally.get(u.banner) ?? 0) + 1)
   }
   let best = g.activeBanner, most = 0
   for (const [b, n] of tally) if (n > most) { most = n; best = b }
-  return g.formation[best] ?? 'bunch'
+  return g.formation[team]?.[best] ?? 'bunch'
 }
 
 // Where each soldier should stand once they arrive. Everything is laid out
@@ -164,30 +166,30 @@ export function commandBuild(g: Game, villagers: Ent[], site: Ent): void {
 
 export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number): boolean {
   const b = BUILDINGS[kind]
-  if ((b.age ?? 1) > g.age[0]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
+  if ((b.age ?? 1) > g.age[g.me]) { toast(g, `Reach the ${AGE_NAMES[b.age ?? 1]} first!`); return false }
   const lm = LANDMARKS[kind as LandmarkKind]
   if (lm) {
-    if (lm.civ !== g.civs[0]) { toast(g, 'That landmark belongs to another banner.'); return false }
-    if (g.age[0] >= lm.toAge) { toast(g, `The ${AGE_NAMES[lm.toAge]} is already yours.`); return false }
-    if (lm.toAge !== g.age[0] + 1) { toast(g, `Reach the ${AGE_NAMES[lm.toAge - 1]} first!`); return false }
-    if (g.ents.some(e => e.team === 0 && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
+    if (lm.civ !== g.civs[g.me]) { toast(g, 'That landmark belongs to another banner.'); return false }
+    if (g.age[g.me] >= lm.toAge) { toast(g, `The ${AGE_NAMES[lm.toAge]} is already yours.`); return false }
+    if (lm.toAge !== g.age[g.me] + 1) { toast(g, `Reach the ${AGE_NAMES[lm.toAge - 1]} first!`); return false }
+    if (g.ents.some(e => e.team === g.me && LANDMARKS[e.kind as LandmarkKind]?.toAge === lm.toAge)) {
       toast(g, 'A landmark is already rising.')
       return false
     }
   }
   if (kind === 'wall') return tryPlaceWall(g)
-  if (!canAfford(g, 0, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
+  if (!canAfford(g, g.me, b.cost)) { toast(g, `Not enough resources for a ${b.name}.`); return false }
   if (!canPlaceAt(g, kind, x, y)) { toast(g, "Can't build there — the ground is blocked."); return false }
-  let villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
+  let villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === g.me)
   if (!villagers.length && lm) {
     // landmarks are begun from the Town Hall — round up the nearest spare hands
     villagers = g.ents
-      .filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden && e.state !== 'build')
+      .filter(e => e.team === g.me && e.kind === 'villager' && !e.hidden && e.state !== 'build')
       .sort((a, b2) => dist(a.x, a.y, x, y) - dist(b2.x, b2.y, x, y))
       .slice(0, 2)
   }
   if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
-  pay(g, 0, b.cost)
+  pay(g, g.me, b.cost)
   clearSpent(g, kind, x, y) // sweep away the stumps and rubble underneath
   const site = spawn(g, kind, 0, x, y, false)
   if (kind === 'gate') {
@@ -195,7 +197,7 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
     // the gate is set INTO the fence: the posts it swallows come down, and
     // their timber goes back in the pile
     for (const post of wallsUnderGate(g, x, y)) {
-      g.res[0].wood += BUILDINGS.wall.cost.wood
+      g.res[g.me].wood += BUILDINGS.wall.cost.wood
       const i = g.ents.indexOf(post)
       if (i >= 0) g.ents.splice(i, 1)
       g.byId.delete(post.id)
@@ -214,16 +216,16 @@ export function tryPlaceBuilding(g: Game, kind: Buildable, x: number, y: number)
 // place the whole dragged line of palisade posts at once
 function tryPlaceWall(g: Game): boolean {
   const b = BUILDINGS.wall
-  const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === 0)
+  const villagers = selectedEnts(g).filter(e => e.kind === 'villager' && e.team === g.me)
   if (!villagers.length) { toast(g, 'Select a villager first.'); return false }
   const pts = wallLinePoints(g).filter(p => p.ok)
   if (!pts.length) { toast(g, "Can't build there — the ground is blocked."); return false }
   let placed = 0
   let first: Ent | null = null
   for (const p of pts) {
-    if (!canAfford(g, 0, b.cost)) break
+    if (!canAfford(g, g.me, b.cost)) break
     if (!canPlaceAt(g, 'wall', p.x, p.y)) continue // earlier posts may crowd a later spot
-    pay(g, 0, b.cost)
+    pay(g, g.me, b.cost)
     clearSpent(g, 'wall', p.x, p.y)
     const site = spawn(g, 'wall', 0, p.x, p.y, false)
     if (!first) first = site
@@ -302,9 +304,9 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   const isDouble = !!hit && hit.id === lastTapEnt && now - lastTapT < DOUBLE_TAP_MS
   lastTapT = now
   lastTapEnt = hit ? hit.id : -1
-  if (isDouble && hit && hit.team === 0 && isUnit(hit)) {
+  if (isDouble && hit && hit.team === g.me && isUnit(hit)) {
     const crew = g.ents.filter(e =>
-      e.team === 0 && e.kind === hit.kind && !e.hidden &&
+      e.team === g.me && e.kind === hit.kind && !e.hidden &&
       dist(e.x, e.y, hit.x, hit.y) < GROUP_RADIUS)
     g.selection = crew.map(e => e.id)
     g.uiDirty = true
@@ -312,10 +314,10 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   }
 
   const sel = selectedEnts(g)
-  const myUnits = sel.filter(e => isUnit(e) && e.team === 0)
+  const myUnits = sel.filter(e => isUnit(e) && e.team === g.me)
 
   // villagers tap an unfinished building: lend a hand instead of selecting it
-  if (hit && hit.team === 0 && isBuilding(hit) && hit.complete === false) {
+  if (hit && hit.team === g.me && isBuilding(hit) && hit.complete === false) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
@@ -325,11 +327,11 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
 
   // villagers tap one of your farms: one works this field, the rest spread
   // to free farms nearby — every field wants exactly one pair of hands
-  if (hit && hit.team === 0 && hit.kind === 'farm' && hit.complete) {
+  if (hit && hit.team === g.me && hit.kind === 'farm' && hit.complete) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       const fields = [hit, ...g.ents
-        .filter(o => o !== hit && o.kind === 'farm' && o.team === 0 && !!o.complete)
+        .filter(o => o !== hit && o.kind === 'farm' && o.team === g.me && !!o.complete)
         .sort((a, b) => dist(a.x, a.y, hit.x, hit.y) - dist(b.x, b.y, hit.x, hit.y))]
       let fi = 0
       for (let vi = 0; vi < villagers.length; vi++) {
@@ -347,7 +349,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   }
 
   // villagers tap a battered building: patch it up (soldiers still garrison towers)
-  if (hit && hit.team === 0 && isBuilding(hit) && hit.complete && hit.hp < hit.maxHp) {
+  if (hit && hit.team === g.me && isBuilding(hit) && hit.complete && hit.hp < hit.maxHp) {
     const villagers = myUnits.filter(e => e.kind === 'villager')
     if (villagers.length) {
       commandBuild(g, villagers, hit)
@@ -362,7 +364,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   }
 
   // a monk with a relic taps your church or ministry: enshrine it there
-  if (hit && hit.team === 0 && (hit.kind === 'church' || hit.kind === 'ministry') && hit.complete) {
+  if (hit && hit.team === g.me && (hit.kind === 'church' || hit.kind === 'ministry') && hit.complete) {
     const carriers = myUnits.filter(m => m.kind === 'monk' && m.relicId !== undefined)
     if (carriers.length) {
       for (const m of carriers) {
@@ -374,7 +376,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
   }
 
   // units tap one of your watchtowers (or a fortress landmark): climb inside
-  if (hit && hit.team === 0 && (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') && hit.complete && myUnits.length) {
+  if (hit && hit.team === g.me && (hit.kind === 'watchtower' || hit.kind === 'whitekeep' || hit.kind === 'redpalace') && hit.complete && myUnits.length) {
     for (const u of myUnits) {
       u.state = 'garrison'
       u.targetId = hit.id
@@ -382,7 +384,7 @@ export function handleTap(g: Game, canvas: HTMLCanvasElement, sx: number, sy: nu
     return
   }
 
-  if (hit && hit.team === 0) {
+  if (hit && hit.team === g.me) {
     // tapping your own stuff toggles: already selected → deselect
     const i = g.selection.indexOf(hit.id)
     if (i >= 0) g.selection.splice(i, 1)
@@ -438,7 +440,7 @@ function nearestSourceFor(g: Game, v: Ent, res: ResKind): Ent | null {
   const raw = nearest(g, v.x, v.y, o => o.kind === SOURCE_OF[res] && (o.amount ?? 0) > 0)
   if (res === 'food') {
     // only farms with no farmer — one pair of hands per field
-    const farm = nearest(g, v.x, v.y, o => o.kind === 'farm' && o.team === 0 && !!o.complete && !farmTaken(g, o, v))
+    const farm = nearest(g, v.x, v.y, o => o.kind === 'farm' && o.team === g.me && !!o.complete && !farmTaken(g, o, v))
     if (farm && (!raw || dist(v.x, v.y, farm.x, farm.y) < dist(v.x, v.y, raw.x, raw.y))) return farm
   }
   return raw
@@ -447,7 +449,7 @@ function nearestSourceFor(g: Game, v: Ent, res: ResKind): Ent | null {
 // HUD pill tap: put one more villager on this resource — idle hands first,
 // then borrow from whichever other line has the most workers
 export function sendVillagerToResource(g: Game, res: ResKind): void {
-  const vills = g.ents.filter(e => e.team === 0 && e.kind === 'villager' && !e.hidden)
+  const vills = g.ents.filter(e => e.team === g.me && e.kind === 'villager' && !e.hidden)
   if (!vills.length) { toast(g, 'No villagers yet — train some at the Town Hall.'); return }
   let pick: Ent | null = null
   const idle = vills.filter(v => v.state === 'idle')
@@ -487,7 +489,7 @@ export function sendVillagerToResource(g: Game, res: ResKind): void {
 let idleCycle = 0
 export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
   const idle = g.ents.filter(e =>
-    e.team === 0 && e.kind === 'villager' && !e.hidden && e.state === 'idle')
+    e.team === g.me && e.kind === 'villager' && !e.hidden && e.state === 'idle')
   if (!idle.length) { toast(g, 'Nobody is idle — the village hums along.'); return }
   const v = idle[idleCycle++ % idle.length]
   g.placing = null
@@ -502,7 +504,7 @@ export function cycleIdleVillager(g: Game, canvas?: HTMLCanvasElement): void {
 // army-panel chip: grab every soldier of one type and bring the camera along
 // selection never yanks the camera — the minimap is the way to travel
 export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanvasElement, banner?: number): void {
-  const troop = g.ents.filter(e => e.team === 0 && e.kind === kind && !e.hidden &&
+  const troop = g.ents.filter(e => e.team === g.me && e.kind === kind && !e.hidden &&
     (banner === undefined || e.banner === banner))
   if (!troop.length) return
   g.placing = null
@@ -517,14 +519,14 @@ export function selectUnitsOfKind(g: Game, kind: Ent['kind'], canvas?: HTMLCanva
 export function selectBanner(g: Game, banner: number, canvas?: HTMLCanvasElement): void {
   g.activeBanner = banner
   const host = g.ents.filter(e =>
-    e.team === 0 && isUnit(e) && !e.hidden && e.banner === banner && e.relicId === undefined)
+    e.team === g.me && isUnit(e) && !e.hidden && e.banner === banner && e.relicId === undefined)
   g.placing = null // selection is changing hands; drop any pending placement
   g.placePos = null
   g.placeEnd = null
   g.selection = host.map(e => e.id)
   g.uiDirty = true
   if (!host.length) {
-    toast(g, banner === LION_BANNER && g.banners === 1
+    toast(g, banner === LION_BANNER && g.banners[g.me] === 1
       ? 'No soldiers yet — build a Barracks and train some!'
       : `${BANNERS[banner].name} has no one under it yet.`)
   }
@@ -539,7 +541,7 @@ export function selectArmy(g: Game, canvas?: HTMLCanvasElement): void {
 function assignBanner(g: Game, units: Ent[], banner: number | null): void {
   let n = 0
   for (const u of units) {
-    if (!canBanner(u) || u.team !== 0) continue
+    if (!canBanner(u) || u.team !== g.me) continue
     if (banner === null && mustBanner(u)) continue // a soldier always rides under something
     u.banner = banner === null ? undefined : banner
     n++
@@ -569,9 +571,9 @@ export function cancelMuster(g: Game): void {
   g.uiDirty = true
 }
 
-export function plantMuster(g: Game, banner: number, x: number, y: number): void {
+export function plantMuster(g: Game, banner: number, x: number, y: number, team = g.me): void {
   const w = g.world
-  g.muster[banner] = {
+  g.muster[team][banner] = {
     x: Math.max(20, Math.min(w.w - 20, x)),
     y: Math.max(20, Math.min(w.h - 20, y)),
   }
@@ -581,17 +583,17 @@ export function plantMuster(g: Game, banner: number, x: number, y: number): void
   g.uiDirty = true
 }
 
-export function clearMuster(g: Game, banner: number): void {
-  g.muster[banner] = null
+export function clearMuster(g: Game, banner: number, team = g.me): void {
+  g.muster[team][banner] = null
   g.mustering = null
   toast(g, `${BANNERS[banner].name} musters at its halls again.`)
   g.uiDirty = true
 }
 
 // raise the next banner in the roll and hand it whatever is selected
-export function raiseBanner(g: Game, units: Ent[]): void {
-  if (g.banners >= BANNER_MAX) { toast(g, 'Every banner is already flying.'); return }
-  const banner = g.banners++
+export function raiseBanner(g: Game, units: Ent[], team = g.me): void {
+  if (g.banners[team] >= BANNER_MAX) { toast(g, 'Every banner is already flying.'); return }
+  const banner = g.banners[team]++
   if (units.length) assignBanner(g, units, banner) // a hall may raise one with nobody yet
   g.activeBanner = banner
   toast(g, `${BANNERS[banner].name} rides out — the Lion no longer counts them.`)

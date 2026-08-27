@@ -806,9 +806,9 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
     // recruits ride under whatever banner this hall flies (monks still swear to none)
     if (e.team === 0 && e.recruitBanner !== undefined && mustBanner(u)) u.banner = e.recruitBanner
     // and then walk straight to that banner's muster flag, if one is planted
-    const rally = u.banner !== undefined ? g.muster[u.banner] : null
+    const rally = u.banner !== undefined ? g.muster[u.team]?.[u.banner] : null
     if (rally && e.team === 0) {
-      const spot = musterSlot(g, u.banner!, rally)
+      const spot = musterSlot(g, u.team, u.banner!, rally)
       u.state = 'move'
       u.tx = spot.x
       u.ty = spot.y
@@ -824,11 +824,11 @@ function updateBuilding(g: Game, e: Ent, dt: number): void {
 // at a time, so rather than everyone treading the same patch we count who is
 // already gathered and hand out rings of six around the pole — the company
 // builds outward into a block instead of a heap, and the pole stays clear.
-function musterSlot(g: Game, banner: number, flag: { x: number; y: number }): { x: number; y: number } {
+function musterSlot(g: Game, team: number, banner: number, flag: { x: number; y: number }): { x: number; y: number } {
   const reach = FORMATION_SPACING * 4.5
   let k = 0
   for (const o of g.ents) {
-    if (o.team !== 0 || o.banner !== banner || !isUnit(o)) continue
+    if (o.team !== team || o.banner !== banner || !isUnit(o)) continue
     const ox = o.tx ?? o.x, oy = o.ty ?? o.y
     if (dist(ox, oy, flag.x, flag.y) < reach) k++
   }

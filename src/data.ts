@@ -144,7 +144,7 @@ export interface Game {
   particles: Particle[]
   projectiles: Projectile[]
   arrowsFired: number
-  fog: Fog
+  fog: Fog[] // one per team: each village only knows what it has seen
   visionT: number
   ai: { enabled: boolean; thinkT: number; attackSize: number; attacking: boolean }
   age: number[] // per team: 1 = Dark, 2 = Feudal, 3 = Castle (advanced by landmarks)
@@ -163,11 +163,20 @@ export interface Game {
   pings: { x: number; y: number; t: number }[] // minimap alerts where your things take hits
   taps: { x: number; y: number; r: number; ent: boolean; at: number }[] // tap feedback markers
   rng: number // the simulation's random stream — see rnd()
-  banners: number // how many banners are raised (1 = just the Lion)
-  formation: Formation[] // per banner: how its companies stand when they march
-  muster: (Pt | null)[] // per banner: where its recruits walk once they are raised
-  mustering: number | null // which banner is waiting for you to plant its muster flag
-  activeBanner: number // whose roster the bucklers are showing
+  // Which side of the board you are sitting on. 0 in a solo game and for the
+  // host; 1 for the guest. Everything the HUD shows and every order the dock
+  // gives is about this team — the simulation itself plays no favourites.
+  me: number
+  // Heraldry is per side of the board: in a 1v1 both villages raise their own
+  // companies, so these are indexed by team first and banner second.
+  banners: number[] // per team: how many banners are raised (1 = just the Lion)
+  formation: Formation[][] // per team, per banner: how its companies march
+  muster: (Pt | null)[][] // per team, per banner: where its recruits gather
+  // Local, and deliberately not shared: which banner YOUR bucklers are showing
+  // and whether YOU are mid-way through planting a flag. The other player's
+  // view of their own host is their business.
+  mustering: number | null
+  activeBanner: number
   infoMode: boolean // the ? button: taps read a thing out instead of commanding it
   infoId: number | null // what the info card is currently reading out
   started: boolean

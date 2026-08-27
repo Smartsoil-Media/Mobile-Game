@@ -1,6 +1,6 @@
 // Bootstrap: canvas sizing, fixed-timestep loop, glue, test hooks.
 import { Game, Kind, Buildable, Ent, BUILDINGS, checksum } from './data'
-import { createGame, spawn, canPlaceAt, placementCells, gateSnap, wallsUnderGate } from './world'
+import { createGame, spawn, canPlaceAt, placementCells, gateSnap, wallsUnderGate, fogIndex } from './world'
 import { findPath, inWater } from './nav'
 import { update } from './sim'
 import { render } from './render'
@@ -108,6 +108,12 @@ requestAnimationFrame(frame)
   sprites,
   // ---- determinism, which multiplayer stands or falls on ----
   checksum() { return checksum(g) },
+  // what the LOCAL player can see of a spot — dark, remembered, or lit
+  fogAt(x: number, y: number) {
+    const i = fogIndex(g, x, y)
+    return g.fog[g.me].visible[i] === 1 ? 'visible'
+      : g.fog[g.me].explored[i] === 1 ? 'explored' : 'dark'
+  },
   /**
    * Deal a fresh world from `seed`, step it `ticks` times with nobody touching
    * it, and report the fingerprint every `every` ticks. Two calls with the same
