@@ -40,7 +40,7 @@ const fullDoc = `<!doctype html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bramblewick">
-<meta name="theme-color" content="#75935A">
+<meta name="theme-color" content="#3B4A2F">
 <title>Bramblewick</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -59,8 +59,8 @@ const manifest = {
   scope: '.',
   display: 'fullscreen',
   orientation: 'any',
-  background_color: '#75935A',
-  theme_color: '#75935A',
+  background_color: '#3B4A2F',
+  theme_color: '#3B4A2F',
   icons: [
     { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
     { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },

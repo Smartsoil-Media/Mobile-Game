@@ -230,16 +230,37 @@ Only a **monk** may lift one.
 - The rival village keeps the faith too: at Castle it raises a church,
   ordains monks, and **races you for every unclaimed relic**
 
-## The menu, the banners, the rivalry
+## The way in
 
-The game opens on a **main menu**: **Solo** leads to the banner screen —
-pick **the English or the French**, set the rival's temper (**Gentle /
-Fair / Fierce**), and Begin. **Multiplayer** wears a *coming soon* badge
-(a ranked trophy ladder arrives with it). Every match is **civ vs civ**:
-the enemy village always marches under the other banner, plays its own
-civ's landmarks, and leans into its own civ's habits. A Fierce rival
-thinks faster, runs a deeper economy, starts flush, and pushes with
-bigger armies; a Gentle one gives you room to breathe.
+Four cards, in order:
+
+1. **Your name** — a **stand-in sign-in**: no password, no server, nothing
+   leaves the device. The name is kept in `localStorage` so the menu can
+   greet you next time and put you on the victory card; the sim never
+   reads it. *Wander in unnamed* skips it. Real accounts land with
+   multiplayer.
+2. **How you're playing** — **Solo**, or **Multiplayer** wearing a *coming
+   soon* badge (a ranked trophy ladder arrives with it).
+3. **Where you're playing** — the map picker. **Crocodile Crossing** is the
+   home meadow: the handcrafted map, a winding stream with three shallow
+   fords, crocodiles in the reeds, and woods packed tight enough to wall a
+   lane shut. **Wanderer's Roll** deals a fresh generated map instead —
+   four times the land, villages in opposite corners. The picker builds
+   itself from the `MAPS` table in `data.ts`, so adding a map is a line of
+   data. Picking ground the boot didn't deal re-deals the world in place.
+4. **Your banner** — **the English or the French**, and the rival's temper
+   (**Gentle / Fair / Fierce**). Then Begin.
+
+Every match is **civ vs civ**: the enemy village always marches under the
+other banner, plays its own civ's landmarks, and leans into its own civ's
+habits. A Fierce rival thinks faster, runs a deeper economy, starts flush,
+and pushes with bigger armies; a Gentle one gives you room to breathe.
+
+Held in portrait, the game shows one flat *turn sideways* screen rather
+than a blurred glimpse of a meadow laid out for a window it hasn't got —
+and everything outside the playfield (including the strip beyond a notched
+phone's viewport) is painted the same deep green, so no pale band shows
+along an edge.
 
 ## Ages & Landmarks
 

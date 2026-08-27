@@ -355,6 +355,34 @@ export const DMG_BONUS: Partial<Record<Kind, Partial<Record<Kind, number>>>> = {
   knight: { mangonel: 12, trebuchet: 12 }, // cavalry rides down the war machines
 }
 
+// ---- the maps you can play on ----
+// `seed: 0` is the handcrafted meadow the test suite lives on; anything else is
+// a roll of the generator, and `seed: null` means roll a fresh one every game.
+// Adding a map is a line here — the picker builds itself from this list.
+export interface MapSpec {
+  id: string
+  name: string
+  tag: string // the one-line label under the name
+  blurb: string
+  seed: number | null
+}
+export const MAPS: MapSpec[] = [
+  {
+    id: 'crocodile-crossing',
+    name: 'Crocodile Crossing',
+    tag: 'The home meadow',
+    blurb: 'A winding stream with three shallow fords, crocodiles basking in the reeds, and woods packed tight enough to wall a lane shut.',
+    seed: 0,
+  },
+  {
+    id: 'wanderers-roll',
+    name: "Wanderer's Roll",
+    tag: 'A fresh map every game',
+    blurb: 'Four times the land, villages in opposite corners, and each one dealt its own berries, woods, gold and stone.',
+    seed: null,
+  },
+]
+
 // ---- banners: the companies your host is split into ----
 // Each company is known by the beast it wears, not by a flag: a flag now means
 // a muster point. Everything raised musters under the Lion unless a military

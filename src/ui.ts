@@ -4,9 +4,9 @@ import {
   Game, Ent, Buildable, Cost, ResKind, ChampId, TechId, CivId, LandmarkKind, UNITS, BUILDINGS,
   CHAMPS, TECHS, CIVS, LANDMARKS, LANDMARK_TRICKLES, RESOURCES, LEVY_SPEAR_COST, LEVY_SPEAR_TIME,
   SCHOOL_KNIGHT_COST, SCHOOL_KNIGHT_TIME, AGE_NAMES, RELIC_GOLD_RATE, Kind,
-  BANNERS, BANNER_MAX, LION_BANNER, Beast,
+  BANNERS, BANNER_MAX, LION_BANNER, Beast, MAPS,
   isUnit, isBuilding, isSiege, canBanner, mustBanner, Formation} from './data'
-import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex } from './world'
+import { pop, canAfford, pay, toast, ringBell, openDoors, gatherResOf, gateSnap, wallLinePoints, unitAgeReq, fogIndex, resetGame } from './world'
 import { selectArmy, selectBanner, raiseBanner, selectUnitsOfKind, tryPlaceBuilding, snapPlace, sendVillagerToResource, cycleIdleVillager, clampCamera, formationOf, commandMove, beginMuster, cancelMuster, clearMuster } from './input'
 import { drawTC, drawHouse, drawBarracks, drawLumberCamp, drawMiningCamp, drawMill, drawStable, drawFarm, drawWatchtower, drawArcheryRange, drawWall, drawGate, drawVillager, drawSwordsman, drawSpearman, drawArcher, drawScout, drawKnight, drawAbbeyMill, drawKingsBarracks, drawGuildhall, drawWhiteKeep, drawChamberOfCommerce, drawCavalrySchool, drawRoyalVineyard, drawRedPalace, drawChurch, drawMinistry, drawMonk, drawSiegeWorkshop, drawMangonel, drawTrebuchet, drawTree, drawMine, drawBush, drawQuarry, drawDeer, drawCroc, drawCrag, drawRelic } from './sprites'
 
@@ -212,6 +212,10 @@ function musterIcon(color: string, edge: string, planted: boolean, size = 38): s
     `</svg>`
 }
 
+// Who's playing, as far as the menu is concerned. A stand-in until accounts
+// arrive: nothing leaves the device and the sim never reads it.
+let playerName = ''
+
 const MINI_VILL = `<svg viewBox="0 0 24 24" width="10" height="10"><circle cx="12" cy="7.5" r="4.5" fill="currentColor"/><path d="M4.5 20.5c.8-4.6 4-6.8 7.5-6.8s6.7 2.2 7.5 6.8z" fill="currentColor"/></svg>`
 
 export function initUI(g: Game): void {
@@ -299,16 +303,62 @@ export function initUI(g: Game): void {
     if (ev.buttons) jumpTo(ev)
   })
 
-  // ---- the main menu: home → solo screen (banner + difficulty) → begin ----
+  // ---- the way in: name → mode → map → banner → begin ----
+  // The login is a stand-in: no server, no password, just a name kept on this
+  // device so the menu can greet you. Real accounts land with multiplayer.
+  const NAME_KEY = 'bramblewick.name'
+  const stored = (() => {
+    try { return localStorage.getItem(NAME_KEY) ?? '' } catch { return '' }
+  })()
+  const nameField = el('login-name') as HTMLInputElement
+  nameField.value = stored
+
+  const CARDS = ['menu-login', 'menu-home', 'menu-map-screen', 'menu-solo-screen']
+  const step = (id: string): void => {
+    for (const c of CARDS) el(c).classList.toggle('hidden', c !== id)
+  }
+
+  const signIn = (name: string): void => {
+    playerName = name.trim().slice(0, 18)
+    try {
+      if (playerName) localStorage.setItem(NAME_KEY, playerName)
+      else localStorage.removeItem(NAME_KEY)
+    } catch { /* a locked-down browser just forgets between visits */ }
+    el('menu-greeting').textContent = playerName ? `Welcome, ${playerName}` : 'Welcome, wanderer'
+    step('menu-home')
+  }
+  el('login-go').addEventListener('click', () => signIn(nameField.value))
+  el('login-guest').addEventListener('click', () => signIn(''))
+  nameField.addEventListener('keydown', ev => {
+    if ((ev as KeyboardEvent).key === 'Enter') signIn(nameField.value)
+  })
+  el('home-back').addEventListener('click', () => step('menu-login'))
+
+  // ---- the map picker, built from the table so a new map is a data edit ----
+  let mapPick = MAPS[0]
+  const mapList = el('map-cards')
+  for (const m of MAPS) {
+    const b = document.createElement('button')
+    b.className = 'map-card' + (m === mapPick ? ' selected' : '')
+    b.dataset.map = m.id
+    b.innerHTML = `<i>${m.tag}</i><b>${m.name}</b><small>${m.blurb}</small>`
+    b.addEventListener('click', () => {
+      mapPick = m
+      mapList.querySelectorAll('.map-card').forEach(c => c.classList.remove('selected'))
+      b.classList.add('selected')
+    })
+    mapList.appendChild(b)
+  }
+  mapList.insertAdjacentHTML('afterend',
+    '<div class="menu-note">\u{1F5FA} More meadows are being surveyed</div>')
+
+  el('menu-solo').addEventListener('click', () => step('menu-map-screen'))
+  el('map-back').addEventListener('click', () => step('menu-home'))
+  el('map-next').addEventListener('click', () => step('menu-solo-screen'))
+  el('menu-back').addEventListener('click', () => step('menu-map-screen'))
+
+  // ---- banner and difficulty, then out into the meadow ----
   let civPick: CivId = 'english'
-  el('menu-solo').addEventListener('click', () => {
-    el('menu-home').classList.add('hidden')
-    el('menu-solo-screen').classList.remove('hidden')
-  })
-  el('menu-back').addEventListener('click', () => {
-    el('menu-solo-screen').classList.add('hidden')
-    el('menu-home').classList.remove('hidden')
-  })
   document.querySelectorAll<HTMLButtonElement>('.civ-card').forEach(cardEl => {
     cardEl.addEventListener('click', () => {
       document.querySelectorAll('.civ-card').forEach(c => c.classList.remove('selected'))
@@ -324,6 +374,16 @@ export function initUI(g: Game): void {
     })
   })
   el('play-btn').addEventListener('click', () => {
+    // The world was dealt at boot, before you picked a map. Deal it again if
+    // the ground you chose isn't the ground under your feet — a fresh roll
+    // always counts as different, which is the point of it.
+    const want = mapPick.seed
+    if (want === null || want !== g.mapSeed) {
+      const level = g.aiLevel
+        resetGame(g, want === null ? { seed: (Date.now() >>> 0) || 1 } : want === 0 ? undefined : { seed: want })
+      g.aiLevel = level
+      clampCamera(g, canvas)
+    }
     // the enemy always marches under the other banner — every match is civ vs civ
     g.civs = [civPick, civPick === 'english' ? 'french' : 'english']
     if (g.aiLevel === 'hard') { g.res[1].food += 150; g.res[1].wood += 150 } // a fierce rival starts flush
@@ -1081,12 +1141,14 @@ export function syncUI(g: Game): void {
 
   // end-of-game overlays
   if (g.over === 'win') {
-    el('end-title').textContent = 'Victory!'
+    el('end-title').textContent = playerName ? `Victory, ${playerName}!` : 'Victory!'
     el('end-text').textContent = 'The enemy town hall has crumbled. Peace returns to the meadow.'
     el('end-overlay').classList.remove('hidden')
   } else if (g.over === 'lose') {
     el('end-title').textContent = 'Defeat…'
-    el('end-text').textContent = 'Your town hall has fallen. The meadow will remember your stand.'
+    el('end-text').textContent = playerName
+      ? `Your town hall has fallen. The meadow will remember your stand, ${playerName}.`
+      : 'Your town hall has fallen. The meadow will remember your stand.'
     el('end-overlay').classList.remove('hidden')
   }
 

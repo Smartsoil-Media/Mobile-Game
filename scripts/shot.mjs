@@ -18,9 +18,14 @@ async function waitSim(pg, simSeconds, timeoutMs = 60000) {
     if (Date.now() - start > timeoutMs) throw new Error(`sim only advanced ${(t - t0).toFixed(1)}s of ${simSeconds}s`)
   }
 }
-// walk the main menu: Solo → (defaults: English banner, Fair) → Begin
-async function startGame(pg) {
+// walk the way in: name → Solo → map (Crocodile Crossing) → banner → Begin
+async function startGame(pg, name = 'Tester') {
+  if (name) await pg.fill('#login-name', name)
+  await pg.tap(name ? '#login-go' : '#login-guest')
+  await pg.waitForTimeout(150)
   await pg.tap('#menu-solo')
+  await pg.waitForTimeout(150)
+  await pg.tap('#map-next')
   await pg.waitForTimeout(150)
   await pg.tap('#play-btn')
 }
@@ -3203,11 +3208,29 @@ await waitSim(page3, 1)
 const pageF = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
 await pageF.goto('file://' + resolve('dist/index.html') + '?map=classic')
 await pageF.evaluate(() => window.__game.allowPortrait())
+// the way in starts at the name card, not the mode card
+if (!(await pageF.isVisible('#menu-login'))) throw new Error('the sign-in card should come first')
+if (await pageF.isVisible('#menu-home')) throw new Error('the mode card should wait for a name')
+await pageF.fill('#login-name', 'Rowan')
+await pageF.tap('#login-go')
+await pageF.waitForTimeout(200)
 if (!(await pageF.isVisible('#menu-home'))) throw new Error('main menu missing')
+const greeting = await pageF.evaluate(() => document.getElementById('menu-greeting')?.textContent ?? '')
+console.log('greeting:', greeting)
+if (!greeting.includes('Rowan')) throw new Error('the menu should greet you by name, got ' + greeting)
 const soonBadge = await pageF.evaluate(() =>
   document.querySelector('#menu-multi .soon-badge')?.textContent ?? '')
 if (!soonBadge.includes('soon')) throw new Error('multiplayer should wear a coming-soon badge')
 await pageF.tap('#menu-solo')
+await pageF.waitForTimeout(200)
+// the map picker: Crocodile Crossing is the home meadow and comes selected
+const maps = await pageF.evaluate(() => [...document.querySelectorAll('#map-cards .map-card')].map(c => ({
+  id: c.dataset.map, name: c.querySelector('b')?.textContent, on: c.classList.contains('selected'),
+})))
+console.log('maps:', maps)
+if (maps[0]?.name !== 'Crocodile Crossing') throw new Error('the home meadow should lead the list')
+if (!maps[0]?.on) throw new Error('Crocodile Crossing should come selected')
+await pageF.tap('#map-next')
 await pageF.waitForTimeout(200)
 if (!(await pageF.isVisible('#civ-french'))) throw new Error('the banner screen is missing the French')
 await pageF.tap('#civ-french')
@@ -3217,12 +3240,13 @@ await pageF.tap('#play-btn')
 await pageF.waitForTimeout(250)
 const frStart = await pageF.evaluate(() => {
   const g = window.__game.state
-  return { civs: g.civs, aiLevel: g.aiLevel, enemyFood: Math.round(g.res[1].food), started: g.started }
+  return { civs: g.civs, aiLevel: g.aiLevel, enemyFood: Math.round(g.res[1].food), started: g.started, mapSeed: g.mapSeed }
 })
 console.log('french start:', frStart)
 if (!frStart.started) throw new Error('Begin did not start the game')
 if (frStart.civs[0] !== 'french' || frStart.civs[1] !== 'english') throw new Error('civ picks wrong: ' + frStart.civs.join(','))
 if (frStart.aiLevel !== 'hard' || frStart.enemyFood < 200) throw new Error('difficulty pick did not take')
+if (frStart.mapSeed !== 0) throw new Error('Crocodile Crossing should be the handcrafted meadow, got seed ' + frStart.mapSeed)
 // the French Town Hall offers the French landmark pair
 await pageF.evaluate(() => {
   const g = window.__game.state
@@ -3273,6 +3297,48 @@ if (frCost.queued !== 1) throw new Error('the School of Cavalry did not queue a 
 if (Math.round(frRes.food - frCost.food) !== 50 || Math.round(frRes.gold - frCost.gold) !== 60)
   throw new Error('school knight should cost 50 food + 60 gold')
 await pageF.close()
+
+// 18.95) picking the other ground actually deals a different world, and the
+// name you signed in with is waiting for you next visit
+const pageM = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true })
+await pageM.goto('file://' + resolve('dist/index.html') + '?map=classic')
+await pageM.evaluate(() => window.__game.allowPortrait())
+await pageM.fill('#login-name', 'Bracken')
+await pageM.tap('#login-go')
+await pageM.waitForTimeout(150)
+await pageM.tap('#menu-solo')
+await pageM.waitForTimeout(150)
+const beforeRoll = await pageM.evaluate(() => ({ seed: window.__game.state.mapSeed, w: window.__game.state.world.w }))
+await pageM.tap('[data-map="wanderers-roll"]')
+await pageM.waitForTimeout(150)
+await pageM.tap('#map-next')
+await pageM.waitForTimeout(150)
+await pageM.tap('[data-diff="easy"]')
+await pageM.tap('#play-btn')
+await pageM.waitForTimeout(400)
+const rolled = await pageM.evaluate(() => {
+  const g = window.__game.state
+  return {
+    seed: g.mapSeed, w: g.world.w, aiLevel: g.aiLevel, started: g.started,
+    tcs: g.ents.filter(e => e.kind === 'towncenter').length,
+    vills: g.ents.filter(e => e.team === 0 && e.kind === 'villager').length,
+    camInside: g.camera.x > 0 && g.camera.x < g.world.w && g.camera.y > 0 && g.camera.y < g.world.h,
+  }
+})
+console.log('rolled map:', { from: beforeRoll, to: rolled })
+if (rolled.seed === 0) throw new Error("Wanderer's Roll should deal a rolled map, not the meadow")
+if (rolled.w !== beforeRoll.w * 2) throw new Error('a rolled map is four times the land: ' + rolled.w)
+if (rolled.tcs !== 2 || rolled.vills < 3) throw new Error('the fresh world came up short: ' + JSON.stringify(rolled))
+if (rolled.aiLevel !== 'easy') throw new Error('re-dealing the world should not forget the difficulty pick')
+if (!rolled.camInside) throw new Error('the camera should be sitting in the new world')
+// the name is remembered for next time
+await pageM.goto('file://' + resolve('dist/index.html') + '?map=classic')
+await pageM.evaluate(() => window.__game.allowPortrait())
+await pageM.waitForTimeout(200)
+const remembered = await pageM.evaluate(() => document.getElementById('login-name')?.value ?? '')
+console.log('name remembered:', remembered)
+if (remembered !== 'Bracken') throw new Error('the sign-in should remember your name, got ' + remembered)
+await pageM.close()
 
 // landscape: the whole HUD fits and the game actually plays sideways
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, hasTouch: true })

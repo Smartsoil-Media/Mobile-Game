@@ -73,6 +73,13 @@ export function spawn(g: Game, kind: Kind, team: number, x: number, y: number, c
 // pass a seed and the map is rolled fresh — four times the land, homes in
 // opposite corners, and every village guaranteed its nearby berries, woods,
 // gold and stone ("closish", never identical).
+// Deal a whole new world into the game object everything else already holds a
+// reference to. The menu picks a map after the bootstrap has run, so the world
+// has to be replaced in place rather than handed back.
+export function resetGame(g: Game, opts?: { seed?: number }): void {
+  Object.assign(g, createGame(opts))
+}
+
 export function createGame(opts?: { seed?: number }): Game {
   const random = opts?.seed !== undefined
   const W = random ? WORLD_W * 2 : WORLD_W

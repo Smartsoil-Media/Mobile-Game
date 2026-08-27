@@ -22,13 +22,30 @@
     <div id="dock-buttons"></div>
   </div>
   <div id="start-overlay" class="overlay">
-    <div class="card" id="menu-home">
+    <div class="card" id="menu-login">
       <div class="tagline">A tiny cosy RTS</div>
       <h1>Bramblewick</h1>
+      <p>Every village wants a name over its gate. Yours goes here.</p>
+      <input id="login-name" class="name-field" type="text" maxlength="18" autocomplete="off"
+             spellcheck="false" placeholder="Your name" aria-label="Your name">
+      <button class="big-btn" id="login-go">Enter the meadow</button>
+      <button class="menu-back" id="login-guest">or wander in unnamed</button>
+      <div class="menu-note">&#x1F512; A stand-in for now &mdash; no password, and the name stays on this device</div>
+    </div>
+    <div class="card hidden" id="menu-home">
+      <div class="tagline" id="menu-greeting">Welcome</div>
+      <h1>Choose a game</h1>
       <p>Gather, build, age up through landmarks, and march your little soldiers on the enemy town hall before their village outgrows yours.</p>
       <button class="big-btn" id="menu-solo">Solo</button>
       <button class="big-btn menu-locked" id="menu-multi" aria-disabled="true">Multiplayer<span class="soon-badge">coming soon</span></button>
-      <div class="menu-note">🏆 Ranked ladder arrives with multiplayer</div>
+      <div class="menu-note">&#x1F3C6; Ranked ladder arrives with multiplayer</div>
+      <button class="menu-back" id="home-back">&#8249; not you?</button>
+    </div>
+    <div class="card hidden" id="menu-map-screen">
+      <div class="tagline">Choose your ground</div>
+      <div class="map-cards" id="map-cards"></div>
+      <button class="big-btn" id="map-next">Next</button>
+      <button class="menu-back" id="map-back">&#8249; back</button>
     </div>
     <div class="card hidden" id="menu-solo-screen">
       <div class="tagline">Choose your banner</div>
@@ -41,7 +58,7 @@
         <button class="civ-card" id="civ-french" data-civ="french">
           <span class="civ-emblem">&#x2694;&#xFE0F;</span>
           <b>The French</b>
-          <small>Knights ride in the Feudal Age — cheap at the School of Cavalry.</small>
+          <small>Knights ride in the Feudal Age &mdash; cheap at the School of Cavalry.</small>
         </button>
       </div>
       <div class="diff-row" id="diff-row">
